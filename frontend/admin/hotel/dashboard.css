@@ -1,0 +1,144 @@
+/* =========================================================
+   GLOBAL
+========================================================= */
+body {
+  margin: 0;
+  font-family: 'Outfit', system-ui, sans-serif;
+  background: linear-gradient(180deg, #f6f9ff, #eef3fb);
+  color: #1f2937;
+}
+
+/* =========================================================
+   HEADER
+========================================================= */
+.dashboard-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 22px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* =========================================================
+   HOTEL DROPDOWN (LEFT)
+========================================================= */
+.hotel-dropdown {
+  appearance: none;
+  padding: 10px 40px 10px 14px;
+  border-radius: 14px;
+  border: 1px solid #dbe3f3;
+  background:
+    linear-gradient(135deg, #ffffff, #f1f6ff);
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e3a8a;
+  cursor: pointer;
+  box-shadow:
+    0 8px 22px rgba(80, 120, 255, 0.12),
+    inset 0 0 0 1px rgba(255,255,255,0.6);
+  transition: all 0.25s ease;
+}
+
+.hotel-dropdown:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 28px rgba(80, 120, 255, 0.18);
+}
+
+.hotel-dropdown:focus {
+  outline: none;
+  border-color: #6c8cff;
+  box-shadow:
+    0 0 0 3px rgba(108, 140, 255, 0.25);
+}
+
+/* =========================================================
+   NAVIGATION (CENTER)
+========================================================= */
+.hotel-nav {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.hotel-nav a {
+  text-decoration: none;
+  margin: 0 6px;
+  padding: 10px 18px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #334155;
+  background: linear-gradient(135deg, #ffffff, #f3f7ff);
+  box-shadow:
+    0 6px 18px rgba(0,0,0,0.06);
+  transition: all 0.25s ease;
+}
+
+.hotel-nav a:hover {
+  color: #1e40af;
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 26px rgba(80,120,255,0.18);
+}
+
+/* =========================================================
+   SETTINGS BUTTON (RIGHT)
+========================================================= */
+#btnGlobalSettings {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background:
+    linear-gradient(135deg, #eef2ff, #ffffff);
+  color: #4f46e5;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow:
+    0 6px 18px rgba(79,70,229,0.18);
+  transition: all 0.25s ease;
+}
+
+#btnGlobalSettings:hover {
+  transform: rotate(20deg) scale(1.05);
+  box-shadow:
+    0 10px 28px rgba(79,70,229,0.28);
+}
+
+/* =========================================================
+   CONTENT
+========================================================= */
+.dashboard-content {
+  padding: 22px;
+}
+
+iframe {
+  width: 100%;
+  height: 80vh;
+  border: none;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    0 12px 32px rgba(0,0,0,0.08);
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+@media (max-width: 900px) {
+  .dashboard-header {
+    flex-wrap: wrap;
+  }
+
+  .hotel-nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+}

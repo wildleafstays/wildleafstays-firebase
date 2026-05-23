@@ -1,0 +1,10 @@
+node_modules/
+backend/uploads/
+.firebase/
+.runtimeconfig.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*.local
+.env
+.env.*

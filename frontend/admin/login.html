@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin Login | Wildleaf Stays</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Optional: reuse admin.css or keep minimal -->
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+
+  <h1>Admin Login</h1>
+
+  <form id="loginForm" autocomplete="off">
+    <input
+      type="email"
+      id="email"
+      placeholder="Admin Email"
+      required
+    />
+
+    <input
+      type="password"
+      id="password"
+      placeholder="Password"
+      required
+    />
+
+    <button type="submit">Login</button>
+  </form>
+<a href="./forgot-password.html">Forgot password?</a>
+
+  <p id="errorMsg" style="color:red; margin-top:10px;"></p>
+
+  <!-- IMPORTANT: module -->
+  <script type="module" src="./login.js"></script>
+
+</body>
+</html>

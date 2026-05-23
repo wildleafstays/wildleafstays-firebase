@@ -1,0 +1,404 @@
+/* ============================================================
+   AIRBNB-GRADE VILLA LISTING THEME
+============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  background: #f7f7f7;
+  color: #222;
+}
+
+/* ============================================================
+   PAGE CONTAINER
+============================================================ */
+
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ============================================================
+   HERO SECTION
+============================================================ */
+
+.villa-hero {
+  max-width: 1120px;
+  margin: 24px auto;
+  padding: 0 24px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 8px;
+  height: 420px;
+}
+
+.hero-main {
+  border-radius: 16px;
+  background-size: cover;
+  background-position: center;
+}
+
+.hero-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+}
+
+.hero-side div {
+  border-radius: 14px;
+  background-size: cover;
+  background-position: center;
+}
+
+@media (max-width: 900px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .hero-main {
+    height: 260px;
+  }
+
+  .hero-side {
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: 1fr;
+    height: 90px;
+  }
+}
+
+/* ============================================================
+   MAIN LAYOUT
+============================================================ */
+
+.villa-details,
+.villa-main {
+  overflow: visible;
+}
+
+.villa-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 32px;
+  align-items: start;
+}
+
+.villa-right {
+  position: sticky;
+  top: 96px; /* below header */
+}
+
+@media (max-width: 900px) {
+  .villa-main {
+    grid-template-columns: 1fr;
+  }
+
+  .villa-right {
+    position: static;
+  }
+}
+
+/* ============================================================
+   SUMMARY (LEFT TOP CARD)
+============================================================ */
+
+.villa-summary {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 28px 32px;
+  margin-bottom: 32px;
+  border: 1px solid #ececec;
+}
+
+.villa-title {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.villa-location {
+  font-size: 14px;
+  color: #717171;
+  margin-bottom: 6px;
+}
+
+.villa-meta {
+  font-size: 14px;
+  color: #717171;
+  margin-bottom: 14px;
+}
+
+.villa-meta,
+.villa-tonight-line {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #ececec;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Meta pills */
+.villa-meta-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.meta-pill {
+  font-size: 13px;
+  background: #f6f6f6;
+  color: #555;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+/* Price block */
+.villa-price-highlight {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.villa-price-highlight .price {
+  font-size: 26px;
+  font-weight: 700;
+  color: #ff385c;
+}
+
+.per-night {
+  font-size: 14px;
+  color: #717171;
+}
+
+/* Availability pill */
+.tonight-status {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.tonight-status.available {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.tonight-status.unavailable {
+  background: #fdecea;
+  color: #b3261e;
+}
+
+/* Capacity */
+.villa-capacity {
+  grid-column: 1 / -1; /* span full row */
+ background: #f7f7f7;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: #444;
+}
+
+
+.capacity-note {
+  display: block;
+  font-size: 13px;
+  color: #717171;
+}
+
+.villa-divider {
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  margin-top: 16px;
+}
+
+/* ============================================================
+   SECTION CARDS
+============================================================ */
+
+.villa-section {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px 28px;
+  margin-bottom: 28px;
+  border: 1px solid #ececec;
+}
+
+.villa-section h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+/* Property summary grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+ align-items: stretch; /* 🔑 THIS IS THE KEY */
+}
+
+
+.info-grid div {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 14px;
+  border: 1px solid #ececec;
+}
+
+/* ============================================================
+   AMENITIES
+============================================================ */
+
+.amenities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.amenities-grid div {
+  background: #f7f7f7;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  border: 1px solid #ececec;
+}
+
+/* ============================================================
+   TABS
+============================================================ */
+
+.villa-tabs {
+  margin-top: 32px;
+  padding-bottom: 8px;
+}
+
+.tab-btn {
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 999px;
+  background: #f3f3f3;
+  color: #555;
+  border: 1px solid #e5e5e5;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: #222;
+  color: #fff;
+  border-color: #222;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* ============================================================
+   BOOKING CARD (RIGHT)
+============================================================ */
+
+.booking-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 20px;
+  border: 1px solid #e5e5e5;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.08);
+}
+
+.booking-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.booking-card input,
+.booking-card select {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+}
+
+.check-btn,
+.book-btn {
+  margin-top: 12px;
+  width: 100%;
+  background: #ff385c;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.check-btn:hover,
+.book-btn:hover {
+  background: #e31c5f;
+}
+
+.guest-breakdown {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.guest-breakdown .line {
+  display: flex;
+  justify-content: space-between;
+}
+
+.guest-breakdown .muted {
+  color: #717171;
+}
+
+.guest-breakdown .total {
+  margin-top: 8px;
+  font-weight: 600;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 8px;
+}
+
+
+/* ============================================================
+   MOBILE POLISH
+============================================================ */
+
+@media (max-width: 768px) {
+  .villa-summary {
+    padding: 22px 20px;
+  }
+
+
+
+
+
+  

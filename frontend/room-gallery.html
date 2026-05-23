@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Room Gallery</title>
+
+  <link rel="stylesheet" href="css/hotel.css" />
+
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #galleryContainer {
+      width: 100%;
+      max-width: 800px;
+      height: 80vh;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #galleryImage {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 10px;
+    }
+
+    .navBtn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: none;
+      font-size: 2rem;
+      padding: 10px 15px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .navBtn:hover {
+      background: rgba(255,255,255,0.4);
+    }
+
+    #prevBtn { left: 20px; }
+    #nextBtn { right: 20px; }
+
+    #closeBtn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 0, 0, 0.7);
+      padding: 6px 12px;
+      border-radius: 5px;
+      color: white;
+      cursor: pointer;
+      border: none;
+      font-size: 1rem;
+    }
+
+  </style>
+
+</head>
+<body>
+
+  <button id="closeBtn" onclick="history.back()">Close ✕</button>
+
+  <div id="galleryContainer">
+    <button id="prevBtn" class="navBtn">&#10094;</button>
+    <img id="galleryImage" src="" alt="Room Image">
+    <button id="nextBtn" class="navBtn">&#10095;</button>
+  </div>
+
+<script src="/js/config.js"></script>
+  <script src="room-gallery.js"></script>
+</body>
+</html>

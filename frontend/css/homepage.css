@@ -1,0 +1,595 @@
+
+/* ==========================================================
+   HEADER (LOGO + TITLE)
+========================================================== */
+.site-header {
+  background: #ffffff;
+  padding: 14px 30px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  cursor: default;
+}
+
+.site-header-inner {
+  display: flex;
+width: 90%;  
+  align-items: center;
+
+ 
+}
+
+.header-nav {
+  margin-left: auto;
+}
+
+.header-nav ul {
+  display: flex;
+  gap: 28px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.header-nav a {
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dark);
+}
+
+.header-nav a:hover {
+  color: var(--saffron-gold);
+}
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  width: auto;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.site-logo {
+  width: 55px;
+  height: 55px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid #e3e3e3;
+}
+
+#siteTitle {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+/* ==========================================================
+   HERO CONTAINER (FULL SCREEN)
+========================================================== */
+.hero-wrapper,
+.hero-full {
+  position: relative;
+  width: 100%;
+  height: 70vh;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* ==========================================================
+   HERO IMAGE SLIDER (ADMIN DRIVEN)
+========================================================== */
+.hero-slider {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.hero-slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.2s ease-in-out;
+}
+
+.hero-slide.active {
+  opacity: 1;
+}
+
+.hero-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Dark gradient for text readability */
+.hero-slide::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.35),
+    rgba(0,0,0,0.55)
+  );
+}
+
+/* ==========================================================
+   HERO OVERLAY (GREETING + OFFERS)
+   - Shown ONLY if admin fills data
+========================================================== */
+.hero-overlay {
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  z-index: 55;
+  color: white;
+  max-width: 520px;
+  text-shadow: 0 6px 30px rgba(0,0,0,0.6);
+}
+
+/* Greeting Message */
+.hero-message {
+  font-size: 42px;
+  font-weight: 700;
+  display: none;
+}
+
+
+/* ==========================================================
+   SEARCH BAR (CENTERED ON HERO)
+========================================================== */
+.search-bar-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  z-index: 20;
+}
+
+.search-box {
+  background: #ffffff;
+  padding: 18px 20px;
+  border-radius: 14px;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.search-box input,
+.search-box select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background: linear-gradient(90deg, #007bff, #00bfff);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* ==========================================================
+   HOMEPAGE SECTIONS (SLIDERS)
+========================================================== */
+.homepage-section {
+  max-width: 1300px;
+  margin: 50px auto 50px;
+  padding: 0 20px;
+}
+
+h1, h2, h3 {
+  font-family: "Playfair Display", serif;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.homepage-section h {
+  font-size: 34px;
+  font-weight: 600;
+  text-align: left;
+  margin-bottom: 28px;
+  letter-spacing: 0.2px;
+}
+
+.slider-container {
+  position: relative;
+}
+
+.slider-row {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding-bottom: 10px;
+}
+
+.slider-row::-webkit-scrollbar {
+  display: none;
+}
+
+.slider-card {
+  min-width: 240px;
+  min-height: 360px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.slider-card:hover {
+  transform: translateY(-5px);
+}
+
+.slider-card img {
+  width: 100%;
+  height: 320px;
+  border-radius: 12px;
+  object-fit: cover;
+  margin-bottom: 10px;
+}
+
+.slider-card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Slider arrows */
+.slide-btn {
+  position: absolute;
+  top: 40%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.4);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.slide-btn.left { left: -12px; }
+.slide-btn.right { right: -12px; }
+
+/* Card auto sizing */
+.slider-row.items-1 .slider-card { min-width: 100%; }
+.slider-row.items-2 .slider-card { min-width: calc(50% - 20px); }
+.slider-row.items-3 .slider-card { min-width: calc(33.33% - 20px); }
+
+/* ==========================================================
+   STYLE 1 – PREMIUM FULL VILLA SLIDER
+========================================================== */
+
+.slider-row.style1 .slider-card {
+  min-width: 380px;
+  height: 420px;
+}
+
+.slider-row.style1 img {
+  height: 320px;
+}
+
+.slider-row.style1 h3 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* ==========================================================
+   STYLE 2 – PREMIUM FULL VILLA SLIDER
+========================================================== */
+
+.slider-row.style2 .slider-card {
+  min-width: 280px;
+  height: 360px;
+}
+
+.slider-row.style2 img {
+  height: 260px;
+}
+
+.slider-row.style2 h3 {
+  font-size: 17px;
+}
+
+/* ==========================================================
+   STYLE 3 – PREMIUM FULL VILLA SLIDER
+========================================================== */
+.slider-row.style3 .slider-card {
+  min-width: 320px;
+  min-height: 420px;   /* 👈 increase height */
+  display: flex;
+  flex-direction: column;
+}
+
+
+.slider-row.style3 img {
+  height: 350px;
+}
+
+
+.slider-row.style3 h3 {
+  font-size: 15px;
+}
+
+
+/* ==========================================================
+   STYLE 4 – PREMIUM FULL VILLA SLIDER
+========================================================== */
+.style4-slider-wrapper {
+  position: relative;
+  height: 420px;
+  overflow: hidden;
+  margin: 30px 0;
+}
+
+.style4-slider {
+  position: relative;
+  height: 100%;
+}
+
+.style4-slide {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 1.2s ease-in-out;
+}
+
+.style4-slide.active {
+  opacity: 1;
+}
+
+.style4-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.style4-slide::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(0,0,0,0.55),
+    rgba(0,0,0,0.25),
+    rgba(0,0,0,0)
+  );
+}
+
+.style4-overlay {
+  position: absolute;
+  bottom: 60px;
+  left: 60px;
+  max-width: 520px;
+  color: white;
+  z-index: 10;
+  text-shadow: 0 6px 30px rgba(0,0,0,0.65);
+}
+
+.style4-badge {
+  display: inline-block;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: rgba(0,0,0,0.55);
+  border-radius: 20px;
+  margin-bottom: 12px;
+}
+
+.style4-title {
+  font-size: 38px;
+  font-weight: 700;
+}
+
+.style4-city {
+  font-size: 18px;
+  margin-top: 10px;
+}
+
+.style4-tagline {
+  margin-top: 10px;
+  font-size: 16px;
+  font-style: italic;
+}
+
+.style4-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 48px;
+  color: white;
+  z-index: 20;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.style4-arrow.left { left: 20px; }
+.style4-arrow.right { right: 20px; }
+
+
+
+
+/* ==========================================================
+   FOOTER
+========================================================== */
+.footer {
+  margin-top: 60px;
+  padding: 20px;
+  text-align: center;
+  background: #fff;
+  color: #777;
+  border-top: 1px solid #eee;
+}
+
+
+
+/* ==========================================================
+   MOBILE RESPONSIVE
+========================================================== */
+@media (max-width: 768px) {
+
+  .search-box {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .search-box select,
+  .search-box input,
+  .search-box button {
+    width: 100%;
+  }
+
+  .hero-overlay {
+    left: 20px;
+    max-width: 90%;
+  }
+
+  .hero-message {
+    font-size: 28px;
+  }
+
+  .style4-overlay {
+    left: 20px;
+    bottom: 30px;
+  }
+
+  .style4-title {
+    font-size: 26px;
+  }
+}
+
+/* ==========================================================
+   FULL SCREEN HERO OFFERS SCROLLER
+========================================================== */
+
+.hero-offer-bar {
+  position: absolute;
+  bottom: 40px;
+  left: 0;
+  width: 100vw;
+  overflow: hidden;
+  z-index: 30;
+  display: none;
+}
+
+.hero-offer-track {
+  display: flex;
+  transition: transform 0.8s ease-in-out;
+}
+
+.hero-offer-slide {
+  min-width: 100vw;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  padding: 16px 20px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.card-body {
+  padding: 12px;
+  text-align: center;
+}
+
+.card-price {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.card-occupancy,
+.card-amenities {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.card-occupancy {
+  font-size: 13px;
+  color: #666;
+}
+
+.card-amenities {
+  font-size: 12px;
+  color: #888;
+}
+
+
+/* ==========================================================
+  THEME OVERRIDES
+========================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --saffron-gold: #c9a24d;
+  --text-dark: #1f1f1f;
+  --text-muted: #6b6b6b;
+  --bg-soft: #faf9f7;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+  background: var(--bg-soft);
+  color: var(--text-dark);
+}
+
+
+
+
+.view-more-wrapper {
+  margin: 8px 0 12px;
+}
+
+.view-more-btn {
+  background: transparent;
+  border: none;
+  color: #000;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section-header h2 {
+  margin: 0;
+}
+
+.view-more-btn {
+  font-size: 14px;
+  font-weight: 600;
+  color: #000;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.view-more-btn:hover {
+  text-decoration: underline;
+}
+
+
+

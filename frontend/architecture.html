@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Architecture Hotels</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<h1 id="archTitle"></h1>
+<div id="hotelList" class="section-row"></div>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const type = urlParams.get("type");
+
+if (!type) {
+  document.body.innerHTML = "<h2>No architecture type provided</h2>";
+  throw new Error("Missing ?type parameter");
+}
+
+document.getElementById("archTitle").innerText = type;
+
+fetch(`/api/hotels?architecture=${encodeURIComponent(type)}`)
+  .then(res => res.json())
+  .then(hotels => {
+    const list = document.getElementById("hotelList");
+
+    if (!hotels.length) {
+      list.innerHTML = "<p>No hotels found for this architecture.</p>";
+      return;
+    }
+
+    hotels.forEach(h => {
+      list.innerHTML += `
+        <div class="slider-card" onclick="window.location.href='hotel.html?id=${h.id}'">
+          <img src="${h.main_image}" class="slider-img">
+          <h3>${h.name}</h3>
+          <p>${h.city}</p>
+        </div>
+      `;
+    });
+  });
+</script>
+<script src="/js/config.js"></script>
+</body>
+</html>

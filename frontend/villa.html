@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Villa Details | The Lalitas Hospitality</title>
+
+  <!-- Flatpickr -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+  <!-- Global Header -->
+  <link rel="stylesheet" href="css/header.css">
+
+  <!-- Page Styles -->
+  <link rel="stylesheet" href="css/villa.css" />
+</head>
+
+<body>
+
+  <!-- GLOBAL HEADER -->
+  <div id="headerContainer"></div>
+
+
+  <!-- =========================
+       HERO IMAGE GALLERY
+  ========================== -->
+  <section class="villa-hero">
+    <div class="hero-grid">
+
+      <div class="hero-main"></div>
+
+      <div class="hero-side">
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ==========================================================
+       MAIN CONTENT
+ ================================================================ -->
+<section class="villa-details container">
+
+<div class="villa-main">
+
+<!-- LEFT CONTENT -->
+<div class="villa-left">
+
+ 
+  <!-- ==========================================================
+       Villa Summary
+ ================================================================ -->
+
+<div class="villa-summary"> 
+<section class="villa-header container">
+
+
+<!-- Villa Name --> 
+<h1 
+id="villaName" class="villa-title">
+</h1> 
+
+
+<!-- Location --> 
+
+<div 
+class="villa-location"> 
+<span id="villaCity"> </span> 
+</div> 
+
+
+<div class="info-grid">
+
+
+<!-- Meta Line --> 
+<div 
+class="villa-meta"> 
+<span id="villaRooms"></span> 
+-Rooms Private Vacation Villa 
+</div> 
+
+
+<!-- Price Highlight --> 
+
+<div id="villaTonightLine" class="villa-tonight-line"></div>
+
+ 
+
+
+
+<!-- Capacity --> 
+
+<div 
+class="villa-capacity"> 
+For 
+<strong>
+<span id="villaBaseGuests"></span> 
+</strong> 
+
+guests (Extra charges apply for additional guests. Kids above 5 years are counted as guests.) 
+</div> 
+
+</section> </div>
+
+
+        
+<div class="villa-section">
+          
+<h2>Property Summary</h2>
+
+          
+<div class="info-grid">
+
+           
+<div><strong>Max Guests:</strong> <span id="villaMaxGuests"></span></div>
+            
+<div><strong>Bathrooms:</strong> <span id="villaBathrooms"></span></div>
+          
+<div><strong>Architecture:</strong> <span id="villaArchitecture"></span></div>
+            
+<div><strong>View:</strong> <span id="villaView"></span></div>
+            
+<div><strong>Check-in:</strong> <span id="villaCheckIn"></span></div>
+           
+<div><strong>Check-out:</strong> <span id="villaCheckOut"></span></div>
+         
+</div>
+        
+</div>
+
+        <!-- DESCRIPTION -->
+        <div class="villa-section">
+          <h2>About This Villa</h2>
+          <p id="villaDescription"></p>
+        </div>
+
+        
+
+        <!-- TABS -->
+        <div class="villa-tabs">
+          <button class="tab-btn active" data-tab="amenitiesTab">Amenities</button>
+          <button class="tab-btn" data-tab="rulesTab">House Rules</button>
+          <button class="tab-btn" data-tab="foodTab">Food & Kitchen</button>
+          <button class="tab-btn" data-tab="safetyTab">Safety</button>
+          <button class="tab-btn" data-tab="powerTab">Power & Utilities</button>
+          <button class="tab-btn" data-tab="parkingTab">Parking</button>
+          <button class="tab-btn" data-tab="featuresTab">Property Features</button>
+          <button class="tab-btn" data-tab="attractionsTab">Nearby Attractions</button>
+          <button class="tab-btn" data-tab="refundTab">Refund Policy</button>
+        </div>
+
+        <!-- TAB CONTENT (ONLY SOURCE OF TRUTH) -->
+        <div class="tabs-content">
+
+          <div id="amenitiesTab" class="tab-content active">
+            <div class="villa-section">
+              <h2>Amenities</h2>
+              <div id="villaAmenities" class="amenities-grid"></div>
+            </div>
+          </div>
+
+          <div id="rulesTab" class="tab-content">
+            <div class="villa-section">
+              <h2>House Rules</h2>
+              <ul class="rules-list">
+                <li>Smoking: <strong id="ruleSmoking"></strong></li>
+                <li>Pets: <strong id="rulePets"></strong></li>
+                <li>Parties: <strong id="ruleParties"></strong></li>
+                <li>Loud Music: <strong id="ruleLoudMusic"></strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div id="foodTab" class="tab-content">
+            <div class="villa-section">
+              <h2>Food & Kitchen</h2>
+              <ul class="rules-list">
+                <li>Kitchen: <strong id="villaKitchen"></strong></li>
+                <li>Restaurant: <strong id="villaRestaurant"></strong></li>
+                <li>Room Service: <strong id="villaRoomService"></strong></li>
+                <li>In-house Chef: <strong id="villaChef"></strong></li>
+                <li>Café: <strong id="villaCafe"></strong></li>
+                <li>Outdoor Dining: <strong id="villaOutdoorDining"></strong></li>
+                <li>BBQ: <strong id="villaBBQ"></strong></li>
+                <li>Breakfast Included: <strong id="villaBreakfast"></strong></li>
+              </ul>
+              <p><strong>Food Options:</strong></p>
+              <p id="villaFoodOptions"></p>
+            </div>
+          </div>
+
+          <div id="safetyTab" class="tab-content">
+            <div class="villa-section">
+              <h2>Safety</h2>
+              <ul class="rules-list">
+                <li>CCTV: <strong id="villaCCTV"></strong></li>
+                <li>Fire Extinguishers: <strong id="villaFire"></strong></li>
+                <li>First Aid: <strong id="villaFirstAid"></strong></li>
+                <li>Security Guard: <strong id="villaGuard"></strong></li>
+                <li>Emergency Exit: <strong id="villaEmergencyExit"></strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div id="powerTab" class="tab-content">
+            <div class="villa-section">
+              <h2>Power & Utilities</h2>
+              <ul class="rules-list">
+                <li>Power Backup: <strong id="villaPowerBackup"></strong></li>
+                <li>Hot Water: <strong id="villaHotWater"></strong></li>
+                <li>Solar Water Heating: <strong id="villaSolar"></strong></li>
+                <li>Heating: <strong id="villaHeating"></strong></li>
+                <li>Water Purifier: <strong id="villaWaterPurifier"></strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div id="parkingTab" class="tab-content">
+            <div class="villa-section">
+              <h2>Parking & Transport</h2>
+              <ul class="rules-list">
+                <li>Parking Available: <strong id="villaParking"></strong></li>
+                <li>Covered Parking: <strong id="villaCoveredParking"></strong></li>
+                <li>Valet Service: <strong id="villaValet"></strong></li>
+                <li>EV Charging: <strong id="villaEV"></strong></li>
+                <li>Taxi on Call: <strong id="villaTaxi"></strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div id="featuresTab" class="tab-content">
+            <div class="villa-section">
+              <h2>Property Features</h2>
+              <ul class="rules-list">
+                <li>Lawn / Garden: <strong id="villaLawn"></strong></li>
+                <li>Terrace: <strong id="villaTerrace"></strong></li>
+                <li>Private Villa Mode: <strong id="villaPrivateMode"></strong></li>
+                <li>Mountain View: <strong id="villaMountainView"></strong></li>
+                <li>Valley View: <strong id="villaValleyView"></strong></li>
+                <li>Forest View: <strong id="villaForestView"></strong></li>
+                <li>Outdoor Seating: <strong id="villaOutdoorSeating"></strong></li>
+                <li>Bonfire Area: <strong id="villaBonfire"></strong></li>
+                <li>Swimming Pool: <strong id="villaPool"></strong></li>
+                <li>Kids Play Area: <strong id="villaKidsPlay"></strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div id="attractionsTab" class="tab-content">
+            <div class="villa-section">
+              <h2>Nearby Attractions</h2>
+              <ul id="villaAttractionsList" class="rules-list"></ul>
+            </div>
+          </div>
+
+          <div id="refundTab" class="tab-content">
+            <div class="villa-section">
+              <h2>Refund Policy</h2>
+              <p id="villaRefund"></p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RIGHT BOOKING CARD -->
+      <div class="villa-right">
+        <div class="booking-card">
+          <h2 class="booking-title">Book Full Villa</h2>
+
+          <div class="booking-field">
+            <label>Check-In</label>
+            <input type="text" id="villaDateRange" placeholder="Check-in → Check-out" readonly />
+          </div>
+
+          <div class="booking-field">
+            <label>Adults</label>
+
+            <select id="vAdults"></select>
+          </div>
+
+          <div class="booking-field">
+            <label>Kids(Above 5 Years are chargable)</label>
+            <select id="vKids"></select>
+          </div>
+<div class="booking-field">
+  <label>Infants (Below 5 Years)</label>
+  <select id="vInfants"></select>
+</div>
+
+
+          <button id="vCheckBtn" class="check-btn">Check Availability</button>
+          <p id="vAvailabilityMsg"></p>
+
+          <div id="villaPriceBox" class="villa-price-box" style="display:none;">
+            <p>Nights: <span id="vNights"></span></p>
+            <p>Base Villa Price (per night): ₹<span id="vNightPrice"></span></p>
+            <p>GST: ₹<span id="vGst"></span></p>
+            <h3>Total: ₹<span id="vTotal"></span></h3>
+          </div>
+
+          <button id="vBookBtn" class="book-btn" disabled>Book Full Villa</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SCRIPTS -->
+<script src="js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="js/villa.js"></script>
+  <script src="js/header.js"></script>
+  <script>loadHeader();</script>
+
+</body>
+</html>

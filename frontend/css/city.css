@@ -1,0 +1,282 @@
+/* ================================
+   CITY WRAPPER
+================================ */
+.city-results {
+  max-width: 1200px;
+  margin: auto;
+  padding: 28px 20px;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background: linear-gradient(180deg, #fafbff, #ffffff);
+}
+
+/* ================================
+   HOTEL CARD
+================================ */
+.hotel-card {
+  display: grid;
+  grid-template-columns: 260px 1fr 320px;
+  gap: 26px;
+  background: linear-gradient(
+    135deg,
+    #ffffff,
+    #f8f9ff
+  );
+  border-radius: 20px;
+  padding: 18px;
+  margin-bottom: 30px;
+  box-shadow:
+    0 12px 30px rgba(0,0,0,0.08),
+    inset 0 0 0 1px rgba(255,255,255,0.6);
+  align-items: center;
+  transition: all .3s ease;
+}
+
+.hotel-card:hover {
+  transform: translateY(-6px);
+  box-shadow:
+    0 22px 50px rgba(0,0,0,0.12),
+    inset 0 0 0 1px rgba(255,255,255,0.7);
+}
+
+/* ================================
+   IMAGE
+================================ */
+.hotel-card-image img {
+  width: 100%;
+  height: 185px;
+  object-fit: cover;
+  border-radius: 16px;
+  transition: transform .5s ease;
+}
+
+.hotel-card:hover .hotel-card-image img {
+  transform: scale(1.08);
+}
+
+/* ================================
+   SUMMARY
+================================ */
+.hotel-name {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 700;
+  color: #111;
+}
+
+.hotel-location {
+  color: #666;
+  margin: 6px 0 14px;
+  font-size: 14px;
+}
+
+/* Pills */
+.hotel-highlights span {
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(
+    135deg,
+    #eef2ff,
+    #fdf2f8
+  );
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 8px;
+  margin-bottom: 6px;
+  color: #4f46e5;
+}
+
+/* ================================
+   AVAILABILITY PANEL
+================================ */
+.hotel-card-availability {
+  padding-left: 20px;
+  border-left: 2px dashed #e5e7ff;
+}
+
+/* Loader */
+.availability-loading {
+  color: #777;
+  font-size: 14px;
+}
+
+/* Availability box */
+.avail-box {
+  background: linear-gradient(
+    180deg,
+    #ffffff,
+    #f9faff
+  );
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow:
+    0 8px 20px rgba(0,0,0,0.06);
+}
+
+/* Room rows */
+.avail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 14px;
+  color: #222;
+}
+
+.avail-row strong {
+  font-weight: 700;
+}
+
+/* Available rooms highlight */
+.avail-row:not(.sold) strong {
+  color: #16a34a;
+}
+
+/* Sold out */
+.avail-row.sold {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* Sold-out block */
+.sold-text {
+  color: #ef4444;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+/* ================================
+   CTA BUTTON
+================================ */
+.check-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px;
+  background: linear-gradient(
+    135deg,
+    #6366f1,
+    #ec4899
+  );
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .25s ease;
+  box-shadow: 0 10px 25px rgba(99,102,241,0.35);
+}
+
+.check-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 35px rgba(236,72,153,0.45);
+}
+
+/* ================================
+   SEARCH BAR – CITY PAGE
+================================ */
+.search-bar-container {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: linear-gradient(
+    180deg,
+    rgba(255,255,255,0.92),
+    rgba(250,251,255,0.92)
+  );
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  padding: 18px 14px;
+}
+
+.search-box {
+  max-width: 1200px;
+  margin: auto;
+  display: grid;
+  grid-template-columns: 1.2fr 1.8fr 1fr 1fr auto;
+  gap: 14px;
+  align-items: center;
+  background: linear-gradient(135deg, #ffffff, #f8f9ff);
+  padding: 16px;
+  border-radius: 20px;
+  box-shadow:
+    0 12px 28px rgba(0,0,0,0.08),
+    inset 0 0 0 1px rgba(255,255,255,0.6);
+}
+
+.city-label {
+  background: linear-gradient(
+    135deg,
+    #eef2ff,
+    #fdf2f8
+  );
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-weight: 700;
+  color: #4f46e5;
+  font-size: 15px;
+  text-align: center;
+}
+
+.search-box input,
+.search-box select {
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid #e5e7ff;
+  font-size: 14px;
+  font-weight: 600;
+  background: #fff;
+  color: #111;
+  outline: none;
+  transition: all .25s ease;
+}
+
+.search-box input:focus,
+.search-box select:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+}
+
+.search-box .btn-primary {
+  height: 52px;
+  padding: 0 26px;
+  background: linear-gradient(
+    135deg,
+    #6366f1,
+    #ec4899
+  );
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all .25s ease;
+  box-shadow: 0 10px 25px rgba(99,102,241,0.35);
+}
+
+.search-box .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 35px rgba(236,72,153,0.45);
+}
+
+
+/* ================================
+   MOBILE
+================================ */
+@media (max-width: 900px) {
+  .hotel-card {
+    grid-template-columns: 1fr;
+  }
+
+  .hotel-card-availability {
+    border-left: none;
+    padding-left: 0;
+    margin-top: 16px;
+  }
+
+  .hotel-card-image img {
+    height: 230px;
+  }
+}

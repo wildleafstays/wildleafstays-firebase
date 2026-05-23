@@ -1,0 +1,349 @@
+/* ============================================================
+   BASE
+============================================================ */
+body {
+  font-family: 'Outfit', sans-serif;
+  background: #f7f9fc;
+  margin: 0;
+  padding: 24px;
+  color: #333;
+}
+
+.hidden {
+  display: none !important;
+}
+
+h1 {
+  font-size: 26px;
+  margin-bottom: 20px;
+}
+
+h2 {
+  font-size: 20px;
+  margin-bottom: 14px;
+}
+
+h3 {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* ============================================================
+   PANEL
+============================================================ */
+.admin-panel {
+  max-width: 1100px;
+  margin: auto;
+}
+
+.card-section,
+.collapse-card {
+  background: #fff;
+  border-radius: 14px;
+  margin-bottom: 22px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+}
+
+/* ============================================================
+   COLLAPSIBLE
+============================================================ */
+.collapse-card {
+  overflow: hidden;
+}
+
+.collapse-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  cursor: pointer;
+  background: linear-gradient(90deg, #eef4ff, #f9fbff);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.collapse-header .arrow {
+  font-size: 18px;
+  transition: transform .25s ease;
+}
+
+.collapse-body {
+  display: none;
+  padding: 18px;
+}
+
+.collapse-body.open {
+  display: block;
+}
+
+.arrow.rotated {
+  transform: rotate(180deg);
+}
+
+/* ============================================================
+   FORM GRID (TEXT INPUTS)
+============================================================ */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px 18px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group.full {
+  grid-column: span 2;
+}
+
+input, textarea, select {
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+/* ============================================================
+   CHECKBOX GRID (FIX FOR YOUR ISSUE)
+============================================================ */
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px 18px;
+}
+
+.checkbox-grid label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* ============================================================
+   BUTTONS
+============================================================ */
+.button-row {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+button {
+  border-radius: 12px;
+  padding: 10px 16px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #0077ff, #005fcc);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: #e5e7eb;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+/* ============================================================
+   IMAGE GRIDS
+============================================================ */
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.preview-img-container {
+  position: relative;
+}
+
+.preview-img-container img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+/* ============================================================
+   ROOM CATEGORIES
+============================================================ */
+
+/* Grid holding all room cards */
+.room-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  margin-top: 14px;
+}
+
+/* Individual room card */
+.room-card {
+  background: #ffffff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.room-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+}
+
+/* Room image */
+.room-card img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+/* Card body */
+.room-card-details {
+  padding: 16px;
+}
+
+.room-card-details h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.room-card-details p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #555;
+}
+
+/* Buttons inside card */
+.room-card-details .button-row {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* ============================================================
+   ADD NEW ROOM CARD
+============================================================ */
+.add-room-card {
+  background: #eef4ff;
+  border: 2px dashed #3a7afe;
+  border-radius: 14px;
+  height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.add-room-card:hover {
+  background: #e0ecff;
+  transform: translateY(-2px);
+}
+
+.add-room-card span {
+  font-size: 42px;
+  color: #3a7afe;
+  line-height: 1;
+}
+
+.add-room-card p {
+  margin-top: 10px;
+  font-size: 16px;
+  color: #3a7afe;
+  font-weight: 500;
+}
+
+
+/* ============================================================
+   MODAL FIX – ROOM EDIT / ADD
+============================================================ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 520px;
+  max-width: calc(100vw - 24px);
+  max-height: 85vh;
+  overflow-y: auto;
+
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+
+  z-index: 1100;
+  padding: 20px;
+}
+
+/* Header */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.close-modal {
+  background: none;
+  border: none;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+/* Body spacing */
+.modal-body {
+  margin-top: 12px;
+}
+
+.make-main-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.make-main-btn:hover {
+  background: #1e4fd1;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

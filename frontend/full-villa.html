@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Lalitas Hospitality | Hotel Details</title>
+
+<!-- CSS -->
+<link rel="stylesheet" href="css/header.css">
+<link rel="stylesheet" href="css/full-villa.css">
+
+
+  <!-- Google Font -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+</head>
+
+
+
+<body>
+<header id="headerContainer"></header>
+
+
+  <!-- VILLA LIST -->
+  <main id="villaContainer"></main>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      const res = await fetch(
+        "/api/hotels?full_villa=1"
+      );
+      const villas = await res.json();
+
+      const container = document.getElementById("villaContainer");
+
+      if (!villas || villas.length === 0) {
+        container.innerHTML = "<h2>No private villas found</h2>";
+        return;
+      }
+
+      villas.forEach(v => renderVilla(v));
+    });
+
+    function renderVilla(v) {
+      const img = v.main_image
+        ? `${v.main_image}`
+        : "https://via.placeholder.com/500x300?text=No+Image";
+
+      const container = document.getElementById("villaContainer");
+
+      container.insertAdjacentHTML(
+        "beforeend",
+        `
+        <div class="villa-card" onclick="openVilla(${v.id})">
+          <img src="${img}" class="villa-img" />
+          <div class="villa-info">
+            <div class="villa-title">${v.name}</div>
+            <div class="villa-city">${v.city}</div>
+            <div class="villa-tagline">${v.villa_tagline || ""}</div>
+            <div class="view-btn">View Villa</div>
+          </div>
+        </div>
+      `
+      );
+    }
+
+    function openVilla(id) {
+      window.location.href = `villa.html?id=${id}`;
+    }
+  </script>
+<script src="/js/config.js"></script>
+<script src="/js/header.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", loadHeader);
+</script>
+
+</body>
+</html>

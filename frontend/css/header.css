@@ -1,0 +1,135 @@
+/* ============================================================
+   GLOBAL SITE HEADER — AIRBNB GRADE (FINAL)
+============================================================ */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+/* Width-controlled inner wrapper */
+.site-header-inner {
+  max-width: 1200px;
+  height: 72px;                 /* 🔒 hard lock */
+  margin: 0 auto;
+  padding: 0 32px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ---------------------------------
+   BRAND (Logo + Title)
+--------------------------------- */
+
+.brand-wrap {
+  display: flex;
+  align-items: center;   /* ✅ FIXED */
+  gap: 10px;
+
+  text-decoration: none;
+  color: inherit;
+
+  max-height: 72px;
+}
+           /* 🔒 prevents overflow */
+
+
+.site-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* Lock title typography */
+#siteTitle {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+
+  margin: 0;
+  padding: 0;
+
+  white-space: nowrap;
+  color: #2a2a2a;
+}
+
+/* ---------------------------------
+   NAVIGATION
+--------------------------------- */
+
+.header-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.header-nav a {
+  text-decoration: none;
+  font-family: "Poppins", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #2a2a2a;
+
+  padding: 6px 0;
+  position: relative;
+}
+
+/* Airbnb-style hover underline */
+.header-nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 0%;
+  height: 2px;
+  background: #c9a45c;
+  transition: width 0.25s ease;
+}
+
+.header-nav a:hover::after {
+  width: 100%;
+}
+
+/* Active menu item */
+.header-nav a.active {
+  font-weight: 600;
+}
+
+/* ---------------------------------
+   SCROLL STATE
+--------------------------------- */
+
+.site-header.scrolled {
+  box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+}
+
+/* ---------------------------------
+   MOBILE
+--------------------------------- */
+
+@media (max-width: 900px) {
+  .site-header-inner {
+    padding: 0 20px;
+  }
+
+  .header-nav ul {
+    gap: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-nav {
+    display: none; /* hamburger later */
+  }
+}

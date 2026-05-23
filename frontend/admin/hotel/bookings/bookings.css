@@ -1,0 +1,297 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f6f7fb;
+  margin: 0;
+  padding: 20px;
+}
+
+h1 {
+  margin-bottom: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+th, td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+
+th {
+  background: #0b3c5d;
+  color: white;
+}
+
+.status-confirmed {
+  color: green;
+  font-weight: bold;
+}
+
+.status-cancelled {
+  color: red;
+  font-weight: bold;
+}
+
+button {
+  padding: 6px 10px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+}
+
+.cancel-btn {
+  background: #e74c3c;
+  color: white;
+}
+
+.cancel-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* ================================
+   🌿 Admin Bookings UI
+================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: "Poppins", sans-serif;
+  background: #f4f6f9;
+  color: #333;
+}
+
+/* ================================
+   Title
+================================ */
+h1 {
+  margin-bottom: 20px;
+  font-size: 26px;
+  font-weight: 600;
+  color: #1a3d5d;
+}
+
+/* ================================
+   Filters
+================================ */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #ffffff;
+  padding: 15px 18px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.filters select,
+.filters button {
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.filters select {
+  min-width: 180px;
+  background: #fff;
+}
+
+.filters button {
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.filters button:hover {
+  background: #135cbc;
+}
+
+/* ================================
+   Table Wrapper (KEY)
+================================ */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  background: #fff;
+  padding: 10px;
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.06);
+}
+
+/* ================================
+   Table
+================================ */
+table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background: #1a3d5d;
+  color: #fff;
+}
+
+th,
+td {
+  padding: 10px 12px;
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid #eee;
+}
+
+th {
+  font-weight: 600;
+}
+
+/* ================================
+   Status Styles (Optional)
+================================ */
+td.status-confirmed {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+td.status-cancelled {
+  color: #c62828;
+  font-weight: 600;
+}
+
+/* ================================
+   Hover
+================================ */
+tbody tr:hover td {
+  background: #f9fbff;
+}
+
+/* ================================
+   Scrollbar
+================================ */
+.table-wrapper::-webkit-scrollbar {
+  height: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+  background: #e8edf3;
+  border-radius: 20px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #9ab4d8;
+  border-radius: 20px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #7d9fcc;
+}
+
+/* ================================
+   📱 Mobile Optimisation
+================================ */
+@media (max-width: 768px) {
+
+  body {
+    padding: 12px;
+  }
+
+  h1 {
+    font-size: 20px;
+    margin-bottom: 15px;
+  }
+
+  .filters {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .filters select,
+  .filters button {
+    width: 100%;
+    min-width: unset;
+  }
+
+  th,
+  td {
+    font-size: 12px;
+    padding: 8px;
+  }
+}
+
+/* ===== TABLE WRAPPER FIX ===== */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+}
+
+/* ===== TABLE BASE ===== */
+.table-wrapper table {
+  width: max-content; /* 👈 KEY FIX */
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+/* ===== CELLS ===== */
+.table-wrapper th,
+.table-wrapper td {
+  white-space: nowrap;     /* prevent ugly line breaks */
+  padding: 10px 12px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+/* Room names column */
+td:nth-child(4) {
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Guest column */
+td:nth-child(6) {
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td {
+  position: relative;
+}
+
+td:hover {
+  overflow: visible;
+  z-index: 2;
+}
+
+/* Room Names column (4th column) */
+.table-wrapper td:nth-child(4),
+.table-wrapper th:nth-child(4) {
+  color: #7f1d1d;   
+  font-weight: 500;
+}
+
+.table-wrapper td:nth-child(4) {
+  font-weight: 600;
+}
+
+.table-wrapper th:nth-child(4) {
+  font-weight: 500;
+}
+
