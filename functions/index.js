@@ -47,6 +47,28 @@ function slugify(value) {
     .slice(0, 60) || "wildleaf";
 }
 
+function parseYmd(value) {
+  const [year, month, day] = String(value || "").slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatYmd(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function dateRange(start, end) {
+  const dates = [];
+  const startDate = parseYmd(start);
+  const endDate = parseYmd(end || start);
+  if (!startDate || !endDate) return dates;
+
+  for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+    dates.push(formatYmd(d));
+  }
+  return dates;
+}
+
 function publicHotel(doc) {
   const data = doc.data();
   return {
@@ -416,23 +438,97 @@ app.get("/api/inventory", async (req, res) => {
     const hotelDoc = await getDocByIdOrLegacy("hotels", req.query.hotelId);
     if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
 
+    const dates = dateRange(req.query.start, req.query.end);
     const rooms = await hotelDoc.ref.collection("rooms").get();
-    const inventory = rooms.docs.map(doc => {
+    const inventory = [];
+
+    for (const doc of rooms.docs) {
       const room = doc.data();
-      return {
-        roomId: room.legacyId || doc.id,
-        room_id: room.legacyId || doc.id,
-        category: room.category || room.room_name || "Room",
-        rate: money(room.rate || room.price || room.price_per_night),
-        rooms: Number(room.max_rooms || room.rooms || 1),
-        available_rooms: Number(room.available_rooms || room.max_rooms || room.rooms || 1)
-      };
-    });
+      const maxRooms = Number(room.max_rooms || room.rooms || 1);
+      const baseRate = money(room.rate || room.price || room.price_per_night);
+      const roomId = room.legacyId || doc.id;
+      const targetDates = dates.length ? dates : [null];
+
+      for (const date of targetDates) {
+        let override = {};
+        if (date) {
+          const overrideDoc = await hotelDoc.ref
+            .collection("rooms")
+            .doc(doc.id)
+            .collection("inventory")
+            .doc(date)
+            .get();
+          override = overrideDoc.exists ? overrideDoc.data() : {};
+        }
+
+        const availableRooms = override.available_rooms ?? room.available_rooms ?? maxRooms;
+
+        inventory.push({
+          roomId,
+          room_id: roomId,
+          room_category_id: roomId,
+          category: room.category || room.room_name || "Room",
+          max_rooms: maxRooms,
+          rooms: maxRooms,
+          date,
+          available_rooms: Number(availableRooms),
+          rate: override.rate ?? null,
+          base_price: baseRate,
+          villa_booked: override.villa_booked ? 1 : 0
+        });
+      }
+    }
 
     res.json({ success: true, inventory });
   } catch (err) {
     console.error("GET /api/inventory", err);
     res.status(500).json({ error: "Failed to fetch inventory" });
+  }
+});
+
+app.post("/api/inventory/update", requireAdmin, async (req, res) => {
+  try {
+    const { hotelId, roomCategoryId, date } = req.body;
+    if (!hotelId || !roomCategoryId || !date) {
+      return res.status(400).json({ error: "hotelId, roomCategoryId and date are required" });
+    }
+
+    const hotelDoc = await getDocByIdOrLegacy("hotels", hotelId);
+    if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
+
+    const roomId = String(roomCategoryId);
+    let roomDoc = await hotelDoc.ref.collection("rooms").doc(roomId).get();
+    if (!roomDoc.exists) {
+      const snap = await hotelDoc.ref
+        .collection("rooms")
+        .where("legacyId", "==", Number(roomCategoryId))
+        .limit(1)
+        .get();
+      if (!snap.empty) roomDoc = snap.docs[0];
+    }
+    if (!roomDoc.exists) return res.status(404).json({ error: "Room not found" });
+
+    const room = roomDoc.data();
+    const maxRooms = Number(room.max_rooms || 1);
+    const update = {
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "availableRooms")) {
+      const available = Number(req.body.availableRooms);
+      if (Number.isNaN(available)) return res.status(400).json({ error: "Invalid availableRooms" });
+      update.available_rooms = Math.min(Math.max(available, 0), maxRooms);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "rate")) {
+      update.rate = req.body.rate === null ? null : money(req.body.rate);
+    }
+
+    await roomDoc.ref.collection("inventory").doc(String(date).slice(0, 10)).set(update, { merge: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("POST /api/inventory/update", err);
+    res.status(500).json({ error: "Failed to update inventory" });
   }
 });
 
