@@ -404,13 +404,13 @@ function renderFacilities(fac) {
 function activateVillaMode(hotel) {
 
   // Hide hotel-only sections
-  document.querySelector(".tabs-section").classList.add("hidden");
-  document.querySelector(".rooms-section").classList.add("hidden");
-  document.getElementById("grandTotalBar").classList.add("hidden");
+  document.querySelector(".tabs-section")?.classList.add("hidden");
+  document.querySelector(".rooms-section")?.classList.add("hidden");
+  document.getElementById("grandTotalBar")?.classList.add("hidden");
 
   // Show Villa Section
   const villaSec = document.getElementById("villaModeSection");
-  villaSec.classList.remove("hidden");
+  villaSec?.classList.remove("hidden");
 
   // Fill villa content
   document.getElementById("villaName").textContent = hotel.name;
@@ -425,7 +425,7 @@ let villaBasePrice = 0;
 let extraAdultPrice = 0;
 let extraKidPrice = 0;
 
-hotel.rooms.forEach(cat => {
+(hotel.rooms || []).forEach(cat => {
   const roomsCount = Number(cat.max_rooms || 1);
 
   totalRooms += roomsCount;

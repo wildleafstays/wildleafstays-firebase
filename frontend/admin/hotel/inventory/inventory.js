@@ -1,4 +1,4 @@
-import { authHeaders } from "../../auth.js";
+import { authHeaders, secureFetch } from "../../auth.js";
 import { getHotelContext } from "../../hotelContext.js";
 
 authHeaders();
@@ -56,7 +56,7 @@ function getActiveHotelId() {
 // LOAD HOTELS
 // ===============================
 async function loadHotels() {
-  const res = await fetch(`${API_BASE}/api/hotels`);
+  const res = await secureFetch(`${API_BASE}/api/hotels`);
   const hotels = await res.json();
 
   const hotelSelect = document.getElementById("hotelSelect");
@@ -90,7 +90,7 @@ async function loadInventory() {
   currentStartDate = new Date(start);
   currentEndDate = new Date(end);
 
-  const res = await fetch(
+  const res = await secureFetch(
     `${API_BASE}/api/inventory?hotelId=${encodeURIComponent(
       hotelId
     )}&start=${start}&end=${end}`
@@ -157,7 +157,7 @@ categories[catId].villa[dateStr] = Number(row.villa_booked) === 1;
   html += "</tr>";
 
   // ROWS
-  Object.keys(categories).map(Number).forEach((catId) => {
+  Object.keys(categories).forEach((catId) => {
 
     const cat = categories[catId];
     html += `<tr><td class="room-name"><b>${cat.name}</b></td>`;
@@ -230,7 +230,7 @@ async function updateInv(roomCategoryId, date, newValue, maxRooms) {
 
   const safe = Math.min(Math.max(Number(newValue), 0), Number(maxRooms));
 
-  const res = await fetch(`${API_BASE}/api/inventory/update`, {
+  const res = await secureFetch(`${API_BASE}/api/inventory/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -251,7 +251,7 @@ async function updateInv(roomCategoryId, date, newValue, maxRooms) {
 async function handleInvClick(btn, action) {
   const box = btn.closest(".inv-box");
 
-  const catId = Number(box.dataset.cat);
+  const catId = box.dataset.cat;
   const date = normalizeDate(box.dataset.date);
 
   const maxRooms = Number(box.dataset.max);
@@ -278,7 +278,7 @@ async function handleRateChange(input) {
 
   const hotelId = getActiveHotelId();
 
-  const roomCategoryId = Number(box.dataset.cat);
+  const roomCategoryId = box.dataset.cat;
   const date = normalizeDate(box.dataset.date);
 
 
@@ -292,7 +292,7 @@ async function handleRateChange(input) {
   }
 
   // 🚫 DO NOT SEND availableRooms HERE
-  await fetch(`${API_BASE}/api/inventory/update`, {
+  await secureFetch(`${API_BASE}/api/inventory/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
