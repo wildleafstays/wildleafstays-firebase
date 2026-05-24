@@ -202,7 +202,7 @@ fetch("/api/hotels")
 
 
   // Load homepage sections
-  fetch(`${API}/homepage/render`)
+  fetch("/api/homepage/render")
     .then(res => res.json())
     .then(renderHomepageSections)
     .catch(err => console.error("Homepage sections load error:", err));

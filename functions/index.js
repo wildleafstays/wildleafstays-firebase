@@ -48,6 +48,22 @@ function publicHotel(doc) {
   };
 }
 
+function hotelCard(hotel) {
+  return {
+    title: hotel.name,
+    image: hotel.main_image || hotel.image || (hotel.images || [])[0] || "",
+    price: hotel.price_per_night || hotel.rate || "",
+    max_guests: hotel.max_guests || "",
+    amenities: hotel.amenities || [],
+    filter_value: hotel.city || hotel.legacyId || hotel.id,
+    city: hotel.city || hotel.location || ""
+  };
+}
+
+function defaultHeroImage() {
+  return "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1600&q=80";
+}
+
 async function getDocByIdOrLegacy(collection, id) {
   const direct = await db.collection(collection).doc(String(id)).get();
   if (direct.exists) return direct;
@@ -82,6 +98,50 @@ app.get(["/health", "/api/health"], (req, res) => {
   res.json({ ok: true, backend: "firebase" });
 });
 
+app.get("/api/branding", async (req, res) => {
+  try {
+    const doc = await db.collection("settings").doc("branding").get();
+    res.json({
+      site_title: "Wildleaf Stays",
+      logo_url: "",
+      hero_message: "Find peaceful stays close to nature",
+      hero_offers: [],
+      ...(doc.exists ? doc.data() : {})
+    });
+  } catch (err) {
+    console.error("GET /api/branding", err);
+    res.status(500).json({ error: "Failed to fetch branding" });
+  }
+});
+
+app.get("/api/header-menu", async (req, res) => {
+  try {
+    const snap = await db.collection("headerMenu").orderBy("sort_order", "asc").get();
+    if (snap.empty) {
+      return res.json([
+        { label: "Home", url: "/" },
+        { label: "Villas", url: "/full-villa.html" }
+      ]);
+    }
+
+    res.json(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+  } catch (err) {
+    console.error("GET /api/header-menu", err);
+    res.status(500).json({ error: "Failed to fetch header menu" });
+  }
+});
+
+app.get("/api/collage", async (req, res) => {
+  try {
+    const snap = await db.collection("collage").orderBy("sort_order", "asc").get();
+    if (snap.empty) return res.json([{ image_url: defaultHeroImage() }]);
+    res.json(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+  } catch (err) {
+    console.error("GET /api/collage", err);
+    res.status(500).json({ error: "Failed to fetch collage" });
+  }
+});
+
 app.get("/api/hotels", async (req, res) => {
   try {
     let query = db.collection("hotels");
@@ -94,6 +154,56 @@ app.get("/api/hotels", async (req, res) => {
   } catch (err) {
     console.error("GET /api/hotels", err);
     res.status(500).json({ error: "Failed to fetch hotels" });
+  }
+});
+
+app.get("/api/homepage/render", async (req, res) => {
+  try {
+    const hotelsSnap = await db.collection("hotels").get();
+    const hotels = hotelsSnap.docs.map(doc => ({ id: doc.id, ...publicHotel(doc) }));
+    const cities = [...new Set(hotels.map(hotel => hotel.city).filter(Boolean))];
+
+    const sections = [];
+
+    if (hotels.length) {
+      sections.push({
+        title: "Featured Stays",
+        filter_type: "hotel",
+        card_style: "style1",
+        show_price: true,
+        show_occupancy: true,
+        show_amenities: true,
+        items: hotels.map(hotel => ({
+          ...hotelCard(hotel),
+          filter_value: hotel.legacyId || hotel.id
+        }))
+      });
+    }
+
+    if (cities.length) {
+      sections.push({
+        title: "Explore By Location",
+        filter_type: "city",
+        card_style: "style2",
+        show_price: false,
+        show_occupancy: false,
+        show_amenities: false,
+        items: cities.map(city => {
+          const hotel = hotels.find(h => h.city === city) || {};
+          return {
+            title: city,
+            image: hotel.main_image || hotel.image || defaultHeroImage(),
+            filter_value: city,
+            city
+          };
+        })
+      });
+    }
+
+    res.json(sections);
+  } catch (err) {
+    console.error("GET /api/homepage/render", err);
+    res.status(500).json({ error: "Failed to render homepage" });
   }
 });
 
@@ -357,6 +467,86 @@ app.post("/api/admin/create-admin", async (req, res) => {
   }
 });
 
+app.post("/api/admin/seed-initial", async (req, res) => {
+  try {
+    const setupKey = String(req.headers["x-setup-key"] || req.body.setupKey || "").trim();
+    const expectedSetupKey = String(secretValue(ADMIN_SETUP_KEY, "ADMIN_SETUP_KEY") || "").trim();
+    if (!setupKey || setupKey !== expectedSetupKey) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    const hotelsRef = db.collection("hotels");
+    const existing = await hotelsRef.limit(1).get();
+    if (!existing.empty) return res.json({ success: true, skipped: true });
+
+    const sampleHotels = [
+      {
+        id: "wildleaf-mussoorie",
+        name: "Wildleaf Nature Stay",
+        city: "Mussoorie",
+        location: "Mussoorie",
+        description: "A calm hillside stay for families and couples.",
+        price_per_night: 4500,
+        max_guests: 4,
+        amenities: ["Mountain view", "Parking", "Breakfast"],
+        main_image: defaultHeroImage(),
+        image: defaultHeroImage(),
+        images: [{ image_url: defaultHeroImage() }],
+        is_full_villa: false
+      },
+      {
+        id: "wildleaf-villa-dehradun",
+        name: "Wildleaf Private Villa",
+        city: "Dehradun",
+        location: "Dehradun",
+        description: "A private villa stay with open spaces and quiet evenings.",
+        price_per_night: 12000,
+        max_guests: 10,
+        amenities: ["Full villa", "Kitchen", "Lawn"],
+        main_image: defaultHeroImage(),
+        image: defaultHeroImage(),
+        images: [{ image_url: defaultHeroImage() }],
+        is_full_villa: true
+      }
+    ];
+
+    const batch = db.batch();
+    for (const hotel of sampleHotels) {
+      const { id, ...data } = hotel;
+      const hotelRef = hotelsRef.doc(id);
+      batch.set(hotelRef, {
+        ...data,
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+      batch.set(hotelRef.collection("rooms").doc("standard-room"), {
+        category: hotel.is_full_villa ? "Full Villa" : "Standard Room",
+        room_name: hotel.is_full_villa ? "Full Villa" : "Standard Room",
+        price_per_night: hotel.price_per_night,
+        rate: hotel.price_per_night,
+        max_rooms: hotel.is_full_villa ? 1 : 5,
+        available_rooms: hotel.is_full_villa ? 1 : 5,
+        max_guests: hotel.max_guests,
+        amenities: hotel.amenities,
+        main_image: hotel.main_image,
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    batch.set(db.collection("settings").doc("branding"), {
+      site_title: "Wildleaf Stays",
+      logo_url: "",
+      hero_message: "Find peaceful stays close to nature",
+      hero_offers: ["Test booking is enabled with Razorpay test mode"]
+    });
+
+    await batch.commit();
+    res.json({ success: true, hotels: sampleHotels.length });
+  } catch (err) {
+    console.error("POST /api/admin/seed-initial", err);
+    res.status(500).json({ error: "Failed to seed initial data" });
+  }
+});
+
 app.get("/api/bookings", requireAdmin, async (req, res) => {
   try {
     let query = db.collection("bookings").orderBy("created_at", "desc");
@@ -389,4 +579,3 @@ exports.api = onRequest(
   },
   app
 );
-
