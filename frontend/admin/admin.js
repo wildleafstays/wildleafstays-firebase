@@ -15,7 +15,7 @@ propertyForm.addEventListener("submit", async event => {
   const formData = new FormData(propertyForm);
   const body = Object.fromEntries(formData.entries());
   body.sellAsFullVilla = formData.has("sellAsFullVilla");
-  body.fullVillaPrice = Number(body.fullVillaPrice || 0);
+  body.infantMaxAge = Number(body.infantMaxAge || 2);
 
   await adminFetch("/api/admin/properties", {
     method: "POST",
@@ -35,6 +35,9 @@ roomForm.addEventListener("submit", async event => {
   body.totalRooms = Number(body.totalRooms || 0);
   body.basePrice = Number(body.basePrice || 0);
   body.maxGuests = Number(body.maxGuests || 0);
+  body.includedGuests = Number(body.includedGuests || body.maxGuests || 0);
+  body.extraAdultRate = Number(body.extraAdultRate || 0);
+  body.extraKidRate = Number(body.extraKidRate || 0);
 
   await adminFetch(`/api/admin/properties/${propertyId}/roomCategories`, {
     method: "POST",

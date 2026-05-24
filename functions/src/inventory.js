@@ -87,31 +87,65 @@ function roomAvailable(dayInventory, roomCategoryId, quantity) {
 function quoteRooms(roomCategories, rooms, dates) {
   let subtotal = 0;
   let gstAmount = 0;
+  const lines = [];
 
   rooms.forEach(item => {
     const room = roomCategories[item.roomCategoryId];
     if (!room) return;
 
     const quantity = Number(item.quantity || 0);
+    const adults = Number(item.adults || 0);
+    const kids = Number(item.kids || 0);
+    const maxGuests = Number(room.maxGuests || room.maxGuestsPerRoom || 2) * quantity;
+    if (quantity < 1) return;
+    if (adults + kids > maxGuests) {
+      throw new Error(`${room.name} allows maximum ${maxGuests} guests for ${quantity} room(s)`);
+    }
+    const includedGuests = Number(room.includedGuests || maxGuests) * quantity;
+    const chargeableGuests = Math.max(adults + kids - includedGuests, 0);
+    const extraAdultRate = money(room.extraAdultRate || 0);
+    const extraKidRate = money(room.extraKidRate || 0);
+    const chargeableAdults = Math.min(chargeableGuests, adults);
+    const chargeableKids = Math.max(chargeableGuests - chargeableAdults, 0);
     const base = money(room.basePrice) * quantity * dates.length;
-    const gst = money(base * Number(room.gstPercent || 0) / 100);
+    const extra = money((chargeableAdults * extraAdultRate + chargeableKids * extraKidRate) * dates.length);
+    const taxable = base + extra;
+    const gst = money(taxable * Number(room.gstPercent || 0) / 100);
 
-    subtotal += base;
+    subtotal += taxable;
     gstAmount += gst;
+    lines.push({
+      roomCategoryId: item.roomCategoryId,
+      name: room.name,
+      quantity,
+      adults,
+      kids,
+      infants: Number(item.infants || 0),
+      maxGuests,
+      baseAmount: money(base),
+      extraGuestAmount: money(extra),
+      gstAmount: money(gst),
+      totalAmount: money(taxable + gst)
+    });
   });
 
   return {
+    lines,
     subtotal: money(subtotal),
     gstAmount: money(gstAmount),
     totalAmount: money(subtotal + gstAmount)
   };
 }
 
-function quoteVilla(property, dates) {
-  const subtotal = money(property.fullVillaPrice) * dates.length;
+function quoteVilla(property, roomCategories, dates) {
+  const nightlyTotal = Object.values(roomCategories || {}).reduce((sum, room) => {
+    return sum + money(room.basePrice) * Number(room.totalRooms || 0);
+  }, 0);
+  const subtotal = money(nightlyTotal) * dates.length;
   const gstAmount = money(subtotal * Number(property.fullVillaGstPercent || 0) / 100);
 
   return {
+    nightlyTotal: money(nightlyTotal),
     subtotal: money(subtotal),
     gstAmount,
     totalAmount: money(subtotal + gstAmount)

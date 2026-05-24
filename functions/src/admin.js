@@ -163,16 +163,23 @@ function normalizeProperty(body, options = {}) {
   if (body.sellAsFullVilla !== undefined) property.sellAsFullVilla = Boolean(body.sellAsFullVilla);
   if (body.fullVillaPrice !== undefined) property.fullVillaPrice = Number(body.fullVillaPrice || 0);
   if (body.maxGuests !== undefined) property.maxGuests = Number(body.maxGuests || 0);
+  if (body.infantMaxAge !== undefined) property.infantMaxAge = Number(body.infantMaxAge || 2);
   if (Array.isArray(body.amenities)) property.amenities = body.amenities.map(String).filter(Boolean);
+  if (typeof body.amenities === "string") property.amenities = splitCsv(body.amenities);
+  if (Array.isArray(body.facilities)) property.facilities = body.facilities.map(String).filter(Boolean);
+  if (typeof body.facilities === "string") property.facilities = splitCsv(body.facilities);
   if (Array.isArray(body.photos)) property.photos = body.photos.map(String).filter(Boolean);
+  if (typeof body.photos === "string") property.photos = splitCsv(body.photos);
 
   if (!options.partial) {
     if (!property.name) throw new Error("Property name is required");
     if (!property.destination) throw new Error("Destination is required");
     property.status = property.status || "active";
     property.sellAsFullVilla = Boolean(property.sellAsFullVilla);
-    property.fullVillaPrice = Number(property.fullVillaPrice || 0);
+    property.fullVillaPrice = 0;
+    property.infantMaxAge = Number(property.infantMaxAge || 2);
     property.amenities = property.amenities || [];
+    property.facilities = property.facilities || [];
     property.photos = property.photos || [];
   }
 
@@ -187,18 +194,39 @@ function normalizeRoomCategory(body, options = {}) {
   if (body.totalRooms !== undefined) room.totalRooms = Number(body.totalRooms || 0);
   if (body.basePrice !== undefined) room.basePrice = Number(body.basePrice || 0);
   if (body.maxGuests !== undefined) room.maxGuests = Number(body.maxGuests || 0);
+  if (body.includedGuests !== undefined) room.includedGuests = Number(body.includedGuests || 0);
+  if (body.extraAdultRate !== undefined) room.extraAdultRate = Number(body.extraAdultRate || 0);
+  if (body.extraKidRate !== undefined) room.extraKidRate = Number(body.extraKidRate || 0);
+  if (body.viewType !== undefined) room.viewType = String(body.viewType || "").trim();
+  if (body.bedType !== undefined) room.bedType = String(body.bedType || "").trim();
+  if (body.sizeText !== undefined) room.sizeText = String(body.sizeText || "").trim();
   if (body.active !== undefined) room.active = Boolean(body.active);
   if (Array.isArray(body.photos)) room.photos = body.photos.map(String).filter(Boolean);
+  if (typeof body.photos === "string") room.photos = splitCsv(body.photos);
+  if (Array.isArray(body.amenities)) room.amenities = body.amenities.map(String).filter(Boolean);
+  if (typeof body.amenities === "string") room.amenities = splitCsv(body.amenities);
 
   if (!options.partial) {
     if (!room.name) throw new Error("Room category name is required");
     if (!room.totalRooms || room.totalRooms < 1) throw new Error("Total rooms must be at least 1");
     if (!room.basePrice || room.basePrice < 1) throw new Error("Room price is required");
+    room.maxGuests = Number(room.maxGuests || 2);
+    room.includedGuests = Number(room.includedGuests || room.maxGuests);
+    room.extraAdultRate = Number(room.extraAdultRate || 0);
+    room.extraKidRate = Number(room.extraKidRate || 0);
     room.active = room.active !== false;
     room.photos = room.photos || [];
+    room.amenities = room.amenities || [];
   }
 
   return room;
+}
+
+function splitCsv(value) {
+  return String(value || "")
+    .split(",")
+    .map(item => item.trim())
+    .filter(Boolean);
 }
 
 function slugify(value) {

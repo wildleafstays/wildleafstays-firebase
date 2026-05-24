@@ -46,17 +46,16 @@ module.exports = function availabilityRoutes({ db, admin }) {
 
           return {
             roomCategoryId,
-            name: room.name,
+            ...publicRoom(room),
             availableRooms: minAvailable,
-            basePrice: room.basePrice,
             totalAmount: quote.totalAmount,
-            gstPercent: room.gstPercent || 0,
-            maxGuestsPerRoom: room.maxGuestsPerRoom || 2
+            quote
           };
         }).filter(room => room.availableRooms > 0);
 
         const canSellVilla = bundle.property.sellAsFullVilla === true &&
           inventoryDocs.every(day => villaAvailable(day.data, bundle.roomCategories));
+        const villaQuote = quoteVilla(bundle.property, bundle.roomCategories, dates);
 
         if (roomOptions.length || canSellVilla) {
           results.push({
@@ -64,10 +63,10 @@ module.exports = function availabilityRoutes({ db, admin }) {
             roomOptions,
             villaOption: canSellVilla ? {
               available: true,
-              price: bundle.property.fullVillaPrice,
+              price: villaQuote.nightlyTotal,
               maxGuests: bundle.property.maxGuestsVilla || null,
-              quote: quoteVilla(bundle.property, dates),
-              totalAmount: quoteVilla(bundle.property, dates).totalAmount
+              quote: villaQuote,
+              totalAmount: villaQuote.totalAmount
             } : {
               available: false
             }
@@ -107,7 +106,7 @@ module.exports = function availabilityRoutes({ db, admin }) {
 
         return {
           roomCategoryId,
-          ...room,
+          ...publicRoom(room),
           availableRooms: minAvailable
         };
       });
@@ -121,8 +120,8 @@ module.exports = function availabilityRoutes({ db, admin }) {
         villaOption: {
           enabled: bundle.property.sellAsFullVilla === true,
           available: canSellVilla,
-          price: bundle.property.fullVillaPrice || 0,
-          quote: canSellVilla ? quoteVilla(bundle.property, dates) : null
+          price: quoteVilla(bundle.property, bundle.roomCategories, dates).nightlyTotal,
+          quote: canSellVilla ? quoteVilla(bundle.property, bundle.roomCategories, dates) : null
         }
       });
     } catch (err) {
@@ -143,13 +142,13 @@ module.exports = function availabilityRoutes({ db, admin }) {
       if (!bundle) return res.status(404).json({ error: "Property not found" });
 
       const quote = bookingType === "fullVilla"
-        ? quoteVilla(bundle.property, dates)
+        ? quoteVilla(bundle.property, bundle.roomCategories, dates)
         : quoteRooms(bundle.roomCategories, rooms, dates);
 
       res.json({ quote });
     } catch (err) {
       console.error("POST /api/availability/quote", err);
-      res.status(500).json({ error: "Failed to calculate quote" });
+      res.status(400).json({ error: err.message || "Failed to calculate quote" });
     }
   });
 
@@ -165,6 +164,27 @@ function publicProperty(property) {
     description: property.description,
     photos: property.photos || [],
     amenities: property.amenities || [],
+    facilities: property.facilities || [],
+    infantMaxAge: Number(property.infantMaxAge || 2),
     sellAsFullVilla: property.sellAsFullVilla === true
+  };
+}
+
+function publicRoom(room) {
+  return {
+    id: room.id,
+    name: room.name,
+    description: room.description || "",
+    basePrice: Number(room.basePrice || 0),
+    totalRooms: Number(room.totalRooms || 0),
+    maxGuests: Number(room.maxGuests || room.maxGuestsPerRoom || 2),
+    includedGuests: Number(room.includedGuests || room.maxGuests || room.maxGuestsPerRoom || 2),
+    extraAdultRate: Number(room.extraAdultRate || 0),
+    extraKidRate: Number(room.extraKidRate || 0),
+    photos: room.photos || [],
+    amenities: room.amenities || [],
+    viewType: room.viewType || "",
+    bedType: room.bedType || "",
+    sizeText: room.sizeText || ""
   };
 }

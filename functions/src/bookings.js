@@ -25,7 +25,7 @@ module.exports = function bookingRoutes({ db, admin }) {
       if (!bundle) return res.status(404).json({ error: "Property not found" });
 
       const quote = bookingInput.bookingType === "fullVilla"
-        ? quoteVilla(bundle.property, dates)
+        ? quoteVilla(bundle.property, bundle.roomCategories, dates)
         : quoteRooms(bundle.roomCategories, bookingInput.rooms, dates);
 
       if (quote.totalAmount <= 0) {
@@ -48,7 +48,7 @@ module.exports = function bookingRoutes({ db, admin }) {
       res.json({ success: true, bookingId: bookingRef.id, quote });
     } catch (err) {
       console.error("POST /api/bookings/hold", err);
-      res.status(500).json({ error: "Failed to create booking hold" });
+      res.status(400).json({ error: err.message || "Failed to create booking hold" });
     }
   });
 
@@ -123,9 +123,12 @@ function normalizeBookingInput(body) {
       email: String(body.guest?.email || body.guestEmail || "").trim()
     },
     rooms: Array.isArray(body.rooms)
-      ? body.rooms.map(room => ({
+        ? body.rooms.map(room => ({
           roomCategoryId: String(room.roomCategoryId || ""),
-          quantity: Number(room.quantity || 1)
+          quantity: Number(room.quantity || 1),
+          adults: Number(room.adults || 0),
+          kids: Number(room.kids || 0),
+          infants: Number(room.infants || 0)
         })).filter(room => room.roomCategoryId && room.quantity > 0)
       : [],
     source: body.source || "website"

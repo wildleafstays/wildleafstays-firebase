@@ -20,11 +20,14 @@
           <input name="name" placeholder="Property name" required>
           <input name="destination" placeholder="Destination" required>
           <textarea name="description" placeholder="Short description"></textarea>
+          <input name="photos" placeholder="Property photo URLs, comma separated">
+          <input name="facilities" placeholder="Facilities, comma separated: Pool, Kitchen, Spa, Restaurant">
+          <input name="amenities" placeholder="Amenities, comma separated">
+          <input name="infantMaxAge" type="number" min="0" value="2" placeholder="Infant max age">
           <label class="check">
             <input name="sellAsFullVilla" type="checkbox">
-            Also sell this property as a full villa
+            Also sell this property as a full villa. Price is auto-total of all rooms.
           </label>
-          <input name="fullVillaPrice" type="number" min="0" placeholder="Full villa nightly price">
           <button type="submit">Save Property</button>
         </form>
       </section>
@@ -34,9 +37,18 @@
         <form id="roomForm">
           <select name="propertyId" id="propertySelect" required></select>
           <input name="name" placeholder="Room category name" required>
+          <textarea name="description" placeholder="Room description"></textarea>
+          <input name="photos" placeholder="Room photo URLs, comma separated">
+          <input name="amenities" placeholder="Room amenities, comma separated">
+          <input name="viewType" placeholder="View type, e.g. Mountain view">
+          <input name="bedType" placeholder="Bed type, e.g. King bed">
+          <input name="sizeText" placeholder="Room size, e.g. 320 sq ft">
           <input name="totalRooms" type="number" min="1" placeholder="Total rooms" required>
           <input name="basePrice" type="number" min="1" placeholder="Nightly price" required>
-          <input name="maxGuests" type="number" min="1" placeholder="Max guests">
+          <input name="maxGuests" type="number" min="1" placeholder="Max guests per room" required>
+          <input name="includedGuests" type="number" min="1" placeholder="Guests included in price">
+          <input name="extraAdultRate" type="number" min="0" placeholder="Extra adult rate per night">
+          <input name="extraKidRate" type="number" min="0" placeholder="Extra kid rate per night">
           <button type="submit">Save Room Category</button>
         </form>
       </section>
