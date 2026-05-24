@@ -7,3 +7,6 @@ ui-debug.log
 .env
 .env.*
 .admin-setup-key.local
+.admin-login.local
+.razorpay-key-id.local
+.razorpay-key-secret.local

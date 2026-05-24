@@ -21,6 +21,7 @@ module.exports = function adminRoutes({ db, admin, ADMIN_SETUP_KEY }) {
       let user;
       try {
         user = await admin.auth().getUserByEmail(email);
+        user = await admin.auth().updateUser(user.uid, { password, displayName });
       } catch {
         user = await admin.auth().createUser({ email, password, displayName });
       }
