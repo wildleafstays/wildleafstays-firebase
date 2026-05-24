@@ -39,6 +39,14 @@ function money(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
+function slugify(value) {
+  return String(value || "wildleaf")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "wildleaf";
+}
+
 function publicHotel(doc) {
   const data = doc.data();
   return {
@@ -74,6 +82,22 @@ async function getDocByIdOrLegacy(collection, id) {
     if (!snap.empty) return snap.docs[0];
   }
 
+  return null;
+}
+
+async function findRoomDoc(roomId) {
+  const hotels = await db.collection("hotels").get();
+  for (const hotel of hotels.docs) {
+    const direct = await hotel.ref.collection("rooms").doc(String(roomId)).get();
+    if (direct.exists) return { hotelDoc: hotel, roomDoc: direct };
+
+    const snap = await hotel.ref
+      .collection("rooms")
+      .where("legacyId", "==", Number(roomId))
+      .limit(1)
+      .get();
+    if (!snap.empty) return { hotelDoc: hotel, roomDoc: snap.docs[0] };
+  }
   return null;
 }
 
@@ -157,6 +181,36 @@ app.get("/api/hotels", async (req, res) => {
   }
 });
 
+app.post("/api/hotels", requireAdmin, async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    if (!name) return res.status(400).json({ error: "Hotel name required" });
+
+    let id = slugify(name);
+    const existing = await db.collection("hotels").doc(id).get();
+    if (existing.exists) id = `${id}-${Date.now().toString(36)}`;
+
+    const hotel = {
+      name,
+      city: req.body.city || "",
+      location: req.body.location || req.body.city || "",
+      address: req.body.address || "",
+      description: req.body.description || "",
+      full_villa: Number(req.body.full_villa || 0),
+      is_full_villa: Number(req.body.full_villa || 0) === 1,
+      images: [],
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await db.collection("hotels").doc(id).set(hotel);
+    res.json({ id, ...hotel });
+  } catch (err) {
+    console.error("POST /api/hotels", err);
+    res.status(500).json({ error: "Failed to create hotel" });
+  }
+});
+
 app.get("/api/homepage/render", async (req, res) => {
   try {
     const hotelsSnap = await db.collection("hotels").get();
@@ -221,6 +275,139 @@ app.get("/api/hotels/:id", async (req, res) => {
   } catch (err) {
     console.error("GET /api/hotels/:id", err);
     res.status(500).json({ error: "Failed to fetch hotel" });
+  }
+});
+
+app.put("/api/hotels/:id", requireAdmin, async (req, res) => {
+  try {
+    const hotelDoc = await getDocByIdOrLegacy("hotels", req.params.id);
+    if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
+
+    const data = { ...req.body };
+    data.full_villa = Number(data.full_villa || 0);
+    data.is_full_villa = data.full_villa === 1;
+    data.location = data.location || data.city || data.address || "";
+    data.updated_at = admin.firestore.FieldValue.serverTimestamp();
+
+    await hotelDoc.ref.set(data, { merge: true });
+    res.json({ success: true, id: hotelDoc.id });
+  } catch (err) {
+    console.error("PUT /api/hotels/:id", err);
+    res.status(500).json({ error: "Failed to update hotel" });
+  }
+});
+
+app.delete("/api/hotels/:id", requireAdmin, async (req, res) => {
+  try {
+    const hotelDoc = await getDocByIdOrLegacy("hotels", req.params.id);
+    if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
+
+    const rooms = await hotelDoc.ref.collection("rooms").get();
+    const batch = db.batch();
+    rooms.docs.forEach(doc => batch.delete(doc.ref));
+    batch.delete(hotelDoc.ref);
+    await batch.commit();
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /api/hotels/:id", err);
+    res.status(500).json({ error: "Failed to delete hotel" });
+  }
+});
+
+app.post("/api/hotels/:hotelId/rooms", requireAdmin, async (req, res) => {
+  try {
+    const hotelDoc = await getDocByIdOrLegacy("hotels", req.params.hotelId);
+    if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
+
+    const category = String(req.body.category || "").trim();
+    if (!category) return res.status(400).json({ error: "Room category required" });
+
+    let id = slugify(category);
+    const existing = await hotelDoc.ref.collection("rooms").doc(id).get();
+    if (existing.exists) id = `${id}-${Date.now().toString(36)}`;
+
+    const room = {
+      ...req.body,
+      category,
+      price: money(req.body.price),
+      price_per_night: money(req.body.price),
+      rate: money(req.body.price),
+      gst: Number(req.body.gst || 0),
+      max_rooms: Number(req.body.max_rooms || 1),
+      available_rooms: Number(req.body.max_rooms || 1),
+      max_guests: Number(req.body.max_guests || 1),
+      roomNames: Array.isArray(req.body.roomNames) ? req.body.roomNames : [],
+      images: [],
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await hotelDoc.ref.collection("rooms").doc(id).set(room);
+    res.json({ success: true, id, roomCategoryId: id });
+  } catch (err) {
+    console.error("POST /api/hotels/:hotelId/rooms", err);
+    res.status(500).json({ error: "Failed to create room" });
+  }
+});
+
+app.put("/api/rooms/:id", requireAdmin, async (req, res) => {
+  try {
+    const found = await findRoomDoc(req.params.id);
+    if (!found) return res.status(404).json({ error: "Room not found" });
+
+    const data = {
+      ...req.body,
+      price: money(req.body.price),
+      price_per_night: money(req.body.price),
+      rate: money(req.body.price),
+      gst: Number(req.body.gst || 0),
+      max_rooms: Number(req.body.max_rooms || 1),
+      available_rooms: Number(req.body.max_rooms || 1),
+      max_guests: Number(req.body.max_guests || 1),
+      roomNames: Array.isArray(req.body.roomNames) ? req.body.roomNames : [],
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await found.roomDoc.ref.set(data, { merge: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("PUT /api/rooms/:id", err);
+    res.status(500).json({ error: "Failed to update room" });
+  }
+});
+
+app.delete("/api/rooms/:id", requireAdmin, async (req, res) => {
+  try {
+    const found = await findRoomDoc(req.params.id);
+    if (!found) return res.status(404).json({ error: "Room not found" });
+    await found.roomDoc.ref.delete();
+    res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /api/rooms/:id", err);
+    res.status(500).json({ error: "Failed to delete room" });
+  }
+});
+
+app.get("/api/rooms/by-category/:id", requireAdmin, async (req, res) => {
+  try {
+    const found = await findRoomDoc(req.params.id);
+    if (!found) return res.json([]);
+    res.json(found.roomDoc.data().roomNames || []);
+  } catch (err) {
+    console.error("GET /api/rooms/by-category/:id", err);
+    res.status(500).json({ error: "Failed to fetch room names" });
+  }
+});
+
+app.get("/api/rooms/:id/images", requireAdmin, async (req, res) => {
+  try {
+    const found = await findRoomDoc(req.params.id);
+    if (!found) return res.json([]);
+    res.json(found.roomDoc.data().images || []);
+  } catch (err) {
+    console.error("GET /api/rooms/:id/images", err);
+    res.status(500).json({ error: "Failed to fetch room images" });
   }
 });
 
