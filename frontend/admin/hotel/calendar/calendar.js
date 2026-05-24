@@ -1,4 +1,4 @@
-import { authHeaders } from "../../auth.js";
+import { authHeaders, secureFetch } from "../../auth.js";
 import { getHotelContext } from "../../hotelContext.js";
 
 authHeaders();
@@ -145,7 +145,7 @@ function openEditBooking(bookingId) {
   isEditMode = true;
   editingBookingId = bookingId;
 
-  fetch(`/api/bookings/${bookingId}`)
+  secureFetch(`/api/bookings/${bookingId}`)
     .then(res => res.json())
     .then(b => {
 
@@ -327,7 +327,7 @@ function saveBooking() {
     rooms: selectedRooms
   };
 
-  fetch("/api/calendar/bookings", {
+  secureFetch("/api/calendar/bookings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -353,7 +353,7 @@ loadCalendar(selectedHotelId);
 
 
 function loadCalendarHotels() {
-  fetch("/api/hotels")
+  secureFetch("/api/hotels")
     .then(res => res.json())
     .then(hotels => {
       const select = document.getElementById("calendarHotelSelect");
@@ -439,7 +439,7 @@ function loadAvailableRooms(preselectRoomName = null) {
 
   if (!checkIn || !checkOut || !selectedHotelId) return;
 
-  fetch(
+  secureFetch(
   `/api/rooms/available?hotelId=${selectedHotelId}&checkIn=${checkIn}&checkOut=${checkOut}&excludeBookingId=${bookingId || ""}`
 )
 
@@ -574,7 +574,7 @@ async function updateCalendarBooking() {
 
   };
 
-  const res = await fetch(
+  const res = await secureFetch(
     `/api/calendar/bookings/${editingBookingId}`,
     {
       method: "PUT",
@@ -597,7 +597,7 @@ loadCalendar(selectedHotelId);
 }
 
 function savePayment(bookingId) {
-  fetch(`/api/bookings/${bookingId}/payment`, {
+  secureFetch(`/api/bookings/${bookingId}/payment`, {
 
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -662,7 +662,7 @@ async function loadCalendar(hotelId, fromDate = null) {
     .slice(0, 10);
 
   try {
-    const res = await fetch(
+    const res = await secureFetch(
   `${API}?hotelId=${hotelId}&from=${start}&days=${WINDOW_DAYS}`,
   {
     credentials: "include", // 🔑 THIS IS CRITICAL

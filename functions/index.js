@@ -69,6 +69,69 @@ function dateRange(start, end) {
   return dates;
 }
 
+function stayNights(checkIn, checkOut) {
+  const dates = [];
+  const startDate = parseYmd(checkIn);
+  const endDate = parseYmd(checkOut);
+  if (!startDate || !endDate || startDate >= endDate) return dates;
+
+  for (let d = new Date(startDate); d < endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+    dates.push(formatYmd(d));
+  }
+  return dates;
+}
+
+function physicalRoomId(roomCategoryId, roomName) {
+  return `${roomCategoryId}__${slugify(roomName)}`;
+}
+
+async function listPhysicalRooms(hotelDoc) {
+  const roomsSnap = await hotelDoc.ref.collection("rooms").get();
+  const rooms = [];
+
+  roomsSnap.forEach(doc => {
+    const room = doc.data();
+    const categoryId = room.legacyId || doc.id;
+    const maxRooms = Number(room.max_rooms || room.rooms || 1);
+    const names = Array.isArray(room.roomNames) && room.roomNames.length
+      ? room.roomNames
+      : Array.from({ length: maxRooms }, (_, i) => `${room.category || room.room_name || "Room"} ${i + 1}`);
+
+    names.slice(0, maxRooms).forEach((name, index) => {
+      rooms.push({
+        room_id: physicalRoomId(categoryId, name),
+        room_name: name,
+        room_category_id: categoryId,
+        category: room.category || room.room_name || "Room",
+        sort: index
+      });
+    });
+  });
+
+  return rooms;
+}
+
+async function bookingsForHotel(hotelId) {
+  const snap = await db.collection("bookings")
+    .where("hotel_id", "==", String(hotelId))
+    .get();
+
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+function activeBooking(booking) {
+  return !["cancelled", "canceled"].includes(String(booking.status || "").toLowerCase());
+}
+
+function bookingOverlaps(booking, checkIn, checkOut) {
+  const wanted = new Set(stayNights(checkIn, checkOut));
+  return stayNights(booking.check_in, booking.check_out).some(date => wanted.has(date));
+}
+
+function bookingBalance(total, advance) {
+  return Math.max(money(total) - money(advance), 0);
+}
+
 function publicHotel(doc) {
   const data = doc.data();
   return {
@@ -532,6 +595,190 @@ app.post("/api/inventory/update", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/calendar", async (req, res) => {
+  try {
+    const hotelDoc = await getDocByIdOrLegacy("hotels", req.query.hotelId);
+    if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
+
+    const days = Math.min(Math.max(Number(req.query.days || 14), 1), 45);
+    const from = String(req.query.from || formatYmd(new Date())).slice(0, 10);
+    const fromDate = parseYmd(from);
+    if (!fromDate) return res.status(400).json({ error: "Invalid from date" });
+    const dates = dateRange(from, formatYmd(new Date(fromDate.getTime() + (days - 1) * 86400000)));
+    const rooms = await listPhysicalRooms(hotelDoc);
+    const bookings = (await bookingsForHotel(hotelDoc.data().legacyId || hotelDoc.id))
+      .filter(activeBooking);
+
+    const rows = [];
+    for (const room of rooms) {
+      for (const date of dates) {
+        const booking = bookings.find(b =>
+          (b.rooms || []).some(r => String(r.room_id) === String(room.room_id)) &&
+          stayNights(b.check_in, b.check_out).includes(date)
+        );
+
+        rows.push({
+          cal_date: date,
+          room_id: room.room_id,
+          room_name: room.room_name,
+          room_category_id: room.room_category_id,
+          category: room.category,
+          booking_id: booking ? booking.id : null,
+          guest_name: booking ? booking.guest_name : null,
+          status: booking ? booking.status : null,
+          hotel_payment_status: booking ? booking.hotel_payment_status : null
+        });
+      }
+    }
+
+    res.json(rows);
+  } catch (err) {
+    console.error("GET /api/calendar", err);
+    res.status(500).json({ error: "Failed to fetch calendar" });
+  }
+});
+
+app.get("/api/rooms/available", async (req, res) => {
+  try {
+    const { hotelId, checkIn, checkOut, excludeBookingId } = req.query;
+    const hotelDoc = await getDocByIdOrLegacy("hotels", hotelId);
+    if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
+
+    const rooms = await listPhysicalRooms(hotelDoc);
+    const bookings = (await bookingsForHotel(hotelDoc.data().legacyId || hotelDoc.id))
+      .filter(b => activeBooking(b) && String(b.id) !== String(excludeBookingId || "") && bookingOverlaps(b, checkIn, checkOut));
+
+    const bookedRoomIds = new Set();
+    bookings.forEach(booking => {
+      (booking.rooms || []).forEach(room => bookedRoomIds.add(String(room.room_id)));
+    });
+
+    res.json(rooms.filter(room => !bookedRoomIds.has(String(room.room_id))));
+  } catch (err) {
+    console.error("GET /api/rooms/available", err);
+    res.status(500).json({ error: "Failed to fetch available rooms" });
+  }
+});
+
+app.post("/api/calendar/bookings", requireAdmin, async (req, res) => {
+  try {
+    const { hotelId, checkIn, checkOut, guestName, phone, rooms = [] } = req.body;
+    if (!hotelId || !checkIn || !checkOut || !guestName || !phone || !rooms.length) {
+      return res.status(400).json({ error: "Missing booking fields" });
+    }
+
+    const hotelDoc = await getDocByIdOrLegacy("hotels", hotelId);
+    if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
+
+    const total = money(req.body.total_amount);
+    const advance = money(req.body.advance_amount);
+    const booking = {
+      booking_reference: bookingRef(),
+      hotel_id: hotelDoc.data().legacyId || hotelDoc.id,
+      hotel_name: hotelDoc.data().name || "",
+      check_in: checkIn,
+      check_out: checkOut,
+      guest_name: guestName,
+      guest_phone: phone,
+      rooms,
+      rooms_booked: rooms.length,
+      room_names: rooms.map(room => room.room_name).join(", "),
+      total_amount: total,
+      advance_amount: advance,
+      balance_amount: bookingBalance(total, advance),
+      status: "confirmed",
+      payment_status: req.body.paymentStatus || req.body.hotel_payment_status || "unpaid",
+      hotel_payment_status: req.body.hotel_payment_status || req.body.paymentStatus || "unpaid",
+      notes: req.body.notes || "",
+      source: "admin",
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    const doc = await db.collection("bookings").add(booking);
+    res.json({ success: true, id: doc.id, bookingId: doc.id });
+  } catch (err) {
+    console.error("POST /api/calendar/bookings", err);
+    res.status(500).json({ error: "Failed to create booking" });
+  }
+});
+
+app.get("/api/bookings/:id", requireAdmin, async (req, res) => {
+  try {
+    const doc = await db.collection("bookings").doc(String(req.params.id)).get();
+    if (!doc.exists) return res.status(404).json({ error: "Booking not found" });
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    console.error("GET /api/bookings/:id", err);
+    res.status(500).json({ error: "Failed to fetch booking" });
+  }
+});
+
+app.put("/api/calendar/bookings/:id", requireAdmin, async (req, res) => {
+  try {
+    const ref = db.collection("bookings").doc(String(req.params.id));
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: "Booking not found" });
+
+    const total = money(req.body.total_amount);
+    const advance = money(req.body.advance_amount);
+    const rooms = Array.isArray(req.body.rooms) ? req.body.rooms : [];
+
+    await ref.update({
+      guest_name: req.body.guest_name || "",
+      guest_phone: req.body.guest_phone || "",
+      check_in: req.body.check_in,
+      check_out: req.body.check_out,
+      notes: req.body.notes || "",
+      total_amount: total,
+      advance_amount: advance,
+      balance_amount: bookingBalance(total, advance),
+      hotel_payment_status: req.body.hotel_payment_status || "unpaid",
+      rooms,
+      rooms_booked: rooms.length,
+      room_names: rooms.map(room => room.room_name).filter(Boolean).join(", "),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("PUT /api/calendar/bookings/:id", err);
+    res.status(500).json({ error: "Failed to update booking" });
+  }
+});
+
+app.put("/api/bookings/:id/payment", requireAdmin, async (req, res) => {
+  try {
+    const total = money(req.body.total_amount);
+    const advance = money(req.body.advance_amount);
+    await db.collection("bookings").doc(String(req.params.id)).update({
+      total_amount: total,
+      advance_amount: advance,
+      balance_amount: bookingBalance(total, advance),
+      hotel_payment_status: advance >= total ? "paid" : advance > 0 ? "partial" : "unpaid",
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("PUT /api/bookings/:id/payment", err);
+    res.status(500).json({ error: "Failed to update payment" });
+  }
+});
+
+app.post("/api/bookings/:id/cancel", requireAdmin, async (req, res) => {
+  try {
+    await db.collection("bookings").doc(String(req.params.id)).update({
+      status: "cancelled",
+      cancelled_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("POST /api/bookings/:id/cancel", err);
+    res.status(500).json({ error: "Failed to cancel booking" });
+  }
+});
+
 app.post("/api/bookings/create-pending", async (req, res) => {
   try {
     const {
@@ -833,11 +1080,39 @@ app.post("/api/admin/seed-initial", async (req, res) => {
 
 app.get("/api/bookings", requireAdmin, async (req, res) => {
   try {
-    let query = db.collection("bookings").orderBy("created_at", "desc");
-    if (req.query.status) query = query.where("status", "==", String(req.query.status));
+    const snap = await db.collection("bookings").get();
+    let bookings = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    const snap = await query.get();
-    res.json(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    if (req.query.hotelId) {
+      bookings = bookings.filter(booking => String(booking.hotel_id) === String(req.query.hotelId));
+    }
+
+    if (req.query.status) {
+      bookings = bookings.filter(booking => String(booking.status) === String(req.query.status));
+    }
+
+    bookings.sort((a, b) => {
+      const aTime = a.created_at?.toMillis ? a.created_at.toMillis() : 0;
+      const bTime = b.created_at?.toMillis ? b.created_at.toMillis() : 0;
+      return bTime - aTime;
+    });
+
+    const hotelsSnap = await db.collection("hotels").get();
+    const hotelNames = new Map(hotelsSnap.docs.map(doc => [
+      String(doc.data().legacyId || doc.id),
+      doc.data().name || ""
+    ]));
+
+    res.json(bookings.map(booking => {
+      const rooms = booking.rooms || [];
+      return {
+        ...booking,
+        hotel_name: booking.hotel_name || hotelNames.get(String(booking.hotel_id)) || "",
+        room_names: booking.room_names || rooms.map(room => room.room_name).filter(Boolean).join(", "),
+        rooms_booked: booking.rooms_booked ?? rooms.length,
+        booking_type: booking.is_full_villa ? "Full Villa" : "Rooms"
+      };
+    }));
   } catch (err) {
     console.error("GET /api/bookings", err);
     res.status(500).json({ error: "Failed to fetch bookings" });

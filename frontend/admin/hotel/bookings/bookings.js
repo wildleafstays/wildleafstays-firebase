@@ -1,4 +1,4 @@
-import { authHeaders } from "../../auth.js";
+import { authHeaders, secureFetch } from "../../auth.js";
 import { getHotelContext } from "../../hotelContext.js";
 
 authHeaders();
@@ -24,7 +24,7 @@ const API_BASE = "";
 // Load hotels into dropdown
 // ===============================
 async function loadHotels() {
-  const res = await fetch("/api/hotels");
+  const res = await secureFetch("/api/hotels");
   const hotels = await res.json();
 
   const select = document.getElementById("hotelFilter");
@@ -52,7 +52,7 @@ async function loadBookings() {
 
   if (params.length) url += "?" + params.join("&");
 
-  const res = await fetch(url);
+  const res = await secureFetch(url);
   const bookings = await res.json();
 
   const tbody = document.getElementById("bookingsTable");
@@ -149,7 +149,7 @@ async function cancelBooking(id) {
   if (!confirm("Are you sure you want to cancel this booking?")) return;
 
   try {
-    const res = await fetch(
+    const res = await secureFetch(
       `${API_BASE}/api/bookings/${id}/cancel`,
       { method: "POST" }
     );
