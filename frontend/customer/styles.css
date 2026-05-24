@@ -34,8 +34,10 @@ body {
   display: flex;
   gap: 12px;
   align-items: center;
+  color: var(--ink);
   font-size: 22px;
   font-weight: 700;
+  text-decoration: none;
 }
 
 .brand-mark {
@@ -161,6 +163,39 @@ button:hover {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.search-card {
+  grid-template-columns: 240px minmax(0, 1fr) 230px;
+  align-items: stretch;
+}
+
+.search-card-body {
+  min-width: 0;
+}
+
+.search-card-side {
+  padding-left: 18px;
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.primary-link {
+  height: 46px;
+  padding: 0 16px;
+  display: inline-grid;
+  place-items: center;
+  color: white;
+  background: var(--accent);
+  border-radius: 6px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.primary-link:hover {
+  background: var(--accent-dark);
 }
 
 .property-photo {
@@ -313,20 +348,302 @@ button:hover {
   border-radius: 8px;
 }
 
+.loading-state {
+  width: min(1120px, calc(100% - 40px));
+  margin: 60px auto;
+  padding: 32px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.property-page {
+  padding-bottom: 110px;
+}
+
+.property-hero {
+  min-height: clamp(360px, 58vh, 620px);
+  padding: 28px;
+  display: grid;
+  align-items: end;
+  background-size: cover;
+  background-position: center;
+}
+
+.property-hero-content {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  color: white;
+}
+
+.property-hero h1 {
+  max-width: 840px;
+  margin: 14px 0 8px;
+  font-size: clamp(38px, 7vw, 76px);
+  line-height: 1;
+}
+
+.property-hero p {
+  margin: 0;
+  font-size: 18px;
+}
+
+.back-link {
+  color: white;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.property-shell {
+  width: min(1120px, calc(100% - 40px));
+  margin: -44px auto 60px;
+  position: relative;
+  z-index: 2;
+}
+
+.gallery-strip {
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 2fr repeat(3, 1fr);
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(20, 32, 51, 0.16);
+}
+
+.gallery-strip img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.gallery-strip img:first-child {
+  grid-row: span 2;
+}
+
+.property-intro {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 22px;
+  align-items: start;
+}
+
+.property-intro h2 {
+  margin: 0 0 10px;
+  font-size: 30px;
+}
+
+.property-intro p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.stay-summary {
+  padding: 18px;
+  display: grid;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.stay-summary span {
+  color: var(--muted);
+}
+
+.feature-row {
+  margin: 22px 0;
+}
+
+.room-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.detail-room-card {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 250px;
+  gap: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.detail-room-media {
+  position: relative;
+}
+
+.detail-room-media img {
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.detail-room-media button {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  width: auto;
+  min-width: 0;
+  height: 38px;
+  background: rgba(20, 32, 51, 0.82);
+  border: 0;
+}
+
+.detail-room-copy {
+  min-width: 0;
+}
+
+.room-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.room-heading h3,
+.villa-card h3 {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+
+.detail-room-copy p,
+.villa-card p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.detail-room-book {
+  padding-left: 18px;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.villa-card {
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  background: #fffaf0;
+  border: 1px solid #f1d4a8;
+  border-radius: 8px;
+}
+
+.villa-card.unavailable {
+  color: var(--muted);
+  background: #f7f8fa;
+  border-color: var(--line);
+}
+
+.sticky-booking {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 20;
+  width: min(760px, calc(100% - 32px));
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 16px 46px rgba(20, 32, 51, 0.22);
+  transform: translateX(-50%);
+}
+
+.sticky-booking span {
+  display: block;
+  color: var(--muted);
+}
+
 @media (max-width: 900px) {
   .search-panel,
   .property-card,
+  .search-card,
   .option-row,
   .room-card,
-  .booking-summary {
+  .booking-summary,
+  .property-intro,
+  .detail-room-card {
     grid-template-columns: 1fr;
   }
 
-  .booking-summary {
+  .booking-summary,
+  .villa-card,
+  .sticky-booking {
     display: grid;
+  }
+
+  .search-card-side,
+  .detail-room-book {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+
+  .gallery-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .gallery-strip img:first-child {
+    grid-row: auto;
+  }
+
+  .property-shell {
+    width: min(100% - 24px, 1120px);
   }
 
   .hero-copy h1 {
     font-size: 34px;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    height: auto;
+    padding: 14px 16px;
+  }
+
+  .hero {
+    padding: 32px 16px;
+  }
+
+  .content {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .property-card,
+  .detail-room-card {
+    padding: 12px;
+  }
+
+  .property-hero {
+    padding: 20px 16px;
+  }
+
+  .gallery-strip {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .gallery-strip img {
+    min-width: 78%;
+  }
+
+  .room-heading {
+    display: grid;
   }
 }
