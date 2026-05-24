@@ -446,7 +446,8 @@ app.post("/api/admin/create-admin", async (req, res) => {
   try {
     const { email, password, setupKey } = req.body;
     if (!email || !password || !setupKey) return res.status(400).json({ error: "Missing fields" });
-    if (setupKey !== secretValue(ADMIN_SETUP_KEY, "ADMIN_SETUP_KEY")) {
+    const expectedSetupKey = String(secretValue(ADMIN_SETUP_KEY, "ADMIN_SETUP_KEY") || "").trim();
+    if (String(setupKey || "").trim() !== expectedSetupKey) {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
