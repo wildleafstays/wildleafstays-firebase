@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wildleaf Stays</title>
+    <link rel="stylesheet" href="/customer/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">W</span>
+        <span>Wildleaf Stays</span>
+      </div>
+      <a class="admin-link" href="/admin/">Admin</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <h1>Find stays for families, groups, and quiet escapes</h1>
+          <p>Search rooms and full villas from the same live inventory.</p>
+        </div>
+        <form id="searchForm" class="search-panel">
+          <label>
+            Destination
+            <input id="destination" name="destination" placeholder="e.g. Delhi, Nainital" required>
+          </label>
+          <label>
+            Check-in
+            <input id="checkIn" name="checkIn" type="date" required>
+          </label>
+          <label>
+            Check-out
+            <input id="checkOut" name="checkOut" type="date" required>
+          </label>
+          <label>
+            Adults
+            <input id="adults" name="adults" type="number" min="1" value="2" required>
+          </label>
+          <label>
+            Kids
+            <input id="kids" name="kids" type="number" min="0" value="0">
+          </label>
+          <button type="submit">Search</button>
+        </form>
+      </section>
+
+      <section class="content">
+        <div class="section-title">
+          <h2>Available Stays</h2>
+          <span id="statusText">Enter your destination and dates.</span>
+        </div>
+        <div id="results" class="results"></div>
+      </section>
+    </main>
+
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="/customer/app.js"></script>
+  </body>
+</html>

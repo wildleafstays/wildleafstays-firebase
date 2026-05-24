@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wildleaf Admin</title>
+    <link rel="stylesheet" href="/admin/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <strong>Wildleaf Admin</strong>
+      <a href="/customer/">View Website</a>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <h1>Add Property</h1>
+        <p class="muted">Create the physical hotel/villa once. Full villa sale is an option on the same property.</p>
+        <form id="propertyForm">
+          <input name="name" placeholder="Property name" required>
+          <input name="destination" placeholder="Destination" required>
+          <textarea name="description" placeholder="Short description"></textarea>
+          <label class="check">
+            <input name="sellAsFullVilla" type="checkbox">
+            Also sell this property as a full villa
+          </label>
+          <input name="fullVillaPrice" type="number" min="0" placeholder="Full villa nightly price">
+          <button type="submit">Save Property</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Add Room Category</h2>
+        <form id="roomForm">
+          <select name="propertyId" id="propertySelect" required></select>
+          <input name="name" placeholder="Room category name" required>
+          <input name="totalRooms" type="number" min="1" placeholder="Total rooms" required>
+          <input name="basePrice" type="number" min="1" placeholder="Nightly price" required>
+          <input name="maxGuests" type="number" min="1" placeholder="Max guests">
+          <button type="submit">Save Room Category</button>
+        </form>
+      </section>
+
+      <section class="panel wide">
+        <h2>Properties</h2>
+        <div id="message" class="message"></div>
+        <div id="properties"></div>
+      </section>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="/__/firebase/init.js"></script>
+    <script src="/admin/admin.js"></script>
+  </body>
+</html>

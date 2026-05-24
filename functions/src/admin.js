@@ -1,0 +1,210 @@
+const express = require("express");
+const { requireAdmin } = require("./auth");
+
+module.exports = function adminRoutes({ db, admin, ADMIN_SETUP_KEY }) {
+  const router = express.Router();
+
+  router.post("/setup", async (req, res) => {
+    try {
+      if (!setupKeyMatches(req, ADMIN_SETUP_KEY)) {
+        return res.status(401).json({ error: "Invalid setup key" });
+      }
+
+      const email = String(req.body.email || "").trim().toLowerCase();
+      const password = String(req.body.password || "");
+      const displayName = String(req.body.displayName || "Wildleaf Admin").trim();
+
+      if (!email || password.length < 8) {
+        return res.status(400).json({ error: "Email and 8 character password are required" });
+      }
+
+      let user;
+      try {
+        user = await admin.auth().getUserByEmail(email);
+      } catch {
+        user = await admin.auth().createUser({ email, password, displayName });
+      }
+
+      await db.collection("adminUsers").doc(user.uid).set({
+        email,
+        displayName,
+        role: "owner",
+        active: true,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      res.json({ success: true, uid: user.uid, email });
+    } catch (err) {
+      console.error("POST /api/admin/setup", err);
+      res.status(500).json({ error: "Failed to set up admin" });
+    }
+  });
+
+  router.use(async (req, res, next) => {
+    const auth = await requireAdmin(req, res, admin, db);
+    if (!auth) return;
+    req.adminUser = auth;
+    next();
+  });
+
+  router.get("/properties", async (req, res) => {
+    const snap = await db.collection("properties").orderBy("name").get();
+    res.json({ properties: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+  });
+
+  router.post("/properties", async (req, res) => {
+    try {
+      const input = normalizeProperty(req.body);
+      const propertyRef = input.id
+        ? db.collection("properties").doc(input.id)
+        : db.collection("properties").doc(slugify(input.name));
+
+      await propertyRef.set({
+        ...input,
+        id: propertyRef.id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      res.json({ success: true, propertyId: propertyRef.id });
+    } catch (err) {
+      console.error("POST /api/admin/properties", err);
+      res.status(400).json({ error: err.message || "Failed to save property" });
+    }
+  });
+
+  router.put("/properties/:propertyId", async (req, res) => {
+    try {
+      const input = normalizeProperty(req.body, { partial: true });
+      await db.collection("properties").doc(req.params.propertyId).set({
+        ...input,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("PUT /api/admin/properties/:propertyId", err);
+      res.status(400).json({ error: err.message || "Failed to update property" });
+    }
+  });
+
+  router.get("/properties/:propertyId/roomCategories", async (req, res) => {
+    const snap = await db.collection("properties").doc(req.params.propertyId)
+      .collection("roomCategories").orderBy("name").get();
+    res.json({ roomCategories: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+  });
+
+  router.post("/properties/:propertyId/roomCategories", async (req, res) => {
+    try {
+      const input = normalizeRoomCategory(req.body);
+      const roomRef = input.id
+        ? db.collection("properties").doc(req.params.propertyId).collection("roomCategories").doc(input.id)
+        : db.collection("properties").doc(req.params.propertyId).collection("roomCategories").doc(slugify(input.name));
+
+      await roomRef.set({
+        ...input,
+        id: roomRef.id,
+        active: input.active !== false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      res.json({ success: true, roomCategoryId: roomRef.id });
+    } catch (err) {
+      console.error("POST /api/admin/properties/:propertyId/roomCategories", err);
+      res.status(400).json({ error: err.message || "Failed to save room category" });
+    }
+  });
+
+  router.put("/properties/:propertyId/roomCategories/:roomCategoryId", async (req, res) => {
+    try {
+      const input = normalizeRoomCategory(req.body, { partial: true });
+      await db.collection("properties").doc(req.params.propertyId)
+        .collection("roomCategories").doc(req.params.roomCategoryId).set({
+          ...input,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("PUT /api/admin/properties/:propertyId/roomCategories/:roomCategoryId", err);
+      res.status(400).json({ error: err.message || "Failed to update room category" });
+    }
+  });
+
+  router.get("/bookings", async (req, res) => {
+    const limit = Math.min(Number(req.query.limit || 100), 200);
+    let query = db.collection("bookings").orderBy("createdAt", "desc").limit(limit);
+    if (req.query.propertyId) query = query.where("propertyId", "==", String(req.query.propertyId));
+    const snap = await query.get();
+    res.json({ bookings: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+  });
+
+  return router;
+};
+
+function setupKeyMatches(req, secret) {
+  const given = String(req.headers["x-setup-key"] || req.body.setupKey || "");
+  const expected = secret?.value ? secret.value() : process.env.ADMIN_SETUP_KEY;
+  return Boolean(given && expected && given === expected);
+}
+
+function normalizeProperty(body, options = {}) {
+  const property = {};
+  if (body.id) property.id = slugify(body.id);
+  if (body.name !== undefined) property.name = String(body.name).trim();
+  if (body.destination !== undefined) {
+    property.destination = String(body.destination).trim();
+    property.destinationKey = property.destination.toLowerCase();
+  }
+  if (body.address !== undefined) property.address = String(body.address).trim();
+  if (body.description !== undefined) property.description = String(body.description).trim();
+  if (body.status !== undefined) property.status = body.status === "draft" ? "draft" : "active";
+  if (body.sellAsFullVilla !== undefined) property.sellAsFullVilla = Boolean(body.sellAsFullVilla);
+  if (body.fullVillaPrice !== undefined) property.fullVillaPrice = Number(body.fullVillaPrice || 0);
+  if (body.maxGuests !== undefined) property.maxGuests = Number(body.maxGuests || 0);
+  if (Array.isArray(body.amenities)) property.amenities = body.amenities.map(String).filter(Boolean);
+  if (Array.isArray(body.photos)) property.photos = body.photos.map(String).filter(Boolean);
+
+  if (!options.partial) {
+    if (!property.name) throw new Error("Property name is required");
+    if (!property.destination) throw new Error("Destination is required");
+    property.status = property.status || "active";
+    property.sellAsFullVilla = Boolean(property.sellAsFullVilla);
+    property.fullVillaPrice = Number(property.fullVillaPrice || 0);
+    property.amenities = property.amenities || [];
+    property.photos = property.photos || [];
+  }
+
+  return property;
+}
+
+function normalizeRoomCategory(body, options = {}) {
+  const room = {};
+  if (body.id) room.id = slugify(body.id);
+  if (body.name !== undefined) room.name = String(body.name).trim();
+  if (body.description !== undefined) room.description = String(body.description).trim();
+  if (body.totalRooms !== undefined) room.totalRooms = Number(body.totalRooms || 0);
+  if (body.basePrice !== undefined) room.basePrice = Number(body.basePrice || 0);
+  if (body.maxGuests !== undefined) room.maxGuests = Number(body.maxGuests || 0);
+  if (body.active !== undefined) room.active = Boolean(body.active);
+  if (Array.isArray(body.photos)) room.photos = body.photos.map(String).filter(Boolean);
+
+  if (!options.partial) {
+    if (!room.name) throw new Error("Room category name is required");
+    if (!room.totalRooms || room.totalRooms < 1) throw new Error("Total rooms must be at least 1");
+    if (!room.basePrice || room.basePrice < 1) throw new Error("Room price is required");
+    room.active = room.active !== false;
+    room.photos = room.photos || [];
+  }
+
+  return room;
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
