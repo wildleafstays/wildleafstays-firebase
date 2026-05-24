@@ -9,6 +9,7 @@ const DASHBOARD_PAGE_KEY = "dashboard.activePage";
 const DASHBOARD_MODE_KEY = "dashboard.mode";
 
 const API = "/api";
+const APP_VERSION = "20260524-rooms";
 const DEFAULT_HOTEL_PAGE = "calendar/calendar.html";
 const DEFAULT_HOMEPAGE_PAGE = "../homepage/homepage.html";
 const ALLOWED_PAGES = new Set([
@@ -107,7 +108,8 @@ function getSafePage(page, fallback) {
 function setFramePage(page, fallback = DEFAULT_HOTEL_PAGE) {
   const safePage = getSafePage(page, fallback);
   localStorage.setItem(DASHBOARD_PAGE_KEY, safePage);
-  frame.src = safePage;
+  const separator = safePage.includes("?") ? "&" : "?";
+  frame.src = `${safePage}${separator}v=${APP_VERSION}`;
 }
 
 

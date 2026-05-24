@@ -532,6 +532,9 @@ app.get("/api/inventory", async (req, res) => {
     const dates = dateRange(req.query.start, req.query.end);
     const rooms = await hotelDoc.ref.collection("rooms").get();
     const inventory = [];
+    let villaPrice = 0;
+    let gstPercent = 0;
+    let villaAvailable = true;
 
     for (const doc of rooms.docs) {
       const room = doc.data();
@@ -539,6 +542,7 @@ app.get("/api/inventory", async (req, res) => {
       const baseRate = money(room.rate || room.price || room.price_per_night);
       const roomId = room.legacyId || doc.id;
       const targetDates = dates.length ? dates : [null];
+      if (!gstPercent && room.gst) gstPercent = Number(room.gst);
 
       for (const date of targetDates) {
         let override = {};
@@ -553,6 +557,13 @@ app.get("/api/inventory", async (req, res) => {
         }
 
         const availableRooms = override.available_rooms ?? room.available_rooms ?? maxRooms;
+        const effectiveRate = override.rate ?? baseRate;
+        if (date === dates[0] || (!dates.length && date === null)) {
+          villaPrice += money(effectiveRate) * maxRooms;
+        }
+        if (Number(availableRooms) < maxRooms || override.villa_booked) {
+          villaAvailable = false;
+        }
 
         inventory.push({
           roomId,
@@ -570,7 +581,13 @@ app.get("/api/inventory", async (req, res) => {
       }
     }
 
-    res.json({ success: true, inventory });
+    res.json({
+      success: true,
+      inventory,
+      villa_available: villaAvailable,
+      villa_price: Math.round(villaPrice),
+      gst_percent: gstPercent
+    });
   } catch (err) {
     console.error("GET /api/inventory", err);
     res.status(500).json({ error: "Failed to fetch inventory" });
