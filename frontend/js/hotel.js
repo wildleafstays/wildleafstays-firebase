@@ -9,7 +9,7 @@ const params = new URLSearchParams(window.location.search);
 // Clean hotelId
 let rawHotelId = params.get("id") || "";
 rawHotelId = rawHotelId.split("&")[0].trim();
-const hotelId = Number(rawHotelId);
+const hotelId = rawHotelId;
 
 // Extract params
 let checkIn = params.get("checkIn");
@@ -589,7 +589,7 @@ card.dataset.roomId = room.id;
 
 
     card.innerHTML = `
-      <div class="room-card-img" onclick="openRoomGallery(${room.id})">
+      <div class="room-card-img" onclick="openRoomGallery('${room.id}')">
         <img src="${mainImage}" alt="${room.category}">
       </div>
 
@@ -859,7 +859,7 @@ function updateCustomTotal() {
   document
     .querySelectorAll(".inline-room-selector .room-occupancy-row")
     .forEach(row => {
-      const roomId = Number(row.dataset.roomId);
+      const roomId = row.dataset.roomId;
       const room = window.allRooms.find(r => r.id === roomId);
       if (!room) return;
 

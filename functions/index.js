@@ -128,6 +128,34 @@ function bookingOverlaps(booking, checkIn, checkOut) {
   return stayNights(booking.check_in, booking.check_out).some(date => wanted.has(date));
 }
 
+async function allocateRoomsForBooking(hotelDoc, requestedRooms, checkIn, checkOut, excludeBookingId = "") {
+  const allRooms = await listPhysicalRooms(hotelDoc);
+  const bookings = (await bookingsForHotel(hotelDoc.data().legacyId || hotelDoc.id))
+    .filter(b => activeBooking(b) && String(b.id) !== String(excludeBookingId) && bookingOverlaps(b, checkIn, checkOut));
+
+  const bookedRoomIds = new Set();
+  bookings.forEach(booking => {
+    (booking.rooms || []).forEach(room => bookedRoomIds.add(String(room.room_id)));
+  });
+
+  const available = allRooms.filter(room => !bookedRoomIds.has(String(room.room_id)));
+  const allocated = [];
+
+  for (const request of requestedRooms || []) {
+    const categoryId = String(request.roomCategoryId || request.room_category_id || request.roomId || request.id || "");
+    const count = Math.max(Number(request.rooms || request.count || 1), 1);
+    const matches = available.filter(room => String(room.room_category_id) === categoryId && !allocated.some(a => a.room_id === room.room_id));
+
+    if (matches.length < count) {
+      throw new Error(`Not enough rooms available for ${categoryId}`);
+    }
+
+    allocated.push(...matches.slice(0, count));
+  }
+
+  return allocated;
+}
+
 function bookingBalance(total, advance) {
   return Math.max(money(total) - money(advance), 0);
 }
@@ -803,18 +831,33 @@ app.post("/api/bookings/create-pending", async (req, res) => {
     const total = money(totalAmount);
     if (total <= 0) return res.status(400).json({ error: "Invalid total amount" });
 
+    const hotelDoc = await getDocByIdOrLegacy("hotels", hotelId);
+    if (!hotelDoc) return res.status(404).json({ error: "Hotel not found" });
+
+    let allocatedRooms = [];
+    try {
+      allocatedRooms = isFullVilla === true
+        ? await listPhysicalRooms(hotelDoc)
+        : await allocateRoomsForBooking(hotelDoc, rooms, checkIn, checkOut);
+    } catch (availabilityError) {
+      return res.status(409).json({ error: availabilityError.message || "Selected rooms are no longer available" });
+    }
+
     const baseAmount = money((total * 100) / (100 + Number(gstPercent || 0)));
     const gstAmount = money(total - baseAmount);
     const ref = bookingRef();
 
     const booking = {
       booking_reference: ref,
-      hotel_id: hotelId,
+      hotel_id: hotelDoc.data().legacyId || hotelDoc.id,
+      hotel_name: hotelDoc.data().name || "",
       check_in: checkIn,
       check_out: checkOut,
       adults: Number(adults || 1),
       kids: Number(kids || 0),
-      rooms: isFullVilla ? [] : rooms,
+      rooms: allocatedRooms,
+      rooms_booked: allocatedRooms.length,
+      room_names: allocatedRooms.map(room => room.room_name).join(", "),
       is_full_villa: isFullVilla === true,
       base_amount: baseAmount,
       gst_percent: Number(gstPercent || 0),

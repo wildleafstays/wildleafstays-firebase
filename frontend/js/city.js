@@ -131,7 +131,7 @@ async function loadHotelAvailabilityPreview(hotelId) {
             <strong>${r.minAvailable > 0 ? `${r.minAvailable} rooms` : "Sold Out"}</strong>
           </div>
         `).join("")}
-        <button class="check-btn" onclick="openHotel(${hotelId})">
+        <button class="check-btn" onclick="openHotel('${hotelId}')">
           Check Property
         </button>
       </div>
@@ -281,7 +281,7 @@ function soldOutHTML(hotelId) {
   return `
     <div class="avail-box sold">
       <div class="sold-text">Sold out for selected dates</div>
-      <button class="check-btn" onclick="openHotel(${hotelId})">
+      <button class="check-btn" onclick="openHotel('${hotelId}')">
         Check Property
       </button>
     </div>

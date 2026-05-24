@@ -117,7 +117,7 @@ document.getElementById("totalAmount").textContent =
 
         roomsPayload = Object.entries(groupedRooms).map(
           ([roomId, count]) => ({
-            roomId: Number(roomId),
+            roomId,
             rooms: count
           })
         );
