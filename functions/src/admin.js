@@ -1,5 +1,6 @@
 const express = require("express");
 const { requireAdmin } = require("./auth");
+const { getPropertyBundle, readInventoryForDates, buildBlankInventory, stayDates } = require("./inventory");
 
 module.exports = function adminRoutes({ db, admin, ADMIN_SETUP_KEY }) {
   const router = express.Router();
@@ -89,6 +90,20 @@ module.exports = function adminRoutes({ db, admin, ADMIN_SETUP_KEY }) {
     }
   });
 
+  router.delete("/properties/:propertyId", async (req, res) => {
+    try {
+      await db.collection("properties").doc(req.params.propertyId).set({
+        status: "deleted",
+        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("DELETE /api/admin/properties/:propertyId", err);
+      res.status(500).json({ error: "Failed to delete property" });
+    }
+  });
+
   router.get("/properties/:propertyId/roomCategories", async (req, res) => {
     const snap = await db.collection("properties").doc(req.params.propertyId)
       .collection("roomCategories").orderBy("name").get();
@@ -132,12 +147,119 @@ module.exports = function adminRoutes({ db, admin, ADMIN_SETUP_KEY }) {
     }
   });
 
+  router.delete("/properties/:propertyId/roomCategories/:roomCategoryId", async (req, res) => {
+    try {
+      await db.collection("properties").doc(req.params.propertyId)
+        .collection("roomCategories").doc(req.params.roomCategoryId).set({
+          active: false,
+          deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("DELETE /api/admin/properties/:propertyId/roomCategories/:roomCategoryId", err);
+      res.status(500).json({ error: "Failed to delete room category" });
+    }
+  });
+
+  router.get("/properties/:propertyId/inventory", async (req, res) => {
+    try {
+      const { start, end } = req.query;
+      const dates = stayDates(start, end);
+      if (!dates.length) return res.status(400).json({ error: "Valid start and end dates are required" });
+
+      const bundle = await getPropertyBundle(db, req.params.propertyId);
+      if (!bundle) return res.status(404).json({ error: "Property not found" });
+
+      const days = await db.runTransaction(async transaction => {
+        return readInventoryForDates(transaction, bundle.propertyRef, dates, bundle.roomCategories);
+      });
+
+      res.json({
+        roomCategories: Object.values(bundle.roomCategories),
+        days: days.map(day => ({ date: day.date, ...day.data }))
+      });
+    } catch (err) {
+      console.error("GET /api/admin/properties/:propertyId/inventory", err);
+      res.status(500).json({ error: "Failed to load inventory" });
+    }
+  });
+
+  router.put("/properties/:propertyId/inventory", async (req, res) => {
+    try {
+      const { start, end, roomCategoryId, price, availableRooms, manuallyClosed } = req.body;
+      const dates = stayDates(start, end);
+      if (!dates.length || !roomCategoryId) {
+        return res.status(400).json({ error: "Dates and room category are required" });
+      }
+
+      const bundle = await getPropertyBundle(db, req.params.propertyId);
+      if (!bundle) return res.status(404).json({ error: "Property not found" });
+      const room = bundle.roomCategories[roomCategoryId];
+      if (!room) return res.status(404).json({ error: "Room category not found" });
+
+      await db.runTransaction(async transaction => {
+        const docs = await readInventoryForDates(transaction, bundle.propertyRef, dates, bundle.roomCategories);
+        docs.forEach(day => {
+          const data = day.data || buildBlankInventory(day.date, bundle.roomCategories);
+          const current = data.roomCategories?.[roomCategoryId] || {};
+          const totalRooms = Number(current.totalRooms || room.totalRooms || 0);
+          const bookedRooms = Number(current.bookedRooms || 0);
+          const maxAvailable = Math.max(totalRooms - bookedRooms, 0);
+          const nextAvailable = availableRooms === "" || availableRooms === undefined
+            ? Number(current.availableRooms ?? maxAvailable)
+            : Math.min(Number(availableRooms || 0), maxAvailable);
+
+          data.roomCategories = data.roomCategories || {};
+          data.roomCategories[roomCategoryId] = {
+            ...current,
+            totalRooms,
+            bookedRooms,
+            availableRooms: manuallyClosed ? 0 : nextAvailable,
+            price: price === "" || price === undefined ? Number(current.price || room.basePrice || 0) : Number(price),
+            manuallyClosed: Boolean(manuallyClosed)
+          };
+
+          transaction.set(day.ref, {
+            ...data,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        });
+      });
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error("PUT /api/admin/properties/:propertyId/inventory", err);
+      res.status(400).json({ error: err.message || "Failed to update inventory" });
+    }
+  });
+
   router.get("/bookings", async (req, res) => {
     const limit = Math.min(Number(req.query.limit || 100), 200);
     let query = db.collection("bookings").orderBy("createdAt", "desc").limit(limit);
     if (req.query.propertyId) query = query.where("propertyId", "==", String(req.query.propertyId));
     const snap = await query.get();
     res.json({ bookings: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+  });
+
+  router.get("/homepage", async (req, res) => {
+    const snap = await db.collection("homepageSections").orderBy("order").get();
+    res.json({ sections: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+  });
+
+  router.put("/homepage/:sectionId", async (req, res) => {
+    try {
+      await db.collection("homepageSections").doc(req.params.sectionId).set({
+        ...req.body,
+        order: Number(req.body.order || 0),
+        active: req.body.active !== false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("PUT /api/admin/homepage/:sectionId", err);
+      res.status(400).json({ error: "Failed to save homepage section" });
+    }
   });
 
   return router;
@@ -162,6 +284,7 @@ function normalizeProperty(body, options = {}) {
   if (body.status !== undefined) property.status = body.status === "draft" ? "draft" : "active";
   if (body.sellAsFullVilla !== undefined) property.sellAsFullVilla = Boolean(body.sellAsFullVilla);
   if (body.fullVillaPrice !== undefined) property.fullVillaPrice = Number(body.fullVillaPrice || 0);
+  if (body.gstPercent !== undefined) property.gstPercent = Number(body.gstPercent || 0);
   if (body.maxGuests !== undefined) property.maxGuests = Number(body.maxGuests || 0);
   if (body.infantMaxAge !== undefined) property.infantMaxAge = Number(body.infantMaxAge || 2);
   if (Array.isArray(body.amenities)) property.amenities = body.amenities.map(String).filter(Boolean);
@@ -193,6 +316,7 @@ function normalizeRoomCategory(body, options = {}) {
   if (body.description !== undefined) room.description = String(body.description).trim();
   if (body.totalRooms !== undefined) room.totalRooms = Number(body.totalRooms || 0);
   if (body.basePrice !== undefined) room.basePrice = Number(body.basePrice || 0);
+  if (body.gstPercent !== undefined) room.gstPercent = Number(body.gstPercent || 0);
   if (body.maxGuests !== undefined) room.maxGuests = Number(body.maxGuests || 0);
   if (body.includedGuests !== undefined) room.includedGuests = Number(body.includedGuests || 0);
   if (body.extraAdultRate !== undefined) room.extraAdultRate = Number(body.extraAdultRate || 0);

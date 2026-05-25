@@ -23,10 +23,13 @@ module.exports = function bookingRoutes({ db, admin }) {
 
       const bundle = await getPropertyBundle(db, bookingInput.propertyId);
       if (!bundle) return res.status(404).json({ error: "Property not found" });
+      const inventoryDocs = await db.runTransaction(async transaction => {
+        return readInventoryForDates(transaction, bundle.propertyRef, dates, bundle.roomCategories);
+      });
 
       const quote = bookingInput.bookingType === "fullVilla"
-        ? quoteVilla(bundle.property, bundle.roomCategories, dates)
-        : quoteRooms(bundle.roomCategories, bookingInput.rooms, dates);
+        ? quoteVilla(bundle.property, bundle.roomCategories, dates, inventoryDocs)
+        : quoteRooms(bundle.roomCategories, bookingInput.rooms, dates, inventoryDocs);
 
       if (quote.totalAmount <= 0) {
         return res.status(400).json({ error: "Invalid booking amount" });

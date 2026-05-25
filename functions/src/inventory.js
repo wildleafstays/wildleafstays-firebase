@@ -84,7 +84,7 @@ function roomAvailable(dayInventory, roomCategoryId, quantity) {
   return item && Number(item.availableRooms || 0) >= Number(quantity || 0);
 }
 
-function quoteRooms(roomCategories, rooms, dates) {
+function quoteRooms(roomCategories, rooms, dates, inventoryDocs = []) {
   let subtotal = 0;
   let gstAmount = 0;
   const lines = [];
@@ -107,7 +107,10 @@ function quoteRooms(roomCategories, rooms, dates) {
     const extraKidRate = money(room.extraKidRate || 0);
     const chargeableAdults = Math.min(chargeableGuests, adults);
     const chargeableKids = Math.max(chargeableGuests - chargeableAdults, 0);
-    const base = money(room.basePrice) * quantity * dates.length;
+    const base = dates.reduce((sum, date, index) => {
+      const day = inventoryDocs[index]?.data || null;
+      return sum + roomNightPrice(room, day, item.roomCategoryId) * quantity;
+    }, 0);
     const extra = money((chargeableAdults * extraAdultRate + chargeableKids * extraKidRate) * dates.length);
     const taxable = base + extra;
     const gst = money(taxable * Number(room.gstPercent || 0) / 100);
@@ -137,11 +140,14 @@ function quoteRooms(roomCategories, rooms, dates) {
   };
 }
 
-function quoteVilla(property, roomCategories, dates) {
-  const nightlyTotal = Object.values(roomCategories || {}).reduce((sum, room) => {
-    return sum + money(room.basePrice) * Number(room.totalRooms || 0);
+function quoteVilla(property, roomCategories, dates, inventoryDocs = []) {
+  const subtotal = dates.reduce((dateSum, date, index) => {
+    const day = inventoryDocs[index]?.data || null;
+    return dateSum + Object.values(roomCategories || {}).reduce((sum, room) => {
+      return sum + roomNightPrice(room, day, room.id) * Number(room.totalRooms || 0);
+    }, 0);
   }, 0);
-  const subtotal = money(nightlyTotal) * dates.length;
+  const nightlyTotal = dates.length ? money(subtotal / dates.length) : 0;
   const gstAmount = money(subtotal * Number(property.fullVillaGstPercent || 0) / 100);
 
   return {
@@ -150,6 +156,11 @@ function quoteVilla(property, roomCategories, dates) {
     gstAmount,
     totalAmount: money(subtotal + gstAmount)
   };
+}
+
+function roomNightPrice(room, dayInventory, roomCategoryId) {
+  const inventoryPrice = dayInventory?.roomCategories?.[roomCategoryId]?.price;
+  return money(inventoryPrice !== undefined ? inventoryPrice : room.basePrice);
 }
 
 function applyRoomBooking(dayInventory, rooms, bookingId) {
@@ -210,6 +221,7 @@ module.exports = {
   roomAvailable,
   quoteRooms,
   quoteVilla,
+  roomNightPrice,
   applyRoomBooking,
   applyVillaBooking,
   releaseBooking,

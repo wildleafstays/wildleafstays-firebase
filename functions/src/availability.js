@@ -42,7 +42,7 @@ module.exports = function availabilityRoutes({ db, admin }) {
             })
           );
 
-          const quote = quoteRooms(bundle.roomCategories, [{ roomCategoryId, quantity: 1 }], dates);
+          const quote = quoteRooms(bundle.roomCategories, [{ roomCategoryId, quantity: 1 }], dates, inventoryDocs);
 
           return {
             roomCategoryId,
@@ -55,7 +55,7 @@ module.exports = function availabilityRoutes({ db, admin }) {
 
         const canSellVilla = bundle.property.sellAsFullVilla === true &&
           inventoryDocs.every(day => villaAvailable(day.data, bundle.roomCategories));
-        const villaQuote = quoteVilla(bundle.property, bundle.roomCategories, dates);
+        const villaQuote = quoteVilla(bundle.property, bundle.roomCategories, dates, inventoryDocs);
 
         if (roomOptions.length || canSellVilla) {
           results.push({
@@ -120,8 +120,8 @@ module.exports = function availabilityRoutes({ db, admin }) {
         villaOption: {
           enabled: bundle.property.sellAsFullVilla === true,
           available: canSellVilla,
-          price: quoteVilla(bundle.property, bundle.roomCategories, dates).nightlyTotal,
-          quote: canSellVilla ? quoteVilla(bundle.property, bundle.roomCategories, dates) : null
+          price: quoteVilla(bundle.property, bundle.roomCategories, dates, inventoryDocs).nightlyTotal,
+          quote: canSellVilla ? quoteVilla(bundle.property, bundle.roomCategories, dates, inventoryDocs) : null
         }
       });
     } catch (err) {
@@ -141,9 +141,13 @@ module.exports = function availabilityRoutes({ db, admin }) {
       const bundle = await getPropertyBundle(db, propertyId);
       if (!bundle) return res.status(404).json({ error: "Property not found" });
 
+      const inventoryDocs = await db.runTransaction(async transaction => {
+        return readInventoryForDates(transaction, bundle.propertyRef, dates, bundle.roomCategories);
+      });
+
       const quote = bookingType === "fullVilla"
-        ? quoteVilla(bundle.property, bundle.roomCategories, dates)
-        : quoteRooms(bundle.roomCategories, rooms, dates);
+        ? quoteVilla(bundle.property, bundle.roomCategories, dates, inventoryDocs)
+        : quoteRooms(bundle.roomCategories, rooms, dates, inventoryDocs);
 
       res.json({ quote });
     } catch (err) {
