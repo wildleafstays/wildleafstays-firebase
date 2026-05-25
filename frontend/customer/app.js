@@ -5,6 +5,7 @@ const statusEl = document.querySelector("#statusText");
 let latestResults = [];
 
 setDefaultDates();
+loadHomepage();
 
 form.addEventListener("submit", async event => {
   event.preventDefault();
@@ -52,6 +53,32 @@ function renderResult(result) {
       </div>
     </article>
   `;
+}
+
+async function loadHomepage() {
+  try {
+    const response = await fetch("/api/availability/homepage");
+    const data = await response.json();
+    if (!response.ok) return;
+
+    const hero = (data.sections || []).find(section => section.id === "hero") || (data.sections || [])[0];
+    if (!hero) return;
+
+    if (hero.title) document.querySelector("#heroTitle").textContent = hero.title;
+    if (hero.subtitle) document.querySelector("#heroSubtitle").textContent = hero.subtitle;
+    if (hero.imageUrl) {
+      document.querySelector(".hero").style.backgroundImage =
+        `linear-gradient(rgba(20, 32, 51, 0.28), rgba(20, 32, 51, 0.46)), url("${hero.imageUrl}")`;
+    }
+    if (hero.logoUrl) {
+      const logo = document.querySelector("#siteLogo");
+      logo.src = hero.logoUrl;
+      logo.classList.remove("hidden");
+      document.querySelector("#brandMark").classList.add("hidden");
+    }
+  } catch {
+    // The website should still open if homepage settings are not configured yet.
+  }
 }
 
 function propertyUrl(propertyId) {

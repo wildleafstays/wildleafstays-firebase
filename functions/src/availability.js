@@ -11,6 +11,20 @@ const {
 module.exports = function availabilityRoutes({ db, admin }) {
   const router = express.Router();
 
+  router.get("/homepage", async (req, res) => {
+    try {
+      const snap = await db.collection("homepageSections").orderBy("order").get();
+
+      res.json({ sections: snap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(section => section.active !== false)
+      });
+    } catch (err) {
+      console.error("GET /api/availability/homepage", err);
+      res.status(500).json({ error: "Failed to load homepage settings" });
+    }
+  });
+
   router.get("/search", async (req, res) => {
     try {
       const { destination, checkIn, checkOut } = req.query;
@@ -114,14 +128,17 @@ module.exports = function availabilityRoutes({ db, admin }) {
       const canSellVilla = bundle.property.sellAsFullVilla === true &&
         inventoryDocs.every(day => villaAvailable(day.data, bundle.roomCategories));
 
+      const villaQuote = quoteVilla(bundle.property, bundle.roomCategories, dates, inventoryDocs);
+
       res.json({
         property: publicProperty(bundle.property),
         roomOptions,
         villaOption: {
           enabled: bundle.property.sellAsFullVilla === true,
           available: canSellVilla,
-          price: quoteVilla(bundle.property, bundle.roomCategories, dates, inventoryDocs).nightlyTotal,
-          quote: canSellVilla ? quoteVilla(bundle.property, bundle.roomCategories, dates, inventoryDocs) : null
+          price: villaQuote.nightlyTotal,
+          totalAmount: villaQuote.totalAmount,
+          quote: canSellVilla ? villaQuote : null
         }
       });
     } catch (err) {
@@ -166,6 +183,10 @@ function publicProperty(property) {
     destination: property.destination,
     address: property.address,
     description: property.description,
+    locationText: property.locationText || "",
+    neighbourhood: property.neighbourhood || "",
+    mapUrl: property.mapUrl || "",
+    houseRules: property.houseRules || "",
     photos: property.photos || [],
     amenities: property.amenities || [],
     facilities: property.facilities || [],

@@ -41,7 +41,7 @@ function renderProperty(data) {
       <div class="property-hero-content">
         <a class="back-link" href="/customer/">Back to search</a>
         <h1>${escapeHtml(property.name)}</h1>
-        <p>${escapeHtml(property.destination || "")}</p>
+        <p>${escapeHtml([property.destination, property.address].filter(Boolean).join(" - "))}</p>
       </div>
     </section>
 
@@ -63,11 +63,27 @@ function renderProperty(data) {
 
       <div class="chips feature-row">${facilities.slice(0, 14).map(item => `<span>${escapeHtml(item)}</span>`).join("")}</div>
 
+      <section class="property-info-grid">
+        ${infoPanel("Neighbourhood", property.neighbourhood || "Add neighbourhood details from Admin so guests can understand the area before booking.")}
+        ${infoPanel("Location", property.locationText || property.address || "Add location notes, road access, parking approach, and nearby landmarks.")}
+        ${infoPanel("House Rules", property.houseRules || "Add check-in, food, pet, smoking, party, and cancellation notes from Admin.")}
+        ${property.mapUrl ? `<a class="map-card" href="${escapeAttr(property.mapUrl)}" target="_blank" rel="noopener noreferrer">Open location map</a>` : ""}
+      </section>
+
       <section class="room-stack">
-        ${(data.roomOptions || []).filter(room => room.availableRooms > 0).map(renderRoomCard).join("")}
         ${renderVillaCard(data.villaOption)}
+        ${(data.roomOptions || []).filter(room => room.availableRooms > 0).map(renderRoomCard).join("")}
       </section>
     </section>
+  `;
+}
+
+function infoPanel(title, body) {
+  return `
+    <article class="info-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(body)}</p>
+    </article>
   `;
 }
 
@@ -84,7 +100,7 @@ function renderRoomCard(room) {
         <div class="room-heading">
           <div>
             <h3>${escapeHtml(room.name)}</h3>
-            <p class="muted">${room.availableRooms} available · Max ${room.maxGuests} guests per room</p>
+            <p class="muted">${room.availableRooms} available - Max ${room.maxGuests} guests per room</p>
           </div>
           <strong>Rs ${formatMoney(room.basePrice)} / night</strong>
         </div>
@@ -116,7 +132,7 @@ function renderVillaCard(villaOption) {
       <div>
         <span class="villa-badge">Full villa</span>
         <h3>Reserve the entire property</h3>
-        <p>No separate villa price is entered. This total is calculated from all room category rates and room counts.</p>
+        <p>Best for families and groups. The total is calculated from every room category rate multiplied by its room count, using the same physical inventory.</p>
       </div>
       <div>
         <strong>Rs ${formatMoney(villaOption.totalAmount)}</strong>
@@ -322,4 +338,8 @@ function escapeHtml(value) {
     "\"": "&quot;",
     "'": "&#039;"
   }[char]));
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, "&#096;");
 }

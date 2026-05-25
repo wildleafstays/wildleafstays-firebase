@@ -21,11 +21,12 @@ body {
 }
 
 .topbar {
-  height: 72px;
-  padding: 0 28px;
+  min-height: 72px;
+  padding: 12px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 20px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
@@ -48,6 +49,35 @@ body {
   color: white;
   background: var(--accent);
   border-radius: 50%;
+}
+
+.site-logo {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 18px;
+}
+
+.site-nav a {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.site-nav a:hover {
+  color: var(--accent-dark);
 }
 
 .admin-link {
@@ -131,6 +161,27 @@ button:hover {
 .content {
   width: min(1180px, calc(100% - 40px));
   margin: 28px auto 60px;
+}
+
+.info-band,
+.contact-band {
+  padding: 26px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.info-band h2,
+.contact-band h2 {
+  margin: 0 0 8px;
+}
+
+.info-band p,
+.contact-band p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .section-title {
@@ -459,6 +510,41 @@ button:hover {
   margin: 22px 0;
 }
 
+.property-info-grid {
+  margin: 22px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.info-card,
+.map-card {
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.info-card h3 {
+  margin: 0 0 8px;
+}
+
+.info-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.map-card {
+  display: grid;
+  place-items: center;
+  color: white;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .room-stack {
   display: grid;
   gap: 18px;
@@ -576,6 +662,7 @@ button:hover {
   .room-card,
   .booking-summary,
   .property-intro,
+  .property-info-grid,
   .detail-room-card {
     grid-template-columns: 1fr;
   }
@@ -615,6 +702,16 @@ button:hover {
   .topbar {
     height: auto;
     padding: 14px 16px;
+    align-items: flex-start;
+  }
+
+  .brand {
+    font-size: 18px;
+  }
+
+  .site-nav {
+    justify-content: flex-start;
+    font-size: 14px;
   }
 
   .hero {

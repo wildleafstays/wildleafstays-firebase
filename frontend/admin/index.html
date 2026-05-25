@@ -45,9 +45,14 @@
             <input name="id" type="hidden">
             <input name="name" placeholder="Property name" required>
             <input name="destination" placeholder="Destination" required>
+            <input name="address" placeholder="Address">
             <input name="gstPercent" type="number" min="0" step="0.01" placeholder="GST %">
             <input name="infantMaxAge" type="number" min="0" value="2" placeholder="Infant max age">
             <textarea name="description" placeholder="Short description"></textarea>
+            <textarea name="neighbourhood" placeholder="Neighbourhood, nearby places, market, road access"></textarea>
+            <textarea name="locationText" placeholder="Location notes for guests"></textarea>
+            <input name="mapUrl" placeholder="Google Maps link">
+            <textarea name="houseRules" placeholder="House rules and guest policies"></textarea>
             <label class="upload-box">
               Property images
               <input id="propertyImages" type="file" accept="image/*" multiple>
@@ -89,6 +94,9 @@
             <input name="sizeText" placeholder="Room size, e.g. 320 sq ft">
             <input name="totalRooms" type="number" min="1" placeholder="Total rooms" required>
             <input name="basePrice" type="number" min="1" placeholder="Base nightly rate" required>
+            <input name="cpRate" type="number" min="0" placeholder="CP plan rate: room + breakfast">
+            <input name="mapRate" type="number" min="0" placeholder="MAP plan rate: breakfast + lunch/dinner">
+            <input name="apRate" type="number" min="0" placeholder="AP plan rate: all meals">
             <input name="gstPercent" type="number" min="0" step="0.01" placeholder="GST %">
             <input name="maxGuests" type="number" min="1" placeholder="Max guests per room" required>
             <input name="includedGuests" type="number" min="1" placeholder="Guests included in price">
@@ -104,19 +112,12 @@
         </section>
 
         <section id="inventoryTab" class="tab-panel hidden">
-          <form id="inventoryForm" class="panel compact-grid">
-            <h2>Inventory & Rate Manager</h2>
+          <form id="inventoryForm" class="panel inventory-toolbar">
             <select name="propertyId" id="inventoryProperty" required></select>
-            <select name="roomCategoryId" id="inventoryRoom" required></select>
             <input name="start" type="date" required>
-            <input name="end" type="date" required>
-            <input name="price" type="number" min="0" placeholder="Nightly rate override">
-            <input name="availableRooms" type="number" min="0" placeholder="Available rooms">
-            <label class="check">
-              <input name="manuallyClosed" type="checkbox">
-              Close this room category
-            </label>
-            <button type="submit">Apply</button>
+            <button id="prevInventory" type="button" class="secondary">Previous</button>
+            <button id="nextInventory" type="button" class="secondary">Next</button>
+            <button type="submit">Load Chart</button>
           </form>
           <div id="inventoryTable" class="panel"></div>
         </section>
@@ -131,7 +132,16 @@
             <input name="sectionId" placeholder="Section ID, e.g. hero" required>
             <input name="title" placeholder="Title">
             <textarea name="subtitle" placeholder="Subtitle / description"></textarea>
-            <input name="imageUrl" placeholder="Image URL for now">
+            <label class="upload-box">
+              Logo
+              <input id="homeLogoUpload" type="file" accept="image/*">
+            </label>
+            <input name="logoUrl" placeholder="Logo URL">
+            <label class="upload-box">
+              Hero image
+              <input id="homeHeroUpload" type="file" accept="image/*">
+            </label>
+            <input name="imageUrl" placeholder="Hero image URL">
             <input name="order" type="number" value="1" placeholder="Order">
             <label class="check">
               <input name="active" type="checkbox" checked>

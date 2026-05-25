@@ -8,18 +8,24 @@
   </head>
   <body>
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark">W</span>
+      <a class="brand" href="/customer/">
+        <img id="siteLogo" class="site-logo hidden" alt="Wildleaf Stays logo">
+        <span id="brandMark" class="brand-mark">W</span>
         <span>Wildleaf Stays</span>
-      </div>
-      <a class="admin-link" href="/admin/">Admin</a>
+      </a>
+      <nav class="site-nav">
+        <a href="#hotels">Hotels</a>
+        <a href="#villas">Villas</a>
+        <a href="#contact">Contact</a>
+        <a href="/admin/">Admin</a>
+      </nav>
     </header>
 
     <main>
       <section class="hero">
         <div class="hero-copy">
-          <h1>Find stays for families, groups, and quiet escapes</h1>
-          <p>Search rooms and full villas from the same live inventory.</p>
+          <h1 id="heroTitle">Find stays for families, groups, and quiet escapes</h1>
+          <p id="heroSubtitle">Search rooms and full villas from the same live inventory.</p>
         </div>
         <form id="searchForm" class="search-panel">
           <label>
@@ -46,12 +52,22 @@
         </form>
       </section>
 
-      <section class="content">
+      <section id="hotels" class="content">
         <div class="section-title">
           <h2>Available Stays</h2>
           <span id="statusText">Enter your destination and dates.</span>
         </div>
         <div id="results" class="results"></div>
+      </section>
+
+      <section id="villas" class="content info-band">
+        <h2>Villas For Families And Groups</h2>
+        <p>When a property is sold as a full villa, the rate is calculated from the same room inventory. If one room is already booked, the villa is automatically blocked for those dates.</p>
+      </section>
+
+      <section id="contact" class="content contact-band">
+        <h2>Contact</h2>
+        <p>For booking help, call or message Wildleaf Stays. Add your phone and WhatsApp details from the Home Page editor.</p>
       </section>
     </main>
 

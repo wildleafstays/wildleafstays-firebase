@@ -38,6 +38,12 @@ function buildBlankInventory(date, roomCategories) {
       bookedRooms: 0,
       availableRooms: totalRooms,
       price: money(room.basePrice),
+      ratePlans: {
+        EP: money(room.basePrice),
+        CP: money(room.cpRate || 0),
+        MAP: money(room.mapRate || 0),
+        AP: money(room.apRate || 0)
+      },
       manuallyClosed: false
     };
   });
@@ -159,8 +165,9 @@ function quoteVilla(property, roomCategories, dates, inventoryDocs = []) {
 }
 
 function roomNightPrice(room, dayInventory, roomCategoryId) {
-  const inventoryPrice = dayInventory?.roomCategories?.[roomCategoryId]?.price;
-  return money(inventoryPrice !== undefined ? inventoryPrice : room.basePrice);
+  const inventoryItem = dayInventory?.roomCategories?.[roomCategoryId];
+  const epRate = inventoryItem?.ratePlans?.EP || inventoryItem?.price;
+  return money(epRate !== undefined ? epRate : room.basePrice);
 }
 
 function applyRoomBooking(dayInventory, rooms, bookingId) {

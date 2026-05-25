@@ -15,7 +15,6 @@ const inventoryForm = document.querySelector("#inventoryForm");
 const homepageForm = document.querySelector("#homepageForm");
 const propertySelect = document.querySelector("#propertySelect");
 const inventoryProperty = document.querySelector("#inventoryProperty");
-const inventoryRoom = document.querySelector("#inventoryRoom");
 
 let idToken = "";
 let properties = [];
@@ -84,7 +83,7 @@ roomForm.addEventListener("submit", async event => {
   delete body.propertyId;
   body.photos = csvArray(body.photos);
   body.amenities = checkedValues("roomAmenities");
-  ["totalRooms", "basePrice", "gstPercent", "maxGuests", "includedGuests", "extraAdultRate", "extraKidRate"].forEach(key => {
+  ["totalRooms", "basePrice", "cpRate", "mapRate", "apRate", "gstPercent", "maxGuests", "includedGuests", "extraAdultRate", "extraKidRate"].forEach(key => {
     body[key] = Number(body[key] || 0);
   });
 
@@ -102,16 +101,6 @@ roomForm.addEventListener("submit", async event => {
 
 inventoryForm.addEventListener("submit", async event => {
   event.preventDefault();
-  const data = new FormData(inventoryForm);
-  const propertyId = data.get("propertyId");
-  const body = formBody(data);
-  body.manuallyClosed = data.has("manuallyClosed");
-  body.price = body.price === "" ? "" : Number(body.price);
-  body.availableRooms = body.availableRooms === "" ? "" : Number(body.availableRooms);
-  await adminFetch(`/api/admin/properties/${propertyId}/inventory`, {
-    method: "PUT",
-    body: JSON.stringify(body)
-  });
   await loadInventory();
 });
 
@@ -132,9 +121,11 @@ homepageForm.addEventListener("submit", async event => {
 });
 
 inventoryProperty.addEventListener("change", async () => {
-  await populateInventoryRooms();
   await loadInventory();
 });
+
+document.querySelector("#prevInventory").addEventListener("click", () => shiftInventory(-8));
+document.querySelector("#nextInventory").addEventListener("click", () => shiftInventory(8));
 
 async function refreshAll() {
   await loadProperties();
@@ -172,7 +163,6 @@ async function loadRooms() {
     const data = await adminFetch(`/api/admin/properties/${property.id}/roomCategories`);
     roomCategories[property.id] = data.roomCategories || [];
   }
-  await populateInventoryRooms();
   renderRooms();
 }
 
@@ -195,42 +185,94 @@ function renderRooms() {
   `).join("");
 }
 
-async function populateInventoryRooms() {
-  const propertyId = inventoryProperty.value || properties[0]?.id;
-  const rooms = roomCategories[propertyId] || [];
-  inventoryRoom.innerHTML = rooms.map(room => `<option value="${room.id}">${escapeHtml(room.name)}</option>`).join("");
-}
-
 async function loadInventory() {
   const propertyId = inventoryProperty.value;
   if (!propertyId) return;
   const start = inventoryForm.start.value || dateValue(new Date());
   const endDate = new Date(`${start}T00:00:00`);
-  endDate.setDate(endDate.getDate() + 7);
-  const end = inventoryForm.end.value || dateValue(endDate);
+  endDate.setDate(endDate.getDate() + 8);
+  const end = dateValue(endDate);
   inventoryForm.start.value = start;
-  inventoryForm.end.value = end;
 
   const data = await adminFetch(`/api/admin/properties/${propertyId}/inventory?start=${start}&end=${end}`);
   document.querySelector("#inventoryTable").innerHTML = `
-    <h2>Next Dates</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Date</th>${data.roomCategories.map(room => `<th>${escapeHtml(room.name)}</th>`).join("")}</tr></thead>
-        <tbody>
-          ${data.days.map(day => `
-            <tr>
-              <td>${day.date}</td>
-              ${data.roomCategories.map(room => {
-                const item = day.roomCategories?.[room.id] || {};
-                return `<td>Rs ${formatMoney(item.price || room.basePrice)}<br>${item.availableRooms ?? room.totalRooms} available</td>`;
-              }).join("")}
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
+    <div class="inventory-head">
+      <h2>Inventory Chart</h2>
+      <span>Inline edit inventory and EP/CP/MAP/AP rates. EP falls back to room base rate.</span>
+    </div>
+    <div class="inventory-chart">
+      <div class="chart-row chart-header">
+        <div class="chart-room">Room</div>
+        ${data.days.map(day => `<div class="chart-date">${shortDate(day.date)}</div>`).join("")}
+      </div>
+      ${data.roomCategories.map(room => `
+        <div class="chart-row">
+          <div class="chart-room">
+            <strong>${escapeHtml(room.name)}</strong>
+            <small>Base EP Rs ${formatMoney(room.basePrice)}</small>
+          </div>
+          ${data.days.map(day => renderInventoryCell(propertyId, room, day)).join("")}
+        </div>
+      `).join("")}
     </div>
   `;
+}
+
+function renderInventoryCell(propertyId, room, day) {
+  const item = day.roomCategories?.[room.id] || {};
+  const plans = item.ratePlans || {};
+  if (day.villaBooked) {
+    return `<div class="chart-cell villa-block">Full villa booking</div>`;
+  }
+  return `
+    <div class="chart-cell" data-property="${propertyId}" data-room="${room.id}" data-date="${day.date}">
+      <input class="inv-input" data-field="availableRooms" type="number" min="0" value="${item.availableRooms ?? room.totalRooms}" title="Inventory">
+      ${rateInput("EP", plans.EP || item.price || room.basePrice)}
+      ${rateInput("CP", plans.CP || room.cpRate || "")}
+      ${rateInput("MAP", plans.MAP || room.mapRate || "")}
+      ${rateInput("AP", plans.AP || room.apRate || "")}
+      <button type="button" onclick="saveInventoryCell(this)">Save</button>
+    </div>
+  `;
+}
+
+function rateInput(plan, value) {
+  return `
+    <label class="rate-field">
+      <span>${plan}</span>
+      <input class="rate-input" data-plan="${plan}" type="number" min="0" value="${value}" placeholder="0">
+    </label>
+  `;
+}
+
+async function saveInventoryCell(button) {
+  const cell = button.closest(".chart-cell");
+  const start = cell.dataset.date;
+  const end = nextDate(start);
+  const ratePlans = {};
+  cell.querySelectorAll("[data-plan]").forEach(input => {
+    ratePlans[input.dataset.plan] = input.value === "" ? "" : Number(input.value);
+  });
+  await adminFetch(`/api/admin/properties/${cell.dataset.property}/inventory`, {
+    method: "PUT",
+    body: JSON.stringify({
+      start,
+      end,
+      roomCategoryId: cell.dataset.room,
+      availableRooms: Number(cell.querySelector("[data-field='availableRooms']").value || 0),
+      price: ratePlans.EP,
+      ratePlans
+    })
+  });
+  button.textContent = "Saved";
+  setTimeout(() => { button.textContent = "Save"; }, 900);
+}
+
+function shiftInventory(days) {
+  const current = new Date(`${inventoryForm.start.value || dateValue(new Date())}T00:00:00`);
+  current.setDate(current.getDate() + days);
+  inventoryForm.start.value = dateValue(current);
+  loadInventory();
 }
 
 async function loadBookings() {
@@ -318,6 +360,8 @@ function showTab(name) {
 function wireUploads() {
   document.querySelector("#propertyImages").addEventListener("change", event => uploadFiles(event.target.files, "properties", propertyForm.photos, "propertyPhotoPreview"));
   document.querySelector("#roomImages").addEventListener("change", event => uploadFiles(event.target.files, "rooms", roomForm.photos, "roomPhotoPreview"));
+  document.querySelector("#homeLogoUpload").addEventListener("change", event => uploadOne(event.target.files[0], "homepage", homepageForm.logoUrl));
+  document.querySelector("#homeHeroUpload").addEventListener("change", event => uploadOne(event.target.files[0], "homepage", homepageForm.imageUrl));
 }
 
 async function uploadFiles(files, folder, hiddenInput, previewId) {
@@ -329,6 +373,13 @@ async function uploadFiles(files, folder, hiddenInput, previewId) {
   }
   hiddenInput.value = urls.join(",");
   renderPreview(previewId, urls);
+}
+
+async function uploadOne(file, folder, input) {
+  if (!file) return;
+  const path = `${folder}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "-")}`;
+  const snap = await storage.ref(path).put(file);
+  input.value = await snap.ref.getDownloadURL();
 }
 
 function renderCheckList(elementId, items, name) {
@@ -391,6 +442,16 @@ function csvArray(value) {
 
 function dateValue(date) {
   return date.toISOString().slice(0, 10);
+}
+
+function nextDate(value) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return dateValue(date);
+}
+
+function shortDate(value) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 }
 
 function formatMoney(value) {

@@ -251,6 +251,134 @@ button {
   overflow-x: auto;
 }
 
+.inventory-toolbar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) 180px 120px 120px 140px;
+  gap: 10px;
+  align-items: end;
+}
+
+#inventoryTable {
+  grid-column: 1 / -1;
+}
+
+.inventory-head {
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+}
+
+.inventory-head h2 {
+  margin: 0;
+}
+
+.inventory-chart {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.chart-row {
+  min-width: 1220px;
+  display: grid;
+  grid-template-columns: 220px repeat(8, minmax(118px, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.chart-row:last-child {
+  border-bottom: 0;
+}
+
+.chart-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eef4f7;
+  font-weight: 700;
+}
+
+.chart-room,
+.chart-date,
+.chart-cell {
+  min-height: 102px;
+  padding: 10px;
+  border-right: 1px solid var(--line);
+}
+
+.chart-room {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--panel);
+}
+
+.chart-header .chart-room {
+  background: #eef4f7;
+}
+
+.chart-room small {
+  display: block;
+  margin-top: 5px;
+}
+
+.chart-date {
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+}
+
+.chart-cell {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  background: #fbfcfd;
+}
+
+.chart-cell input,
+.chart-cell button {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 7px;
+  font-size: 13px;
+}
+
+.chart-cell .inv-input {
+  grid-column: 1 / -1;
+  font-weight: 700;
+  border-color: #a9bfd2;
+}
+
+.rate-field {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rate-field span {
+  line-height: 1;
+}
+
+.chart-cell button {
+  grid-column: 1 / -1;
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.villa-block {
+  grid-template-columns: 1fr;
+  place-items: center;
+  color: var(--danger);
+  background: #fff1f0;
+  font-weight: 700;
+  text-align: center;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -267,7 +395,8 @@ td {
 @media (max-width: 980px) {
   .admin-app,
   .tab-panel,
-  .compact-grid {
+  .compact-grid,
+  .inventory-toolbar {
     grid-template-columns: 1fr;
   }
 

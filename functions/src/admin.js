@@ -187,7 +187,7 @@ module.exports = function adminRoutes({ db, admin, ADMIN_SETUP_KEY }) {
 
   router.put("/properties/:propertyId/inventory", async (req, res) => {
     try {
-      const { start, end, roomCategoryId, price, availableRooms, manuallyClosed } = req.body;
+      const { start, end, roomCategoryId, price, availableRooms, manuallyClosed, ratePlans = {} } = req.body;
       const dates = stayDates(start, end);
       if (!dates.length || !roomCategoryId) {
         return res.status(400).json({ error: "Dates and room category are required" });
@@ -217,6 +217,12 @@ module.exports = function adminRoutes({ db, admin, ADMIN_SETUP_KEY }) {
             bookedRooms,
             availableRooms: manuallyClosed ? 0 : nextAvailable,
             price: price === "" || price === undefined ? Number(current.price || room.basePrice || 0) : Number(price),
+            ratePlans: {
+              EP: numberOrFallback(ratePlans.EP, price === "" || price === undefined ? Number(current.price || room.basePrice || 0) : Number(price)),
+              CP: numberOrFallback(ratePlans.CP, current.ratePlans?.CP || room.cpRate || 0),
+              MAP: numberOrFallback(ratePlans.MAP, current.ratePlans?.MAP || room.mapRate || 0),
+              AP: numberOrFallback(ratePlans.AP, current.ratePlans?.AP || room.apRate || 0)
+            },
             manuallyClosed: Boolean(manuallyClosed)
           };
 
@@ -281,6 +287,10 @@ function normalizeProperty(body, options = {}) {
   }
   if (body.address !== undefined) property.address = String(body.address).trim();
   if (body.description !== undefined) property.description = String(body.description).trim();
+  if (body.locationText !== undefined) property.locationText = String(body.locationText || "").trim();
+  if (body.neighbourhood !== undefined) property.neighbourhood = String(body.neighbourhood || "").trim();
+  if (body.mapUrl !== undefined) property.mapUrl = String(body.mapUrl || "").trim();
+  if (body.houseRules !== undefined) property.houseRules = String(body.houseRules || "").trim();
   if (body.status !== undefined) property.status = body.status === "draft" ? "draft" : "active";
   if (body.sellAsFullVilla !== undefined) property.sellAsFullVilla = Boolean(body.sellAsFullVilla);
   if (body.fullVillaPrice !== undefined) property.fullVillaPrice = Number(body.fullVillaPrice || 0);
@@ -316,6 +326,9 @@ function normalizeRoomCategory(body, options = {}) {
   if (body.description !== undefined) room.description = String(body.description).trim();
   if (body.totalRooms !== undefined) room.totalRooms = Number(body.totalRooms || 0);
   if (body.basePrice !== undefined) room.basePrice = Number(body.basePrice || 0);
+  if (body.cpRate !== undefined) room.cpRate = Number(body.cpRate || 0);
+  if (body.mapRate !== undefined) room.mapRate = Number(body.mapRate || 0);
+  if (body.apRate !== undefined) room.apRate = Number(body.apRate || 0);
   if (body.gstPercent !== undefined) room.gstPercent = Number(body.gstPercent || 0);
   if (body.maxGuests !== undefined) room.maxGuests = Number(body.maxGuests || 0);
   if (body.includedGuests !== undefined) room.includedGuests = Number(body.includedGuests || 0);
@@ -344,6 +357,11 @@ function normalizeRoomCategory(body, options = {}) {
   }
 
   return room;
+}
+
+function numberOrFallback(value, fallback) {
+  if (value === "" || value === undefined || value === null) return Number(fallback || 0);
+  return Number(value || 0);
 }
 
 function splitCsv(value) {
