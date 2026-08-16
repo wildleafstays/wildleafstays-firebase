@@ -67,6 +67,10 @@ export interface PropertiesTable {
   contact_email: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   check_in_time: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   check_out_time: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  submission_sequence: Generated<number>;
+  submitted_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;
+  approved_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;
+  live_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;
   version: Generated<number>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
@@ -172,6 +176,96 @@ export interface PhysicalUnitsTable {
   updated_at: Generated<Date>;
 }
 
+export interface AmenityCatalogTable {
+  code: string;
+  name: string;
+  category: string;
+  active: Generated<boolean>;
+  sort_order: Generated<number>;
+  created_at: Generated<Date>;
+}
+
+export interface PropertyAmenitiesTable {
+  organization_id: string;
+  property_id: string;
+  amenity_code: string;
+  details: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PropertyPoliciesTable {
+  property_id: string;
+  organization_id: string;
+  children_policy: string;
+  pets_policy: string;
+  smoking_policy: string;
+  parties_events_policy: string;
+  minimum_checkin_age: number | null;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  house_rules: string | null;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PropertyMediaTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  media_type: string;
+  storage_provider: string;
+  storage_key: string;
+  mime_type: string | null;
+  alt_text: string | null;
+  caption: string | null;
+  is_cover: Generated<boolean>;
+  sort_order: Generated<number>;
+  status: Generated<string>;
+  created_by_user_id: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PropertyDocumentsTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  document_type: string;
+  storage_provider: string;
+  storage_key: string;
+  original_filename: string;
+  issued_on: string | null;
+  expires_on: string | null;
+  verification_status: Generated<string>;
+  verification_reason: string | null;
+  verified_by_user_id: string | null;
+  verified_at: Date | null;
+  status: Generated<string>;
+  created_by_user_id: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PropertyReviewRoundsTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  submission_number: number;
+  submitted_by_user_id: string;
+  submitted_at: Generated<Date>;
+  review_started_by_user_id: string | null;
+  review_started_at: Date | null;
+  decision: string | null;
+  decision_reason: string | null;
+  decided_by_user_id: string | null;
+  decided_at: Date | null;
+  status: Generated<string>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
 export interface AuditEventsTable {
   id: Generated<string>;
   actor_type: string;
@@ -231,6 +325,12 @@ export interface Database {
   property_floors: PropertyFloorsTable;
   room_categories: RoomCategoriesTable;
   physical_units: PhysicalUnitsTable;
+  amenity_catalog: AmenityCatalogTable;
+  property_amenities: PropertyAmenitiesTable;
+  property_policies: PropertyPoliciesTable;
+  property_media: PropertyMediaTable;
+  property_documents: PropertyDocumentsTable;
+  property_review_rounds: PropertyReviewRoundsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
