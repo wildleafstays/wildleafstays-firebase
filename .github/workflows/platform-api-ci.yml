@@ -1,6 +1,7 @@
 name: Platform API CI
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "platform-api/**"
@@ -8,6 +9,7 @@ on:
   push:
     branches:
       - booking-engine-v2-foundation
+      - "phase-*"
     paths:
       - "platform-api/**"
       - ".github/workflows/platform-api-ci.yml"
@@ -15,9 +17,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: platform-api-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     services:
       postgres:
         image: postgres:18
@@ -32,14 +40,17 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+
     env:
       NODE_ENV: test
       DATABASE_URL: postgres://wildleaf:wildleaf@localhost:5432/wildleaf_test
       FIREBASE_PROJECT_ID: wildleaf-test
       DB_MAX_CONNECTIONS: 5
+
     defaults:
       run:
         working-directory: platform-api
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -53,6 +64,7 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
       - name: Production dependency audit
         run: npm audit --omit=dev --omit=optional
 
