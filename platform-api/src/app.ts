@@ -11,6 +11,7 @@ import { AccessRepository } from "./modules/access/infrastructure/access-reposit
 import { UserRepository } from "./modules/identity/infrastructure/user-repository.js";
 import { registerSessionRoutes } from "./modules/identity/transport/session-routes.js";
 import { registerOrganizationRoutes } from "./modules/organizations/transport/organization-routes.js";
+import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
 import { registerErrorHandler } from "./shared/http/error-handler.js";
 
 export interface AppDependencies {
@@ -136,6 +137,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await registerOrganizationRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  await registerPropertyRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,

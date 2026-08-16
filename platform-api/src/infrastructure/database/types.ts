@@ -46,6 +46,27 @@ export interface PropertiesTable {
   name: string;
   status: string;
   timezone: string;
+  property_type: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  sale_mode: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  short_description: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null | undefined
+  >;
+  description: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  address_line_1: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  address_line_2: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  locality: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  city: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  state_region: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  postal_code: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  country_code: Generated<string>;
+  latitude: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  longitude: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  contact_phone: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  contact_email: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  check_in_time: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  check_out_time: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   version: Generated<number>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
