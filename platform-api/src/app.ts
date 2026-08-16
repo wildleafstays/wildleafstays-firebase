@@ -12,6 +12,7 @@ import { UserRepository } from "./modules/identity/infrastructure/user-repositor
 import { registerSessionRoutes } from "./modules/identity/transport/session-routes.js";
 import { registerOrganizationRoutes } from "./modules/organizations/transport/organization-routes.js";
 import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
+import { registerPropertySetupRoutes } from "./modules/property-setup/transport/property-setup-routes.js";
 import { registerErrorHandler } from "./shared/http/error-handler.js";
 
 export interface AppDependencies {
@@ -144,6 +145,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await registerPropertyRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  await registerPropertySetupRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,

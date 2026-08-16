@@ -93,6 +93,85 @@ export interface PlatformStaffRolesTable {
   updated_at: Generated<Date>;
 }
 
+export interface PropertyStructuresTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  code: string | null;
+  name: string;
+  structure_type: string;
+  sort_order: Generated<number>;
+  has_lift: Generated<boolean>;
+  wheelchair_accessible: Generated<boolean>;
+  status: Generated<string>;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PropertyFloorsTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  structure_id: string;
+  code: string | null;
+  name: string;
+  floor_number: number | null;
+  sort_order: Generated<number>;
+  lift_accessible: Generated<boolean>;
+  wheelchair_accessible: Generated<boolean>;
+  status: Generated<string>;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface RoomCategoriesTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  code: string;
+  name: string;
+  accommodation_type: string;
+  description: string | null;
+  base_occupancy: Generated<number>;
+  max_adults: Generated<number>;
+  max_children: Generated<number>;
+  max_occupancy: Generated<number>;
+  size_sqm: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  bed_configuration: string | null;
+  extra_bed_allowed: Generated<boolean>;
+  default_view_label: string | null;
+  sort_order: Generated<number>;
+  status: Generated<string>;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PhysicalUnitsTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  room_category_id: string;
+  structure_id: string | null;
+  floor_id: string | null;
+  unit_code: string;
+  display_name: string | null;
+  has_view: Generated<boolean>;
+  view_label: string | null;
+  wheelchair_accessible: Generated<boolean>;
+  step_free_accessible: Generated<boolean>;
+  lift_accessible: Generated<boolean>;
+  smoking_policy: Generated<string>;
+  internal_notes: string | null;
+  sort_order: Generated<number>;
+  status: Generated<string>;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
 export interface AuditEventsTable {
   id: Generated<string>;
   actor_type: string;
@@ -148,6 +227,10 @@ export interface Database {
   properties: PropertiesTable;
   property_access_grants: PropertyAccessGrantsTable;
   platform_staff_roles: PlatformStaffRolesTable;
+  property_structures: PropertyStructuresTable;
+  property_floors: PropertyFloorsTable;
+  room_categories: RoomCategoriesTable;
+  physical_units: PhysicalUnitsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
