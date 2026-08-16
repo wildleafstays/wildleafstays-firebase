@@ -1,0 +1,146 @@
+import { randomUUID } from "node:crypto";
+import helmet from "@fastify/helmet";
+import swagger from "@fastify/swagger";
+import Fastify, { type FastifyInstance } from "fastify";
+import type { Kysely } from "kysely";
+import type { AppConfig } from "./config/env.js";
+import { checkDatabaseReadiness } from "./infrastructure/database/database.js";
+import type { Database } from "./infrastructure/database/types.js";
+import type { IdentityVerifier } from "./infrastructure/identity/identity-verifier.js";
+import { AccessRepository } from "./modules/access/infrastructure/access-repository.js";
+import { UserRepository } from "./modules/identity/infrastructure/user-repository.js";
+import { registerSessionRoutes } from "./modules/identity/transport/session-routes.js";
+import { registerOrganizationRoutes } from "./modules/organizations/transport/organization-routes.js";
+import { registerErrorHandler } from "./shared/http/error-handler.js";
+
+export interface AppDependencies {
+  config: AppConfig;
+  db: Kysely<Database>;
+  identityVerifier: IdentityVerifier;
+}
+
+export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: {
+      level: deps.config.LOG_LEVEL,
+      redact: {
+        paths: ["req.headers.authorization", "headers.authorization"],
+        censor: "[REDACTED]"
+      }
+    },
+    genReqId(request) {
+      const supplied = request.headers["x-request-id"];
+      if (typeof supplied === "string" && /^[A-Za-z0-9._:-]{8,128}$/.test(supplied)) {
+        return supplied;
+      }
+      return randomUUID();
+    }
+  });
+
+  app.decorateRequest("actor", null);
+  app.decorateRequest("correlationId", "");
+
+  app.addHook("onRequest", async (request, reply) => {
+    const supplied = request.headers["x-correlation-id"];
+    request.correlationId =
+      typeof supplied === "string" && /^[A-Za-z0-9._:-]{8,128}$/.test(supplied)
+        ? supplied
+        : request.id;
+    void reply.header("x-request-id", request.id);
+    void reply.header("x-correlation-id", request.correlationId);
+  });
+
+  await app.register(helmet, {
+    global: true,
+    contentSecurityPolicy: false
+  });
+
+  await app.register(swagger, {
+    openapi: {
+      openapi: "3.0.3",
+      info: {
+        title: "Wildleaf Platform API",
+        description: "Transactional API for the Wildleaf hospitality operating platform.",
+        version: "0.1.0"
+      },
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "Firebase ID token"
+          }
+        }
+      }
+    }
+  });
+
+  if (deps.config.NODE_ENV !== "production") {
+    app.get("/openapi.json", async () => app.swagger());
+  }
+
+  registerErrorHandler(app);
+
+  app.get(
+    "/health/live",
+    {
+      schema: {
+        tags: ["Health"],
+        response: {
+          200: {
+            type: "object",
+            additionalProperties: false,
+            required: ["status", "service"],
+            properties: {
+              status: { type: "string" },
+              service: { type: "string" }
+            }
+          }
+        }
+      }
+    },
+    async () => ({ status: "ok", service: "wildleaf-platform-api" })
+  );
+
+  app.get(
+    "/health/ready",
+    {
+      schema: {
+        tags: ["Health"],
+        response: {
+          200: {
+            type: "object",
+            additionalProperties: false,
+            required: ["status", "database"],
+            properties: {
+              status: { type: "string" },
+              database: { type: "string" }
+            }
+          }
+        }
+      }
+    },
+    async () => {
+      await checkDatabaseReadiness(deps.db);
+      return { status: "ok", database: "ready" };
+    }
+  );
+
+  const userRepository = new UserRepository(deps.db);
+  const accessRepository = new AccessRepository(deps.db);
+
+  await registerSessionRoutes(app, {
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  await registerOrganizationRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  return app;
+}

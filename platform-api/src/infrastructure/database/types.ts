@@ -1,0 +1,133 @@
+import type { ColumnType, Generated } from "kysely";
+
+export type JsonObject = Record<string, unknown>;
+
+export interface UsersTable {
+  id: Generated<string>;
+  auth_provider: string;
+  auth_subject: string;
+  email: string | null;
+  display_name: string | null;
+  email_verified: boolean;
+  status: string;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface OrganizationsTable {
+  id: Generated<string>;
+  legal_name: string;
+  trading_name: string | null;
+  organization_type: string;
+  status: string;
+  country_code: string;
+  currency_code: string;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface OrganizationMembershipsTable {
+  id: Generated<string>;
+  organization_id: string;
+  user_id: string;
+  role_code: string;
+  status: string;
+  invited_by_user_id: string | null;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PropertiesTable {
+  id: Generated<string>;
+  organization_id: string;
+  public_slug: string | null;
+  name: string;
+  status: string;
+  timezone: string;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PropertyAccessGrantsTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  organization_membership_id: string;
+  role_code: string;
+  status: string;
+  version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PlatformStaffRolesTable {
+  id: Generated<string>;
+  user_id: string;
+  role_code: string;
+  status: string;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface AuditEventsTable {
+  id: Generated<string>;
+  actor_type: string;
+  actor_user_id: string | null;
+  actor_role: string | null;
+  organization_id: string | null;
+  property_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  before_json: ColumnType<JsonObject | null, JsonObject | null, JsonObject | null>;
+  after_json: ColumnType<JsonObject | null, JsonObject | null, JsonObject | null>;
+  metadata_json: ColumnType<JsonObject, JsonObject, JsonObject>;
+  reason: string | null;
+  source: string;
+  request_id: string;
+  correlation_id: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: Generated<Date>;
+}
+
+export interface IdempotencyKeysTable {
+  id: Generated<string>;
+  scope_key: string;
+  idempotency_key: string;
+  request_hash: string;
+  state: string;
+  response_status: number | null;
+  response_body: ColumnType<JsonObject | null, JsonObject | null, JsonObject | null>;
+  expires_at: Date;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface OutboxEventsTable {
+  id: Generated<string>;
+  aggregate_type: string;
+  aggregate_id: string;
+  event_type: string;
+  payload: ColumnType<JsonObject, JsonObject, JsonObject>;
+  occurred_at: Generated<Date>;
+  available_at: Generated<Date>;
+  processed_at: Date | null;
+  attempt_count: Generated<number>;
+  last_error: string | null;
+}
+
+export interface Database {
+  users: UsersTable;
+  organizations: OrganizationsTable;
+  organization_memberships: OrganizationMembershipsTable;
+  properties: PropertiesTable;
+  property_access_grants: PropertyAccessGrantsTable;
+  platform_staff_roles: PlatformStaffRolesTable;
+  audit_events: AuditEventsTable;
+  idempotency_keys: IdempotencyKeysTable;
+  outbox_events: OutboxEventsTable;
+}
