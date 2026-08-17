@@ -42,6 +42,7 @@ import type {
   QuotePromotionLinesTable,
   QuotePromotionSnapshotsTable
 } from "../../modules/quotes/infrastructure/quote-promotion-database-types.js";
+import type { QuoteInventoryHoldsTable } from "../../modules/quotes/infrastructure/quote-hold-database-types.js";
 
 import type {
   CancellationPoliciesTable,
@@ -429,6 +430,7 @@ export interface Database {
   quote_promotion_lines: QuotePromotionLinesTable;
   quote_final_fee_lines: QuoteFinalFeeLinesTable;
   quote_final_tax_lines: QuoteFinalTaxLinesTable;
+  quote_inventory_holds: QuoteInventoryHoldsTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;

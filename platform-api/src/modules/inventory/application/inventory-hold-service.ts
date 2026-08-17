@@ -196,7 +196,10 @@ export class InventoryHoldService {
     actor: ActorContext,
     organizationId: string,
     propertyId: string,
-    permission: typeof Permissions.INVENTORY_READ | typeof Permissions.INVENTORY_MANAGE
+    permission:
+      | typeof Permissions.INVENTORY_READ
+      | typeof Permissions.INVENTORY_MANAGE
+      | typeof Permissions.RESERVATION_MANAGE
   ): Promise<SaleMode> {
     this.authorization.assert(actor, permission, {
       kind: "property",
@@ -310,9 +313,13 @@ export class InventoryHoldService {
     actor: ActorContext,
     organizationId: string,
     propertyId: string,
-    request: RequestMetadata
+    request: RequestMetadata,
+    permission:
+      | typeof Permissions.INVENTORY_READ
+      | typeof Permissions.INVENTORY_MANAGE
+      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_READ
   ): Promise<number> {
-    await this.property(trx, actor, organizationId, propertyId, Permissions.INVENTORY_READ);
+    await this.property(trx, actor, organizationId, propertyId, permission);
 
     let expired = 0;
     while (true) {
@@ -343,7 +350,11 @@ export class InventoryHoldService {
     trx: Transaction<Database>,
     actor: ActorContext,
     input: CreateInventoryHoldInput,
-    request: RequestMetadata
+    request: RequestMetadata,
+    permission:
+      | typeof Permissions.INVENTORY_MANAGE
+      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_MANAGE,
+    expiresAtCap: Date | null = null
   ): Promise<InventoryHoldResult> {
     const dates = dateRange(input.startDate, input.endDate);
     if (
@@ -362,16 +373,27 @@ export class InventoryHoldService {
       throw new ValidationError("clientReference must contain 1 to 200 characters");
     }
 
+    if (expiresAtCap !== null && Number.isNaN(expiresAtCap.getTime())) {
+      throw new ValidationError("expiresAtCap must be a valid date");
+    }
+
     const mode = await this.property(
       trx,
       actor,
       input.organizationId,
       input.propertyId,
-      Permissions.INVENTORY_MANAGE
+      permission
     );
     validateItems(input.items, mode);
 
-    await this.expireDueForProperty(trx, actor, input.organizationId, input.propertyId, request);
+    await this.expireDueForProperty(
+      trx,
+      actor,
+      input.organizationId,
+      input.propertyId,
+      request,
+      permission
+    );
 
     const categories = await this.materialize(
       trx,
@@ -547,7 +569,16 @@ export class InventoryHoldService {
       }
     }
 
-    const expiresAt = new Date(this.now().getTime() + input.ttlSeconds * 1000);
+    const holdNow = this.now();
+    const requestedExpiresAt = new Date(holdNow.getTime() + input.ttlSeconds * 1000);
+    const expiresAt =
+      expiresAtCap !== null && expiresAtCap < requestedExpiresAt
+        ? new Date(expiresAtCap.getTime())
+        : requestedExpiresAt;
+    if (expiresAt <= holdNow) {
+      throw new ConflictError("Inventory hold expiry must be in the future");
+    }
+
     const hold = await this.holds.createHold(trx, {
       organizationId: input.organizationId,
       propertyId: input.propertyId,
@@ -636,9 +667,12 @@ export class InventoryHoldService {
     organizationId: string,
     propertyId: string,
     holdId: string,
-    request: RequestMetadata
+    request: RequestMetadata,
+    permission:
+      | typeof Permissions.INVENTORY_READ
+      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_READ
   ): Promise<InventoryHoldResult> {
-    await this.property(trx, actor, organizationId, propertyId, Permissions.INVENTORY_READ);
+    await this.property(trx, actor, organizationId, propertyId, permission);
 
     let hold = await this.holds.findHoldForUpdate(trx, organizationId, propertyId, holdId);
     if (!hold) {

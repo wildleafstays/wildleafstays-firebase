@@ -8,6 +8,7 @@ import { requestMetadata } from "../../../shared/http/request-metadata.js";
 import { IdempotencyService } from "../../../shared/idempotency/idempotency-service.js";
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
+import { QuoteHoldService } from "../application/quote-hold-service.js";
 import { QuoteService } from "../application/quote-service.js";
 import type { QuoteUnitRequest } from "../domain/quote.js";
 
@@ -85,6 +86,7 @@ export async function registerQuoteRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new QuoteService();
+  const holdService = new QuoteHoldService();
 
   app.post<{ Params: PropertyParams; Body: CreateQuoteBody }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/quotes",
@@ -205,6 +207,52 @@ export async function registerQuoteRoutes(
             request.params.quoteId
           )
         );
+    }
+  );
+
+  app.post<{ Params: QuoteParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/quotes/:quoteId/hold",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Quotes"],
+        summary: "Atomically convert a final quote into an inventory hold",
+        description:
+          "Locks the immutable quote, verifies final commercial completeness and expiry, revalidates live canonical inventory, creates one inventory hold, and persists an immutable quote-to-hold link. Repeated commands for the same quote return the existing active hold.",
+        security: [{ bearerAuth: [] }],
+        params: quoteParamsSchema,
+        headers: idempotencyHeaders
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      const key = requireIdempotencyKey(request.headers);
+      const requestBody = { quoteId: request.params.quoteId };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `quote.hold.create:${request.params.quoteId}:user:${actor.userId}`,
+          key,
+          requestBody
+        },
+        async (trx) => {
+          const body = await holdService.createFromQuote(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              quoteId: request.params.quoteId
+            },
+            requestMetadata(request, "partner-api")
+          );
+          return { statusCode: body.created ? 201 : 200, body };
+        }
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
     }
   );
 }
