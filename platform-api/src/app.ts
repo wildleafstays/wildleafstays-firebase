@@ -21,6 +21,7 @@ import { registerPropertyRoutes } from "./modules/properties/transport/property-
 import { registerPropertySetupRoutes } from "./modules/property-setup/transport/property-setup-routes.js";
 import { registerQuoteRoutes } from "./modules/quotes/transport/quote-routes.js";
 import { registerRateRoutes } from "./modules/rates/transport/rate-routes.js";
+import { registerReservationRoutes } from "./modules/reservations/transport/reservation-routes.js";
 import { registerErrorHandler } from "./shared/http/error-handler.js";
 
 export interface AppDependencies {
@@ -202,6 +203,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await registerQuoteRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  await registerReservationRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,

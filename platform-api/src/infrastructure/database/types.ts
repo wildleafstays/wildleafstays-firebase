@@ -43,6 +43,12 @@ import type {
   QuotePromotionSnapshotsTable
 } from "../../modules/quotes/infrastructure/quote-promotion-database-types.js";
 import type { QuoteInventoryHoldsTable } from "../../modules/quotes/infrastructure/quote-hold-database-types.js";
+import type {
+  ReservationFinancialSnapshotsTable,
+  ReservationLeadGuestSnapshotsTable,
+  ReservationsTable,
+  ReservationStatusHistoryTable
+} from "../../modules/reservations/infrastructure/reservation-database-types.js";
 
 import type {
   CancellationPoliciesTable,
@@ -431,6 +437,10 @@ export interface Database {
   quote_final_fee_lines: QuoteFinalFeeLinesTable;
   quote_final_tax_lines: QuoteFinalTaxLinesTable;
   quote_inventory_holds: QuoteInventoryHoldsTable;
+  reservations: ReservationsTable;
+  reservation_financial_snapshots: ReservationFinancialSnapshotsTable;
+  reservation_lead_guest_snapshots: ReservationLeadGuestSnapshotsTable;
+  reservation_status_history: ReservationStatusHistoryTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;
