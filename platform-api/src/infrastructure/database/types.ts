@@ -4,6 +4,11 @@ import type {
   InventoryDailyBucketsTable,
   InventoryEventsTable
 } from "../../modules/inventory/infrastructure/inventory-database-types.js";
+import type {
+  InventoryHoldItemsTable,
+  InventoryHoldNightsTable,
+  InventoryHoldsTable
+} from "../../modules/inventory/infrastructure/inventory-hold-database-types.js";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -339,6 +344,9 @@ export interface Database {
   inventory_daily_buckets: InventoryDailyBucketsTable;
   inventory_blocks: InventoryBlocksTable;
   inventory_events: InventoryEventsTable;
+  inventory_holds: InventoryHoldsTable;
+  inventory_hold_items: InventoryHoldItemsTable;
+  inventory_hold_nights: InventoryHoldNightsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;

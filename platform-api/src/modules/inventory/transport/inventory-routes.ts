@@ -8,6 +8,7 @@ import { requestMetadata } from "../../../shared/http/request-metadata.js";
 import { IdempotencyService } from "../../../shared/idempotency/idempotency-service.js";
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
+import { InventoryHoldService } from "../application/inventory-hold-service.js";
 import { InventoryService } from "../application/inventory-service.js";
 import type {
   InventoryBlockScope,
@@ -123,6 +124,7 @@ export async function registerInventoryRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new InventoryService();
+  const holdService = new InventoryHoldService();
 
   app.get<{ Params: PropertyParams; Querystring: AvailabilityQuery }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/inventory/availability",
@@ -142,18 +144,24 @@ export async function registerInventoryRoutes(
         throw new AuthenticationError();
       }
 
-      return deps.db
-        .transaction()
-        .execute((trx) =>
-          service.getAvailability(
-            trx,
-            actor,
-            request.params.organizationId,
-            request.params.propertyId,
-            request.query.startDate,
-            request.query.endDate
-          )
+      return deps.db.transaction().execute(async (trx) => {
+        await holdService.expireDueForProperty(
+          trx,
+          actor,
+          request.params.organizationId,
+          request.params.propertyId,
+          requestMetadata(request, "partner-api")
         );
+
+        return service.getAvailability(
+          trx,
+          actor,
+          request.params.organizationId,
+          request.params.propertyId,
+          request.query.startDate,
+          request.query.endDate
+        );
+      });
     }
   );
 
