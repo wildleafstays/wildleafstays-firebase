@@ -9,6 +9,7 @@ import type { Database } from "./infrastructure/database/types.js";
 import type { IdentityVerifier } from "./infrastructure/identity/identity-verifier.js";
 import { AccessRepository } from "./modules/access/infrastructure/access-repository.js";
 import { registerCommercialRuleRoutes } from "./modules/commercial/transport/commercial-rule-routes.js";
+import { registerPromotionRuleRoutes } from "./modules/commercial/transport/promotion-rule-routes.js";
 import { UserRepository } from "./modules/identity/infrastructure/user-repository.js";
 import { registerSessionRoutes } from "./modules/identity/transport/session-routes.js";
 import { registerInventoryAllocationRoutes } from "./modules/inventory/transport/inventory-allocation-routes.js";
@@ -208,6 +209,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await registerCommercialRuleRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  await registerPromotionRuleRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,

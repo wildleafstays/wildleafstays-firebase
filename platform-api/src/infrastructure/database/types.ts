@@ -55,6 +55,14 @@ import type {
   PropertyCommercialSettingVersionsTable,
   RatePlanCancellationAssignmentsTable
 } from "../../modules/commercial/infrastructure/commercial-rules-database-types.js";
+import type {
+  PromotionAssignmentsTable,
+  PromotionCampaignsTable,
+  PromotionCampaignVersionsTable,
+  PromotionRuleEventsTable,
+  PropertyPromotionSettingsTable,
+  PropertyPromotionSettingVersionsTable
+} from "../../modules/commercial/infrastructure/promotion-rules-database-types.js";
 export type JsonObject = Record<string, unknown>;
 
 export interface UsersTable {
@@ -427,6 +435,12 @@ export interface Database {
   guest_age_policies: GuestAgePoliciesTable;
   guest_age_policy_versions: GuestAgePolicyVersionsTable;
   commercial_rule_events: CommercialRuleEventsTable;
+  property_promotion_settings: PropertyPromotionSettingsTable;
+  property_promotion_setting_versions: PropertyPromotionSettingVersionsTable;
+  promotion_campaigns: PromotionCampaignsTable;
+  promotion_campaign_versions: PromotionCampaignVersionsTable;
+  promotion_assignments: PromotionAssignmentsTable;
+  promotion_rule_events: PromotionRuleEventsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
