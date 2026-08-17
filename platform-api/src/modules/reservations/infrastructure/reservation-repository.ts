@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Selectable, Transaction } from "kysely";
+import { sql, type Selectable, type Transaction } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import type {
@@ -81,6 +81,84 @@ export class ReservationRepository {
       .where("property_id", "=", propertyId)
       .where("id", "=", reservationId)
       .executeTakeFirst();
+  }
+
+  async findByIdForUpdate(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reservationId: string
+  ): Promise<ReservationRecord | undefined> {
+    return trx
+      .selectFrom("reservations")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("id", "=", reservationId)
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
+  async transitionStatus(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reservationId: string,
+    fromStatus: ReservationStatus,
+    toStatus: ReservationStatus
+  ): Promise<ReservationRecord | undefined> {
+    return trx
+      .updateTable("reservations")
+      .set({
+        status: toStatus,
+        version: sql<number>`version + 1`,
+        updated_at: sql<Date>`now()`
+      })
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("id", "=", reservationId)
+      .where("status", "=", fromStatus)
+      .returningAll()
+      .executeTakeFirst();
+  }
+
+  async appendStatusHistory(
+    trx: Transaction<Database>,
+    input: {
+      reservationId: string;
+      organizationId: string;
+      propertyId: string;
+      fromStatus: ReservationStatus;
+      toStatus: ReservationStatus;
+      reason: string;
+      actorUserId: string | null;
+      request: RequestMetadata;
+    }
+  ): Promise<void> {
+    const latest = await trx
+      .selectFrom("reservation_status_history")
+      .select((eb) => eb.fn.max<number>("sequence_number").as("max_sequence"))
+      .where("reservation_id", "=", input.reservationId)
+      .executeTakeFirst();
+
+    const sequenceNumber = Number(latest?.max_sequence ?? 0) + 1;
+    await trx
+      .insertInto("reservation_status_history")
+      .values({
+        id: randomUUID(),
+        reservation_id: input.reservationId,
+        organization_id: input.organizationId,
+        property_id: input.propertyId,
+        sequence_number: sequenceNumber,
+        from_status: input.fromStatus,
+        to_status: input.toStatus,
+        reason: input.reason,
+        actor_user_id: input.actorUserId,
+        source: input.request.source,
+        request_id: input.request.requestId,
+        correlation_id: input.request.correlationId
+      })
+      .execute();
   }
 
   async createReservation(

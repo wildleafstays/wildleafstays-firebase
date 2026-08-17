@@ -49,6 +49,10 @@ import type {
   ReservationsTable,
   ReservationStatusHistoryTable
 } from "../../modules/reservations/infrastructure/reservation-database-types.js";
+import type {
+  PaymentEventsTable,
+  PaymentIntentsTable
+} from "../../modules/payments/infrastructure/payment-database-types.js";
 
 import type {
   CancellationPoliciesTable,
@@ -441,6 +445,8 @@ export interface Database {
   reservation_financial_snapshots: ReservationFinancialSnapshotsTable;
   reservation_lead_guest_snapshots: ReservationLeadGuestSnapshotsTable;
   reservation_status_history: ReservationStatusHistoryTable;
+  payment_intents: PaymentIntentsTable;
+  payment_events: PaymentEventsTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;
