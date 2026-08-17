@@ -1,8 +1,11 @@
 import { Kysely, PostgresDialect, sql } from "kysely";
-import { Pool } from "pg";
+import { Pool, types as pgTypes } from "pg";
 import type { AppConfig } from "../../config/env.js";
 import type { Database } from "./types.js";
 
+// PostgreSQL DATE is a calendar date, not an instant in time.
+// Keep OID 1082 as YYYY-MM-DD so business dates never shift with process timezone.
+pgTypes.setTypeParser(1082, (value) => value);
 export function createDatabase(
   config: Pick<AppConfig, "DATABASE_URL" | "DB_MAX_CONNECTIONS">
 ): Kysely<Database> {

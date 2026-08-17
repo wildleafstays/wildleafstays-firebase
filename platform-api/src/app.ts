@@ -10,6 +10,7 @@ import type { IdentityVerifier } from "./infrastructure/identity/identity-verifi
 import { AccessRepository } from "./modules/access/infrastructure/access-repository.js";
 import { UserRepository } from "./modules/identity/infrastructure/user-repository.js";
 import { registerSessionRoutes } from "./modules/identity/transport/session-routes.js";
+import { registerInventoryRoutes } from "./modules/inventory/transport/inventory-routes.js";
 import { registerOrganizationRoutes } from "./modules/organizations/transport/organization-routes.js";
 import { registerPropertyOnboardingRoutes } from "./modules/property-onboarding/transport/property-onboarding-routes.js";
 import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
@@ -160,6 +161,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await registerPropertyOnboardingRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  await registerInventoryRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,

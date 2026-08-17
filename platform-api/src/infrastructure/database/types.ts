@@ -1,4 +1,9 @@
 import type { ColumnType, Generated } from "kysely";
+import type {
+  InventoryBlocksTable,
+  InventoryDailyBucketsTable,
+  InventoryEventsTable
+} from "../../modules/inventory/infrastructure/inventory-database-types.js";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -331,6 +336,9 @@ export interface Database {
   property_media: PropertyMediaTable;
   property_documents: PropertyDocumentsTable;
   property_review_rounds: PropertyReviewRoundsTable;
+  inventory_daily_buckets: InventoryDailyBucketsTable;
+  inventory_blocks: InventoryBlocksTable;
+  inventory_events: InventoryEventsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
