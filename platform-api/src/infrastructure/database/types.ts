@@ -14,6 +14,12 @@ import type {
   InventoryAllocationNightsTable,
   InventoryAllocationsTable
 } from "../../modules/inventory/infrastructure/inventory-allocation-database-types.js";
+import type {
+  RateCalendarDaysTable,
+  RateEventsTable,
+  RatePlanProductsTable,
+  RatePlansTable
+} from "../../modules/rates/infrastructure/rate-database-types.js";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -355,6 +361,10 @@ export interface Database {
   inventory_allocations: InventoryAllocationsTable;
   inventory_allocation_items: InventoryAllocationItemsTable;
   inventory_allocation_nights: InventoryAllocationNightsTable;
+  rate_plans: RatePlansTable;
+  rate_plan_products: RatePlanProductsTable;
+  rate_calendar_days: RateCalendarDaysTable;
+  rate_events: RateEventsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
