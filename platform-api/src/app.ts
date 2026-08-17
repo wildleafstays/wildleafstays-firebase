@@ -18,6 +18,7 @@ import { registerPropertyOnboardingRoutes } from "./modules/property-onboarding/
 import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
 import { registerPropertySetupRoutes } from "./modules/property-setup/transport/property-setup-routes.js";
 import { registerRateRoutes } from "./modules/rates/transport/rate-routes.js";
+import { registerQuoteRoutes } from "./modules/quotes/transport/quote-routes.js";
 import { registerErrorHandler } from "./shared/http/error-handler.js";
 
 export interface AppDependencies {
@@ -192,6 +193,12 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await registerRateRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+  await registerQuoteRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,

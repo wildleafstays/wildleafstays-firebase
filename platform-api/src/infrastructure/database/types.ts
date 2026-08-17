@@ -20,6 +20,12 @@ import type {
   RatePlanProductsTable,
   RatePlansTable
 } from "../../modules/rates/infrastructure/rate-database-types.js";
+import type {
+  QuoteEventsTable,
+  QuoteNightsTable,
+  QuotesTable,
+  QuoteUnitsTable
+} from "../../modules/quotes/infrastructure/quote-database-types.js";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -365,6 +371,10 @@ export interface Database {
   rate_plan_products: RatePlanProductsTable;
   rate_calendar_days: RateCalendarDaysTable;
   rate_events: RateEventsTable;
+  quotes: QuotesTable;
+  quote_units: QuoteUnitsTable;
+  quote_nights: QuoteNightsTable;
+  quote_events: QuoteEventsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
