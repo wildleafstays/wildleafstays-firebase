@@ -26,6 +26,16 @@ import type {
   QuotesTable,
   QuoteUnitsTable
 } from "../../modules/quotes/infrastructure/quote-database-types.js";
+import type {
+  QuoteCancellationSnapshotsTable,
+  QuoteCancellationTierSnapshotsTable,
+  QuoteCommercialSettingDaysTable,
+  QuoteCommercialSnapshotsTable,
+  QuoteFeeLinesTable,
+  QuoteGuestAgeSnapshotsTable,
+  QuoteTaxLinesTable,
+  QuoteUnitAgeBreakdownsTable
+} from "../../modules/quotes/infrastructure/quote-commercial-database-types.js";
 
 import type {
   CancellationPoliciesTable,
@@ -393,6 +403,14 @@ export interface Database {
   quote_units: QuoteUnitsTable;
   quote_nights: QuoteNightsTable;
   quote_events: QuoteEventsTable;
+  quote_commercial_snapshots: QuoteCommercialSnapshotsTable;
+  quote_commercial_setting_days: QuoteCommercialSettingDaysTable;
+  quote_guest_age_snapshots: QuoteGuestAgeSnapshotsTable;
+  quote_unit_age_breakdowns: QuoteUnitAgeBreakdownsTable;
+  quote_fee_lines: QuoteFeeLinesTable;
+  quote_tax_lines: QuoteTaxLinesTable;
+  quote_cancellation_snapshots: QuoteCancellationSnapshotsTable;
+  quote_cancellation_tier_snapshots: QuoteCancellationTierSnapshotsTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;

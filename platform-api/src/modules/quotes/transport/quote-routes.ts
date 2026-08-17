@@ -91,9 +91,9 @@ export async function registerQuoteRoutes(
       preHandler: authenticate,
       schema: {
         tags: ["Quotes"],
-        summary: "Create an immutable pre-tax quote snapshot",
+        summary: "Create an immutable quote snapshot",
         description:
-          "Creates a priced availability snapshot. Phase 4A quotes are intentionally not hold-eligible until tax, fee and cancellation-policy rules are added.",
+          "Creates an immutable availability and price snapshot. When commercial rules are configured, tax, fee, guest-age and cancellation snapshots are applied; promotions remain deliberately unevaluated, so Phase 4B2 quotes are not yet hold-eligible.",
         security: [{ bearerAuth: [] }],
         params: propertyParamsSchema,
         headers: idempotencyHeaders,

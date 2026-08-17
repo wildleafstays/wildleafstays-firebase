@@ -1,4 +1,5 @@
 import { ConflictError, ValidationError } from "../../../shared/errors/app-error.js";
+import type { ResolvedGuestAgePolicy } from "../../commercial/domain/commercial-quote-resolution.js";
 import type { InventoryAvailabilityResult } from "../../inventory/domain/inventory.js";
 import type { RateCalendarView } from "../../rates/domain/rates.js";
 import type {
@@ -53,7 +54,61 @@ export function stayNightCount(arrivalDate: string, departureDate: string): numb
   return nights;
 }
 
-function validateUnits(input: CreateQuoteInput, calendar: RateCalendarView): QuoteUnitSnapshot[] {
+function classifyChildAges(
+  childAges: number[],
+  guestAgePolicy: ResolvedGuestAgePolicy | null
+): {
+  children: number;
+  infants: number;
+  occupancyChildren: number;
+  childLimitCount: number;
+  chargeableChildren: number;
+} {
+  if (!guestAgePolicy) {
+    return {
+      children: childAges.length,
+      infants: 0,
+      occupancyChildren: childAges.length,
+      childLimitCount: childAges.length,
+      chargeableChildren: childAges.length
+    };
+  }
+
+  let children = 0;
+  let infants = 0;
+
+  for (const age of childAges) {
+    if (age > guestAgePolicy.childMaxAge) {
+      throw new ValidationError(
+        "A guest older than the configured child maximum age must be counted as an adult",
+        {
+          age,
+          childMaxAge: guestAgePolicy.childMaxAge
+        }
+      );
+    }
+
+    if (guestAgePolicy.infantMaxAge !== null && age <= guestAgePolicy.infantMaxAge) {
+      infants += 1;
+    } else {
+      children += 1;
+    }
+  }
+
+  return {
+    children,
+    infants,
+    occupancyChildren: children + (guestAgePolicy.infantsCountTowardsOccupancy ? infants : 0),
+    childLimitCount: children + (guestAgePolicy.infantsCountTowardsChildLimit ? infants : 0),
+    chargeableChildren: children + (guestAgePolicy.infantsChargeAsChildren ? infants : 0)
+  };
+}
+
+function validateUnits(
+  input: CreateQuoteInput,
+  calendar: RateCalendarView,
+  guestAgePolicy: ResolvedGuestAgePolicy | null
+): QuoteUnitSnapshot[] {
   const product = calendar.rateProduct;
   const quantity = input.units.length;
 
@@ -78,7 +133,9 @@ function validateUnits(input: CreateQuoteInput, calendar: RateCalendarView): Quo
       }
     }
 
-    const children = unit.childAges.length;
+    const classification = classifyChildAges(unit.childAges, guestAgePolicy);
+    const occupancyCount = unit.adults + classification.occupancyChildren;
+
     if (unit.adults > product.maxAdults) {
       throw new ValidationError("Adult occupancy exceeds the selected rate product", {
         unitIndex: index + 1,
@@ -86,17 +143,17 @@ function validateUnits(input: CreateQuoteInput, calendar: RateCalendarView): Quo
         maxAdults: product.maxAdults
       });
     }
-    if (children > product.maxChildren) {
+    if (classification.childLimitCount > product.maxChildren) {
       throw new ValidationError("Child occupancy exceeds the selected rate product", {
         unitIndex: index + 1,
-        children,
+        childLimitCount: classification.childLimitCount,
         maxChildren: product.maxChildren
       });
     }
-    if (unit.adults + children > product.maxOccupancy) {
+    if (occupancyCount > product.maxOccupancy) {
       throw new ValidationError("Total occupancy exceeds the selected rate product", {
         unitIndex: index + 1,
-        occupancy: unit.adults + children,
+        occupancy: occupancyCount,
         maxOccupancy: product.maxOccupancy
       });
     }
@@ -105,13 +162,18 @@ function validateUnits(input: CreateQuoteInput, calendar: RateCalendarView): Quo
       unitIndex: index + 1,
       adults: unit.adults,
       childAges: [...unit.childAges],
+      children: classification.children,
+      infants: classification.infants,
+      occupancyCount,
+      childLimitCount: classification.childLimitCount,
+      chargeableChildren: classification.chargeableChildren,
       includedAdults: product.includedAdults,
       includedChildren: product.includedChildren,
       maxAdults: product.maxAdults,
       maxChildren: product.maxChildren,
       maxOccupancy: product.maxOccupancy,
       extraAdults: Math.max(0, unit.adults - product.includedAdults),
-      extraChildren: Math.max(0, children - product.includedChildren)
+      extraChildren: Math.max(0, classification.chargeableChildren - product.includedChildren)
     };
   });
 }
@@ -169,7 +231,8 @@ function productLabel(
 export function calculateQuote(
   input: CreateQuoteInput,
   calendar: RateCalendarView,
-  availability: InventoryAvailabilityResult
+  availability: InventoryAvailabilityResult,
+  guestAgePolicy: ResolvedGuestAgePolicy | null = null
 ): QuoteCalculation {
   const nights = stayNightCount(input.arrivalDate, input.departureDate);
 
@@ -222,7 +285,7 @@ export function calculateQuote(
     });
   }
 
-  const units = validateUnits(input, calendar);
+  const units = validateUnits(input, calendar, guestAgePolicy);
   const quantity = units.length;
   const extraAdults = units.reduce((sum, unit) => sum + unit.extraAdults, 0);
   const extraChildren = units.reduce((sum, unit) => sum + unit.extraChildren, 0);
@@ -301,6 +364,7 @@ export function calculateQuote(
     commercialStatus: "PRE_TAX_ONLY",
     holdEligible: false,
     units,
-    nights: quoteNights
+    nights: quoteNights,
+    commercial: null
   };
 }

@@ -8,11 +8,13 @@ import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import type { ActorContext } from "../../access/domain/actor-context.js";
 import { AuthorizationService } from "../../access/domain/authorization-service.js";
 import { Permissions } from "../../access/domain/permissions.js";
+import { CommercialQuoteResolver } from "../../commercial/application/commercial-quote-resolver.js";
 import { InventoryHoldService } from "../../inventory/application/inventory-hold-service.js";
 import { InventoryService } from "../../inventory/application/inventory-service.js";
 import { RateService } from "../../rates/application/rate-service.js";
-import type { CreateQuoteInput, QuoteView } from "../domain/quote.js";
+import type { CreateQuoteInput, QuoteCalculation, QuoteView } from "../domain/quote.js";
 import { QuoteRepository } from "../infrastructure/quote-repository.js";
+import { calculateCommercialQuote } from "./commercial-quote-calculator.js";
 import { addDays, calculateQuote, stayNightCount } from "./quote-calculator.js";
 
 const MIN_TTL_SECONDS = 60;
@@ -28,7 +30,8 @@ export class QuoteService {
     private readonly authorization = new AuthorizationService(),
     private readonly rates = new RateService(),
     private readonly inventory = new InventoryService(),
-    private readonly holds = new InventoryHoldService()
+    private readonly holds = new InventoryHoldService(),
+    private readonly commercial = new CommercialQuoteResolver()
   ) {}
 
   async createQuote(
@@ -82,7 +85,32 @@ export class QuoteService {
       input.departureDate
     );
 
-    const calculation = calculateQuote(input, calendar, availability);
+    const stayDates = calendar.days
+      .filter((day) => day.stayDate >= input.arrivalDate && day.stayDate < input.departureDate)
+      .map((day) => day.stayDate);
+
+    const commercialContext = await this.commercial.resolve(trx, {
+      organizationId: input.organizationId,
+      propertyId: input.propertyId,
+      ratePlanId: calendar.ratePlan.id,
+      rateProductId: calendar.rateProduct.id,
+      stayDates
+    });
+
+    const baseCalculation = calculateQuote(
+      input,
+      calendar,
+      availability,
+      commercialContext?.guestAgePolicy ?? null
+    );
+
+    const calculation: QuoteCalculation = commercialContext
+      ? {
+          ...baseCalculation,
+          commercial: calculateCommercialQuote(baseCalculation, commercialContext)
+        }
+      : baseCalculation;
+
     const expiresAt = new Date(Date.now() + input.ttlSeconds * 1000);
 
     const quote = await this.repository.create(trx, {
@@ -105,8 +133,11 @@ export class QuoteService {
       details: {
         quoteReference: quote.quoteReference,
         commercialStatus: quote.commercialStatus,
+        promotionStatus: quote.promotionStatus,
         holdEligible: quote.holdEligible,
         totalMinor: quote.totalMinor,
+        taxMinor: quote.taxMinor,
+        feeMinor: quote.feeMinor,
         currencyCode: quote.currencyCode,
         expiresAt: quote.expiresAt
       },
@@ -134,6 +165,7 @@ export class QuoteService {
         propertyId: input.propertyId,
         quoteReference: quote.quoteReference,
         commercialStatus: quote.commercialStatus,
+        promotionStatus: quote.promotionStatus,
         holdEligible: quote.holdEligible,
         expiresAt: quote.expiresAt
       }
