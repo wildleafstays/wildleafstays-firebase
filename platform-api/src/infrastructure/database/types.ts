@@ -9,6 +9,11 @@ import type {
   InventoryHoldNightsTable,
   InventoryHoldsTable
 } from "../../modules/inventory/infrastructure/inventory-hold-database-types.js";
+import type {
+  InventoryAllocationItemsTable,
+  InventoryAllocationNightsTable,
+  InventoryAllocationsTable
+} from "../../modules/inventory/infrastructure/inventory-allocation-database-types.js";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -347,6 +352,9 @@ export interface Database {
   inventory_holds: InventoryHoldsTable;
   inventory_hold_items: InventoryHoldItemsTable;
   inventory_hold_nights: InventoryHoldNightsTable;
+  inventory_allocations: InventoryAllocationsTable;
+  inventory_allocation_items: InventoryAllocationItemsTable;
+  inventory_allocation_nights: InventoryAllocationNightsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
