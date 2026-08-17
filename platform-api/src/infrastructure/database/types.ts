@@ -27,6 +27,24 @@ import type {
   QuoteUnitsTable
 } from "../../modules/quotes/infrastructure/quote-database-types.js";
 
+import type {
+  CancellationPoliciesTable,
+  CancellationPolicyTiersTable,
+  CancellationPolicyVersionsTable,
+  CommercialFeeAssignmentsTable,
+  CommercialFeePoliciesTable,
+  CommercialFeePolicyVersionsTable,
+  CommercialRuleEventsTable,
+  CommercialTaxAssignmentsTable,
+  CommercialTaxComponentsTable,
+  CommercialTaxPoliciesTable,
+  CommercialTaxPolicyVersionsTable,
+  GuestAgePoliciesTable,
+  GuestAgePolicyVersionsTable,
+  PropertyCommercialSettingsTable,
+  PropertyCommercialSettingVersionsTable,
+  RatePlanCancellationAssignmentsTable
+} from "../../modules/commercial/infrastructure/commercial-rules-database-types.js";
 export type JsonObject = Record<string, unknown>;
 
 export interface UsersTable {
@@ -375,6 +393,22 @@ export interface Database {
   quote_units: QuoteUnitsTable;
   quote_nights: QuoteNightsTable;
   quote_events: QuoteEventsTable;
+  property_commercial_settings: PropertyCommercialSettingsTable;
+  property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
+  commercial_tax_policies: CommercialTaxPoliciesTable;
+  commercial_tax_policy_versions: CommercialTaxPolicyVersionsTable;
+  commercial_tax_components: CommercialTaxComponentsTable;
+  commercial_tax_assignments: CommercialTaxAssignmentsTable;
+  commercial_fee_policies: CommercialFeePoliciesTable;
+  commercial_fee_policy_versions: CommercialFeePolicyVersionsTable;
+  commercial_fee_assignments: CommercialFeeAssignmentsTable;
+  cancellation_policies: CancellationPoliciesTable;
+  cancellation_policy_versions: CancellationPolicyVersionsTable;
+  cancellation_policy_tiers: CancellationPolicyTiersTable;
+  rate_plan_cancellation_assignments: RatePlanCancellationAssignmentsTable;
+  guest_age_policies: GuestAgePoliciesTable;
+  guest_age_policy_versions: GuestAgePolicyVersionsTable;
+  commercial_rule_events: CommercialRuleEventsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;
