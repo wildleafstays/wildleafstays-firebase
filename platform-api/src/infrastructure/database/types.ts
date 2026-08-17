@@ -53,6 +53,7 @@ import type {
   PaymentEventsTable,
   PaymentIntentsTable
 } from "../../modules/payments/infrastructure/payment-database-types.js";
+import type { PaymentProviderEvidenceTable } from "../../modules/payments/infrastructure/payment-evidence-database-types.js";
 
 import type {
   CancellationPoliciesTable,
@@ -447,6 +448,7 @@ export interface Database {
   reservation_status_history: ReservationStatusHistoryTable;
   payment_intents: PaymentIntentsTable;
   payment_events: PaymentEventsTable;
+  payment_provider_evidence: PaymentProviderEvidenceTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;

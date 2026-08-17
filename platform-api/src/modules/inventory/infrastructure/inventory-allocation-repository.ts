@@ -42,6 +42,21 @@ export class InventoryAllocationRepository {
       .executeTakeFirst();
   }
 
+  async findReservationOwnerByHold(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    holdId: string
+  ): Promise<{ id: string; status: string } | undefined> {
+    return trx
+      .selectFrom("reservations")
+      .select(["id", "status"])
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("inventory_hold_id", "=", holdId)
+      .executeTakeFirst();
+  }
+
   async findForUpdate(
     trx: Transaction<Database>,
     organizationId: string,

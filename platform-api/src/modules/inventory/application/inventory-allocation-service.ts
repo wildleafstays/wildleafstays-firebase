@@ -83,6 +83,30 @@ export class InventoryAllocationService {
     }
   }
 
+  private async assertNotReservationOwnedHold(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    holdId: string
+  ): Promise<void> {
+    const reservation = await this.allocations.findReservationOwnerByHold(
+      trx,
+      organizationId,
+      propertyId,
+      holdId
+    );
+    if (reservation) {
+      throw new ConflictError(
+        "Reservation-linked inventory cannot be managed through generic inventory allocation commands",
+        {
+          reservationId: reservation.id,
+          reservationStatus: reservation.status,
+          inventoryHoldId: holdId
+        }
+      );
+    }
+  }
+
   private async existingAllocationResult(
     trx: Transaction<Database>,
     allocation: InventoryAllocationRecord,
@@ -122,6 +146,8 @@ export class InventoryAllocationService {
     if (!hold) {
       throw new NotFoundError("Inventory hold not found");
     }
+
+    await this.assertNotReservationOwnedHold(trx, organizationId, propertyId, holdId);
 
     const existingForHold = await this.allocations.findByHold(
       trx,
@@ -342,6 +368,8 @@ export class InventoryAllocationService {
     if (!allocation) {
       throw new NotFoundError("Inventory allocation not found");
     }
+
+    await this.assertNotReservationOwnedHold(trx, organizationId, propertyId, allocation.hold_id);
 
     const items = await this.allocations.listItems(trx, allocation.id);
     if (allocation.status === InventoryAllocationStatuses.RELEASED) {

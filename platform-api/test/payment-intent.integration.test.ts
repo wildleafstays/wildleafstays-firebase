@@ -4,9 +4,11 @@ import { loadConfig } from "../src/config/env.js";
 import { createDatabase } from "../src/infrastructure/database/database.js";
 import type { ActorContext } from "../src/modules/access/domain/actor-context.js";
 import { CommercialRuleService } from "../src/modules/commercial/application/commercial-rule-service.js";
+import { InventoryAllocationService } from "../src/modules/inventory/application/inventory-allocation-service.js";
 import { InventoryHoldService } from "../src/modules/inventory/application/inventory-hold-service.js";
 import { QuoteHoldService } from "../src/modules/quotes/application/quote-hold-service.js";
 import { HeldReservationService } from "../src/modules/reservations/application/held-reservation-service.js";
+import { VerifiedPaymentEvidenceService } from "../src/modules/payments/application/verified-payment-evidence-service.js";
 import { BeginPaymentService } from "../src/modules/reservations/application/begin-payment-service.js";
 import { PromotionRuleService } from "../src/modules/commercial/application/promotion-rule-service.js";
 import { CreateOrganizationService } from "../src/modules/organizations/application/create-organization-service.js";
@@ -714,5 +716,181 @@ describe("Phase 5A provider-neutral payment intent", () => {
     );
 
     expect(read.paymentIntent).toEqual(result.paymentIntent);
+  });
+});
+
+describe("Phase 5B1 verified payment evidence boundary", () => {
+  function evidenceInput(
+    fixture: Fixture,
+    payment: Awaited<ReturnType<typeof beginPayment>>,
+    overrides: Partial<{
+      providerEventId: string;
+      providerPaymentId: string;
+      amountMinor: number;
+      currencyCode: string;
+    }> = {}
+  ) {
+    return {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      reservationId: payment.reservation.id,
+      paymentIntentId: payment.paymentIntent.id,
+      provider: "RAZORPAY",
+      providerEventId: overrides.providerEventId ?? `evt_${randomUUID()}`,
+      providerPaymentId: overrides.providerPaymentId ?? `pay_${randomUUID()}`,
+      providerOrderId: `order_${randomUUID()}`,
+      amountMinor: overrides.amountMinor ?? payment.paymentIntent.amountMinor,
+      currencyCode: overrides.currencyCode ?? payment.paymentIntent.currencyCode,
+      verificationMethod: "WEBHOOK_SIGNATURE" as const,
+      payloadSha256: "a".repeat(64)
+    };
+  }
+
+  async function recordEvidence(input: ReturnType<typeof evidenceInput>) {
+    return db
+      .transaction()
+      .execute((trx) => new VerifiedPaymentEvidenceService().record(trx, input, metadata()));
+  }
+
+  async function paymentFixture() {
+    const fixture = await createFixture();
+    await configureCommercialCore(fixture);
+    await setPromotionMode(fixture, "NO_PROMOTIONS");
+    const quoted = await createFinalQuote(fixture);
+    const quoteHold = await createQuoteHold(fixture, quoted.quote.id);
+    const held = await createHeldReservation(fixture, quoted.quote.id);
+    const payment = await beginPayment(fixture, held.reservation.id);
+    return { fixture, quoteHold, held, payment };
+  }
+
+  it("records verified evidence without prematurely confirming payment, reservation or inventory", async () => {
+    const { fixture, quoteHold, held, payment } = await paymentFixture();
+    const result = await recordEvidence(evidenceInput(fixture, payment));
+    expect(result.created).toBe(true);
+    expect(result.evidence).toMatchObject({
+      paymentIntentId: payment.paymentIntent.id,
+      reservationId: held.reservation.id,
+      provider: "RAZORPAY",
+      amountMinor: payment.paymentIntent.amountMinor,
+      currencyCode: payment.paymentIntent.currencyCode,
+      verificationMethod: "WEBHOOK_SIGNATURE"
+    });
+    const intent = await db
+      .selectFrom("payment_intents")
+      .select("status")
+      .where("id", "=", payment.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+    const reservation = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", held.reservation.id)
+      .executeTakeFirstOrThrow();
+    const hold = await db
+      .selectFrom("inventory_holds")
+      .select("status")
+      .where("id", "=", quoteHold.quoteHold.inventoryHoldId)
+      .executeTakeFirstOrThrow();
+    const allocation = await db
+      .selectFrom("inventory_allocations")
+      .select("id")
+      .where("hold_id", "=", quoteHold.quoteHold.inventoryHoldId)
+      .executeTakeFirst();
+    expect(intent.status).toBe("PENDING");
+    expect(reservation.status).toBe("PAYMENT_PENDING");
+    expect(hold.status).toBe("ACTIVE");
+    expect(allocation).toBeUndefined();
+    const event = await db
+      .selectFrom("payment_events")
+      .select("event_type")
+      .where("payment_intent_id", "=", payment.paymentIntent.id)
+      .where("event_type", "=", "VERIFIED_PAYMENT_EVIDENCE_RECORDED")
+      .executeTakeFirstOrThrow();
+    expect(event.event_type).toBe("VERIFIED_PAYMENT_EVIDENCE_RECORDED");
+  });
+
+  it("returns the same evidence on an exact retry", async () => {
+    const { fixture, payment } = await paymentFixture();
+    const input = evidenceInput(fixture, payment);
+    const first = await recordEvidence(input);
+    const second = await recordEvidence(input);
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.evidence.id).toBe(first.evidence.id);
+  });
+
+  it("rejects reuse of the same provider event with changed evidence", async () => {
+    const { fixture, payment } = await paymentFixture();
+    const input = evidenceInput(fixture, payment);
+    await recordEvidence(input);
+    await expect(
+      recordEvidence({ ...input, providerPaymentId: `pay_${randomUUID()}` })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("rejects reuse of the same provider payment identifier for a different payment intent", async () => {
+    const first = await paymentFixture();
+    const shared = `pay_${randomUUID()}`;
+    await recordEvidence(
+      evidenceInput(first.fixture, first.payment, { providerPaymentId: shared })
+    );
+    const second = await paymentFixture();
+    await expect(
+      recordEvidence(evidenceInput(second.fixture, second.payment, { providerPaymentId: shared }))
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("rejects an amount mismatch", async () => {
+    const { fixture, payment } = await paymentFixture();
+    await expect(
+      recordEvidence(
+        evidenceInput(fixture, payment, { amountMinor: payment.paymentIntent.amountMinor + 1 })
+      )
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("rejects a currency mismatch", async () => {
+    const { fixture, payment } = await paymentFixture();
+    await expect(
+      recordEvidence(evidenceInput(fixture, payment, { currencyCode: "USD" }))
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("protects verified provider evidence from mutation", async () => {
+    const { fixture, payment } = await paymentFixture();
+    const recorded = await recordEvidence(evidenceInput(fixture, payment));
+    await expect(
+      db
+        .updateTable("payment_provider_evidence")
+        .set({ amount_minor: payment.paymentIntent.amountMinor + 1 })
+        .where("id", "=", recorded.evidence.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+    await expect(
+      db.deleteFrom("payment_provider_evidence").where("id", "=", recorded.evidence.id).execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+
+  it("blocks generic inventory confirmation for a canonical reservation-linked hold", async () => {
+    const fixture = await createFixture();
+    await configureCommercialCore(fixture);
+    await setPromotionMode(fixture, "NO_PROMOTIONS");
+    const quoted = await createFinalQuote(fixture);
+    const quoteHold = await createQuoteHold(fixture, quoted.quote.id);
+    const held = await createHeldReservation(fixture, quoted.quote.id);
+    await expect(
+      db
+        .transaction()
+        .execute((trx) =>
+          new InventoryAllocationService().confirmHold(
+            trx,
+            fixture.actor,
+            fixture.organizationId,
+            fixture.propertyId,
+            quoteHold.quoteHold.inventoryHoldId,
+            held.reservation.reservationReference,
+            metadata()
+          )
+        )
+    ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 });
