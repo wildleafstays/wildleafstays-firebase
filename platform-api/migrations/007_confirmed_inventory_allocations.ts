@@ -47,6 +47,9 @@ async function replaceInventoryEventTypeConstraint(
         )
     `.execute(db);
   } else {
+    // Historical allocation events are immutable. On rollback, restore the old
+    // write constraint as NOT VALID so existing Phase 3C history remains legal
+    // while new writes are still checked against the pre-3C event set.
     await sql`
       alter table inventory_events
         add constraint inventory_events_event_type_check
@@ -63,7 +66,7 @@ async function replaceInventoryEventTypeConstraint(
             'BOOKING_CONFIRMED',
             'BOOKING_CANCELLED'
           )
-        )
+        ) not valid
     `.execute(db);
   }
 }
