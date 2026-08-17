@@ -8,6 +8,7 @@ import { checkDatabaseReadiness } from "./infrastructure/database/database.js";
 import type { Database } from "./infrastructure/database/types.js";
 import type { IdentityVerifier } from "./infrastructure/identity/identity-verifier.js";
 import { AccessRepository } from "./modules/access/infrastructure/access-repository.js";
+import { registerCommercialRuleRoutes } from "./modules/commercial/transport/commercial-rule-routes.js";
 import { UserRepository } from "./modules/identity/infrastructure/user-repository.js";
 import { registerSessionRoutes } from "./modules/identity/transport/session-routes.js";
 import { registerInventoryAllocationRoutes } from "./modules/inventory/transport/inventory-allocation-routes.js";
@@ -17,8 +18,8 @@ import { registerOrganizationRoutes } from "./modules/organizations/transport/or
 import { registerPropertyOnboardingRoutes } from "./modules/property-onboarding/transport/property-onboarding-routes.js";
 import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
 import { registerPropertySetupRoutes } from "./modules/property-setup/transport/property-setup-routes.js";
-import { registerRateRoutes } from "./modules/rates/transport/rate-routes.js";
 import { registerQuoteRoutes } from "./modules/quotes/transport/quote-routes.js";
+import { registerRateRoutes } from "./modules/rates/transport/rate-routes.js";
 import { registerErrorHandler } from "./shared/http/error-handler.js";
 
 export interface AppDependencies {
@@ -198,11 +199,20 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     userRepository,
     accessRepository
   });
+
   await registerQuoteRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,
     accessRepository
   });
+
+  await registerCommercialRuleRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
   return app;
 }

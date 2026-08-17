@@ -10,6 +10,8 @@ export const Permissions = {
   INVENTORY_MANAGE: "inventory.manage",
   RATES_READ: "rates.read",
   RATES_MANAGE: "rates.manage",
+  COMMERCIAL_READ: "commercial.read",
+  COMMERCIAL_MANAGE: "commercial.manage",
   RESERVATION_READ: "reservation.read",
   RESERVATION_MANAGE: "reservation.manage",
   OPERATIONS_READ: "operations.read",

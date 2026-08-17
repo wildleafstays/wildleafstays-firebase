@@ -43,6 +43,7 @@ const platformRolePermissions: Record<PlatformRole, ReadonlySet<Permission>> = {
     Permissions.INVENTORY_READ,
     Permissions.INVENTORY_MANAGE,
     Permissions.RATES_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ,
     Permissions.RESERVATION_MANAGE,
     Permissions.OPERATIONS_READ,
@@ -56,11 +57,14 @@ const platformRolePermissions: Record<PlatformRole, ReadonlySet<Permission>> = {
     Permissions.INVENTORY_MANAGE,
     Permissions.RATES_READ,
     Permissions.RATES_MANAGE,
+    Permissions.COMMERCIAL_READ,
+    Permissions.COMMERCIAL_MANAGE,
     Permissions.RESERVATION_READ
   ]),
   FINANCE_MANAGER: new Set([
     Permissions.ORGANIZATION_READ,
     Permissions.PROPERTY_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ,
     Permissions.FINANCE_READ,
     Permissions.SETTLEMENT_MANAGE,
@@ -74,6 +78,7 @@ const platformRolePermissions: Record<PlatformRole, ReadonlySet<Permission>> = {
   ]),
   CUSTOMER_SUPPORT: new Set([
     Permissions.PROPERTY_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ,
     Permissions.RESERVATION_MANAGE,
     Permissions.OPERATIONS_READ,
@@ -85,6 +90,7 @@ const platformRolePermissions: Record<PlatformRole, ReadonlySet<Permission>> = {
     Permissions.PROPERTY_READ,
     Permissions.INVENTORY_READ,
     Permissions.RATES_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ,
     Permissions.OPERATIONS_READ,
     Permissions.QUALITY_READ,
@@ -103,6 +109,8 @@ const organizationRolePermissions: Record<OrganizationRole, ReadonlySet<Permissi
     Permissions.INVENTORY_MANAGE,
     Permissions.RATES_READ,
     Permissions.RATES_MANAGE,
+    Permissions.COMMERCIAL_READ,
+    Permissions.COMMERCIAL_MANAGE,
     Permissions.RESERVATION_READ,
     Permissions.RESERVATION_MANAGE,
     Permissions.OPERATIONS_READ,
@@ -120,6 +128,8 @@ const organizationRolePermissions: Record<OrganizationRole, ReadonlySet<Permissi
     Permissions.INVENTORY_MANAGE,
     Permissions.RATES_READ,
     Permissions.RATES_MANAGE,
+    Permissions.COMMERCIAL_READ,
+    Permissions.COMMERCIAL_MANAGE,
     Permissions.RESERVATION_READ,
     Permissions.RESERVATION_MANAGE,
     Permissions.OPERATIONS_READ,
@@ -130,6 +140,7 @@ const organizationRolePermissions: Record<OrganizationRole, ReadonlySet<Permissi
   FINANCE: new Set([
     Permissions.ORGANIZATION_READ,
     Permissions.PROPERTY_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ,
     Permissions.FINANCE_READ
   ]),
@@ -138,6 +149,7 @@ const organizationRolePermissions: Record<OrganizationRole, ReadonlySet<Permissi
     Permissions.PROPERTY_READ,
     Permissions.INVENTORY_READ,
     Permissions.RATES_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ
   ])
 };
@@ -150,6 +162,8 @@ const propertyRolePermissions: Record<PropertyRole, ReadonlySet<Permission>> = {
     Permissions.INVENTORY_MANAGE,
     Permissions.RATES_READ,
     Permissions.RATES_MANAGE,
+    Permissions.COMMERCIAL_READ,
+    Permissions.COMMERCIAL_MANAGE,
     Permissions.RESERVATION_READ,
     Permissions.RESERVATION_MANAGE,
     Permissions.OPERATIONS_READ,
@@ -160,6 +174,7 @@ const propertyRolePermissions: Record<PropertyRole, ReadonlySet<Permission>> = {
     Permissions.PROPERTY_READ,
     Permissions.INVENTORY_READ,
     Permissions.RATES_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ,
     Permissions.RESERVATION_MANAGE,
     Permissions.OPERATIONS_READ,
@@ -171,6 +186,8 @@ const propertyRolePermissions: Record<PropertyRole, ReadonlySet<Permission>> = {
     Permissions.INVENTORY_MANAGE,
     Permissions.RATES_READ,
     Permissions.RATES_MANAGE,
+    Permissions.COMMERCIAL_READ,
+    Permissions.COMMERCIAL_MANAGE,
     Permissions.RESERVATION_READ
   ]),
   HOUSEKEEPING: new Set([
@@ -181,6 +198,7 @@ const propertyRolePermissions: Record<PropertyRole, ReadonlySet<Permission>> = {
   ]),
   FINANCE: new Set([
     Permissions.PROPERTY_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ,
     Permissions.FINANCE_READ
   ]),
@@ -188,6 +206,7 @@ const propertyRolePermissions: Record<PropertyRole, ReadonlySet<Permission>> = {
     Permissions.PROPERTY_READ,
     Permissions.INVENTORY_READ,
     Permissions.RATES_READ,
+    Permissions.COMMERCIAL_READ,
     Permissions.RESERVATION_READ
   ])
 };
