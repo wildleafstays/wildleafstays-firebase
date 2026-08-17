@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { Selectable, Transaction } from "kysely";
 import type { Database, JsonObject } from "../../../infrastructure/database/types.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
-import type { QuoteCalculation, QuoteCommercialSnapshotView, QuoteView } from "../domain/quote.js";
+import type {
+  QuoteCalculation,
+  QuoteCommercialSnapshotView,
+  QuotePromotionSnapshotView,
+  QuoteView
+} from "../domain/quote.js";
 import type {
   QuoteCancellationSnapshotsTable,
   QuoteCancellationTierSnapshotsTable,
@@ -19,6 +24,12 @@ import type {
   QuotesTable,
   QuoteUnitsTable
 } from "./quote-database-types.js";
+import type {
+  QuoteFinalFeeLinesTable,
+  QuoteFinalTaxLinesTable,
+  QuotePromotionLinesTable,
+  QuotePromotionSnapshotsTable
+} from "./quote-promotion-database-types.js";
 
 export type QuoteRecord = Selectable<QuotesTable>;
 export type QuoteUnitRecord = Selectable<QuoteUnitsTable>;
@@ -33,6 +44,17 @@ type FeeLineRecord = Selectable<QuoteFeeLinesTable>;
 type TaxLineRecord = Selectable<QuoteTaxLinesTable>;
 type CancellationSnapshotRecord = Selectable<QuoteCancellationSnapshotsTable>;
 type CancellationTierSnapshotRecord = Selectable<QuoteCancellationTierSnapshotsTable>;
+type PromotionSnapshotRecord = Selectable<QuotePromotionSnapshotsTable>;
+type PromotionLineRecord = Selectable<QuotePromotionLinesTable>;
+type FinalFeeLineRecord = Selectable<QuoteFinalFeeLinesTable>;
+type FinalTaxLineRecord = Selectable<QuoteFinalTaxLinesTable>;
+
+interface PromotionRecords {
+  snapshot: PromotionSnapshotRecord;
+  lines: PromotionLineRecord[];
+  feeLines: FinalFeeLineRecord[];
+  taxLines: FinalTaxLineRecord[];
+}
 
 interface CommercialRecords {
   snapshot: CommercialSnapshotRecord;
@@ -178,11 +200,133 @@ function commercialView(records: CommercialRecords): QuoteCommercialSnapshotView
   };
 }
 
+function promotionView(records: PromotionRecords): QuotePromotionSnapshotView {
+  const feeById = new Map(records.feeLines.map((line) => [line.id, line]));
+
+  return {
+    promotionStatus: "EVALUATED",
+    holdEligible: true,
+    bookingDate: normalizeDate(records.snapshot.booking_date),
+    requestedPromotionCode: records.snapshot.requested_promotion_code,
+    settingsVersionId: records.snapshot.promotion_settings_version_id,
+    settingsVersion: records.snapshot.settings_version_number,
+    settingsEffectiveFrom: normalizeDate(records.snapshot.settings_effective_from),
+    promotionMode: records.snapshot.promotion_mode as "NO_PROMOTIONS" | "POLICIES",
+    currencyCode: records.snapshot.currency_code,
+    grossAccommodationMinor: records.snapshot.gross_accommodation_minor,
+    grossExtraGuestMinor: records.snapshot.gross_extra_guest_minor,
+    accommodationDiscountMinor: records.snapshot.accommodation_discount_minor,
+    extraGuestDiscountMinor: records.snapshot.extra_guest_discount_minor,
+    discountMinor: records.snapshot.discount_minor,
+    discountedAccommodationMinor: records.snapshot.discounted_accommodation_minor,
+    discountedExtraGuestMinor: records.snapshot.discounted_extra_guest_minor,
+    inclusiveFeeMinor: records.snapshot.inclusive_fee_minor,
+    exclusiveFeeMinor: records.snapshot.exclusive_fee_minor,
+    feeMinor: records.snapshot.fee_minor,
+    inclusiveTaxMinor: records.snapshot.inclusive_tax_minor,
+    exclusiveTaxMinor: records.snapshot.exclusive_tax_minor,
+    taxMinor: records.snapshot.tax_minor,
+    totalMinor: records.snapshot.total_minor,
+    lines: records.lines
+      .sort((a, b) => b.priority - a.priority || a.campaign_code.localeCompare(b.campaign_code))
+      .map((line) => ({
+        campaignId: line.promotion_campaign_id,
+        campaignCode: line.campaign_code,
+        campaignName: line.campaign_name,
+        promotionKind: line.promotion_kind as "AUTOMATIC" | "PROMO_CODE",
+        publicCode: line.public_code,
+        campaignVersionId: line.promotion_campaign_version_id,
+        version: line.version_number,
+        effectiveFrom: normalizeDate(line.effective_from),
+        currencyCode: line.currency_code,
+        bookingWindowStart:
+          line.booking_window_start === null ? null : normalizeDate(line.booking_window_start),
+        bookingWindowEnd:
+          line.booking_window_end === null ? null : normalizeDate(line.booking_window_end),
+        arrivalWindowStart:
+          line.arrival_window_start === null ? null : normalizeDate(line.arrival_window_start),
+        arrivalWindowEnd:
+          line.arrival_window_end === null ? null : normalizeDate(line.arrival_window_end),
+        minimumStayNights: line.minimum_stay_nights,
+        minimumSpendMinor: line.minimum_spend_minor,
+        discountType: line.discount_type as "PERCENTAGE" | "FIXED_AMOUNT",
+        discountValue: line.discount_value,
+        maximumDiscountMinor: line.maximum_discount_minor,
+        appliesTo: line.applies_to as "ACCOMMODATION" | "ACCOMMODATION_AND_EXTRA_GUEST",
+        priority: line.priority,
+        stackingMode: line.stacking_mode as "EXCLUSIVE" | "STACKABLE",
+        stackGroup: line.stack_group,
+        assignmentId: line.promotion_assignment_id,
+        assignmentScopeType: line.assignment_scope_type as
+          "PROPERTY" | "RATE_PLAN" | "RATE_PRODUCT",
+        assignmentRatePlanId: line.assignment_rate_plan_id,
+        assignmentRateProductId: line.assignment_rate_product_id,
+        assignmentEffectiveFrom: normalizeDate(line.assignment_effective_from),
+        discountBasisMinor: line.discount_basis_minor,
+        accommodationDiscountMinor: line.accommodation_discount_minor,
+        extraGuestDiscountMinor: line.extra_guest_discount_minor,
+        discountMinor: line.discount_minor
+      })),
+    finalFeeLines: records.feeLines
+      .sort(
+        (a, b) =>
+          (a.stay_date ?? "").localeCompare(b.stay_date ?? "") ||
+          a.line_key.localeCompare(b.line_key)
+      )
+      .map((line) => ({
+        lineKey: line.line_key,
+        feePolicyId: line.fee_policy_id,
+        feePolicyVersionId: line.fee_policy_version_id,
+        feePolicyCode: line.fee_policy_code,
+        feePolicyName: line.fee_policy_name,
+        version: line.version_number,
+        effectiveFrom: normalizeDate(line.effective_from),
+        stayDate: line.stay_date === null ? null : normalizeDate(line.stay_date),
+        calculationType: line.calculation_type as "FIXED" | "PERCENTAGE",
+        applicationBasis: line.application_basis as
+          "PER_STAY" | "PER_NIGHT" | "PER_UNIT_PER_STAY" | "PER_UNIT_PER_NIGHT" | "STAY_CHARGES",
+        amountMinorSnapshot: line.amount_minor_snapshot,
+        rateBasisPointsSnapshot: line.rate_basis_points_snapshot,
+        priceMode: line.price_mode as "EXCLUSIVE" | "INCLUSIVE",
+        taxable: line.taxable,
+        taxPolicyId: line.tax_policy_id,
+        multiplier: line.multiplier,
+        feeMinor: line.fee_minor
+      })),
+    finalTaxLines: records.taxLines
+      .sort(
+        (a, b) =>
+          (a.stay_date ?? "").localeCompare(b.stay_date ?? "") ||
+          a.component_code.localeCompare(b.component_code)
+      )
+      .map((line) => ({
+        taxPolicyId: line.tax_policy_id,
+        taxPolicyVersionId: line.tax_policy_version_id,
+        taxPolicyCode: line.tax_policy_code,
+        taxPolicyName: line.tax_policy_name,
+        version: line.version_number,
+        effectiveFrom: normalizeDate(line.effective_from),
+        componentCode: line.component_code,
+        componentName: line.component_name,
+        rateBasisPoints: line.rate_basis_points,
+        priceMode: line.price_mode as "EXCLUSIVE" | "INCLUSIVE",
+        chargeType: line.charge_type as "ACCOMMODATION" | "EXTRA_GUEST" | "FEE",
+        stayDate: line.stay_date === null ? null : normalizeDate(line.stay_date),
+        feeLineKey: line.final_fee_line_id
+          ? (feeById.get(line.final_fee_line_id)?.line_key ?? null)
+          : null,
+        taxableBasisMinor: line.taxable_basis_minor,
+        taxMinor: line.tax_minor
+      }))
+  };
+}
+
 function view(
   quote: QuoteRecord,
   units: QuoteUnitRecord[],
   nights: QuoteNightRecord[],
   commercial: CommercialRecords | null,
+  promotion: PromotionRecords | null,
   now: Date
 ): QuoteView {
   const ageByUnit = new Map(
@@ -190,6 +334,8 @@ function view(
   );
   const commercialSnapshot = commercial?.snapshot ?? null;
   const commercialDetails = commercial ? commercialView(commercial) : null;
+  const promotionSnapshot = promotion?.snapshot ?? null;
+  const promotionDetails = promotion ? promotionView(promotion) : null;
 
   return {
     id: quote.id,
@@ -211,20 +357,30 @@ function view(
     currencyCode: quote.currency_code,
     accommodationMinor: quote.accommodation_minor,
     extraGuestMinor: quote.extra_guest_minor,
-    taxMinor: commercialSnapshot?.tax_minor ?? quote.tax_minor,
-    feeMinor: commercialSnapshot?.fee_minor ?? quote.fee_minor,
-    totalMinor: commercialSnapshot?.total_minor ?? quote.total_minor,
-    inclusiveTaxMinor: commercialSnapshot?.inclusive_tax_minor ?? 0,
-    exclusiveTaxMinor: commercialSnapshot?.exclusive_tax_minor ?? 0,
-    inclusiveFeeMinor: commercialSnapshot?.inclusive_fee_minor ?? 0,
-    exclusiveFeeMinor: commercialSnapshot?.exclusive_fee_minor ?? 0,
+    taxMinor: promotionSnapshot?.tax_minor ?? commercialSnapshot?.tax_minor ?? quote.tax_minor,
+    feeMinor: promotionSnapshot?.fee_minor ?? commercialSnapshot?.fee_minor ?? quote.fee_minor,
+    totalMinor:
+      promotionSnapshot?.total_minor ?? commercialSnapshot?.total_minor ?? quote.total_minor,
+    discountMinor: promotionSnapshot?.discount_minor ?? 0,
+    discountedAccommodationMinor:
+      promotionSnapshot?.discounted_accommodation_minor ?? quote.accommodation_minor,
+    discountedExtraGuestMinor:
+      promotionSnapshot?.discounted_extra_guest_minor ?? quote.extra_guest_minor,
+    inclusiveTaxMinor:
+      promotionSnapshot?.inclusive_tax_minor ?? commercialSnapshot?.inclusive_tax_minor ?? 0,
+    exclusiveTaxMinor:
+      promotionSnapshot?.exclusive_tax_minor ?? commercialSnapshot?.exclusive_tax_minor ?? 0,
+    inclusiveFeeMinor:
+      promotionSnapshot?.inclusive_fee_minor ?? commercialSnapshot?.inclusive_fee_minor ?? 0,
+    exclusiveFeeMinor:
+      promotionSnapshot?.exclusive_fee_minor ?? commercialSnapshot?.exclusive_fee_minor ?? 0,
     arrivalClosedToArrival: quote.arrival_closed_to_arrival,
     departureClosedToDeparture: quote.departure_closed_to_departure,
     minimumStaySnapshot: quote.minimum_stay_snapshot,
     maximumStaySnapshot: quote.maximum_stay_snapshot,
     commercialStatus: commercialSnapshot ? "COMMERCIAL_RULES_APPLIED" : "PRE_TAX_ONLY",
-    promotionStatus: commercialSnapshot ? "NOT_EVALUATED" : null,
-    holdEligible: false,
+    promotionStatus: promotionSnapshot ? "EVALUATED" : commercialSnapshot ? "NOT_EVALUATED" : null,
+    holdEligible: promotionSnapshot?.hold_eligible ?? false,
     expiresAt: quote.expires_at.toISOString(),
     expired: quote.expires_at.getTime() <= now.getTime(),
     createdAt: quote.created_at.toISOString(),
@@ -270,7 +426,8 @@ function view(
         closedToDeparture: night.closed_to_departure,
         stopSell: night.stop_sell
       })),
-    commercial: commercialDetails
+    commercial: commercialDetails,
+    promotion: promotionDetails
   };
 }
 
@@ -328,6 +485,26 @@ export class QuoteRepository {
       cancellation,
       cancellationTiers
     };
+  }
+
+  private async loadPromotion(
+    trx: Transaction<Database>,
+    quoteId: string
+  ): Promise<PromotionRecords | null> {
+    const snapshot = await trx
+      .selectFrom("quote_promotion_snapshots")
+      .selectAll()
+      .where("quote_id", "=", quoteId)
+      .executeTakeFirst();
+    if (!snapshot) return null;
+
+    const [lines, feeLines, taxLines] = await Promise.all([
+      trx.selectFrom("quote_promotion_lines").selectAll().where("quote_id", "=", quoteId).execute(),
+      trx.selectFrom("quote_final_fee_lines").selectAll().where("quote_id", "=", quoteId).execute(),
+      trx.selectFrom("quote_final_tax_lines").selectAll().where("quote_id", "=", quoteId).execute()
+    ]);
+
+    return { snapshot, lines, feeLines, taxLines };
   }
 
   async create(
@@ -622,7 +799,156 @@ export class QuoteRepository {
       }
     }
 
-    return view(quote, units, nights, await this.loadCommercial(trx, id), new Date());
+    if (calculation.promotion) {
+      const promotion = calculation.promotion;
+      const promotionSnapshotId = randomUUID();
+      await trx
+        .insertInto("quote_promotion_snapshots")
+        .values({
+          id: promotionSnapshotId,
+          quote_id: id,
+          organization_id: input.organizationId,
+          property_id: input.propertyId,
+          promotion_settings_version_id: promotion.settingsVersionId,
+          settings_version_number: promotion.settingsVersion,
+          settings_effective_from: promotion.settingsEffectiveFrom,
+          promotion_mode: promotion.promotionMode,
+          booking_date: promotion.bookingDate,
+          requested_promotion_code: promotion.requestedPromotionCode,
+          promotion_status: promotion.promotionStatus,
+          currency_code: promotion.currencyCode,
+          gross_accommodation_minor: promotion.grossAccommodationMinor,
+          gross_extra_guest_minor: promotion.grossExtraGuestMinor,
+          accommodation_discount_minor: promotion.accommodationDiscountMinor,
+          extra_guest_discount_minor: promotion.extraGuestDiscountMinor,
+          discount_minor: promotion.discountMinor,
+          discounted_accommodation_minor: promotion.discountedAccommodationMinor,
+          discounted_extra_guest_minor: promotion.discountedExtraGuestMinor,
+          inclusive_fee_minor: promotion.inclusiveFeeMinor,
+          exclusive_fee_minor: promotion.exclusiveFeeMinor,
+          fee_minor: promotion.feeMinor,
+          inclusive_tax_minor: promotion.inclusiveTaxMinor,
+          exclusive_tax_minor: promotion.exclusiveTaxMinor,
+          tax_minor: promotion.taxMinor,
+          total_minor: promotion.totalMinor,
+          hold_eligible: true
+        })
+        .execute();
+
+      for (const line of promotion.lines) {
+        await trx
+          .insertInto("quote_promotion_lines")
+          .values({
+            id: randomUUID(),
+            quote_promotion_snapshot_id: promotionSnapshotId,
+            quote_id: id,
+            organization_id: input.organizationId,
+            property_id: input.propertyId,
+            promotion_campaign_id: line.campaignId,
+            promotion_campaign_version_id: line.campaignVersionId,
+            promotion_assignment_id: line.assignmentId,
+            campaign_code: line.campaignCode,
+            campaign_name: line.campaignName,
+            promotion_kind: line.promotionKind,
+            public_code: line.publicCode,
+            version_number: line.version,
+            effective_from: line.effectiveFrom,
+            currency_code: line.currencyCode,
+            booking_window_start: line.bookingWindowStart,
+            booking_window_end: line.bookingWindowEnd,
+            arrival_window_start: line.arrivalWindowStart,
+            arrival_window_end: line.arrivalWindowEnd,
+            minimum_stay_nights: line.minimumStayNights,
+            minimum_spend_minor: line.minimumSpendMinor,
+            discount_type: line.discountType,
+            discount_value: line.discountValue,
+            maximum_discount_minor: line.maximumDiscountMinor,
+            applies_to: line.appliesTo,
+            priority: line.priority,
+            stacking_mode: line.stackingMode,
+            stack_group: line.stackGroup,
+            assignment_scope_type: line.assignmentScopeType,
+            assignment_rate_plan_id: line.assignmentRatePlanId,
+            assignment_rate_product_id: line.assignmentRateProductId,
+            assignment_effective_from: line.assignmentEffectiveFrom,
+            discount_basis_minor: line.discountBasisMinor,
+            accommodation_discount_minor: line.accommodationDiscountMinor,
+            extra_guest_discount_minor: line.extraGuestDiscountMinor,
+            discount_minor: line.discountMinor
+          })
+          .execute();
+      }
+
+      const finalFeeIds = new Map<string, string>();
+      for (const fee of promotion.finalFeeLines) {
+        const feeId = randomUUID();
+        finalFeeIds.set(fee.lineKey, feeId);
+        await trx
+          .insertInto("quote_final_fee_lines")
+          .values({
+            id: feeId,
+            quote_promotion_snapshot_id: promotionSnapshotId,
+            quote_id: id,
+            organization_id: input.organizationId,
+            property_id: input.propertyId,
+            line_key: fee.lineKey,
+            fee_policy_id: fee.feePolicyId,
+            fee_policy_version_id: fee.feePolicyVersionId,
+            fee_policy_code: fee.feePolicyCode,
+            fee_policy_name: fee.feePolicyName,
+            version_number: fee.version,
+            effective_from: fee.effectiveFrom,
+            stay_date: fee.stayDate,
+            calculation_type: fee.calculationType,
+            application_basis: fee.applicationBasis,
+            amount_minor_snapshot: fee.amountMinorSnapshot,
+            rate_basis_points_snapshot: fee.rateBasisPointsSnapshot,
+            price_mode: fee.priceMode,
+            taxable: fee.taxable,
+            tax_policy_id: fee.taxPolicyId,
+            multiplier: fee.multiplier,
+            fee_minor: fee.feeMinor
+          })
+          .execute();
+      }
+
+      for (const tax of promotion.finalTaxLines) {
+        await trx
+          .insertInto("quote_final_tax_lines")
+          .values({
+            id: randomUUID(),
+            quote_promotion_snapshot_id: promotionSnapshotId,
+            quote_id: id,
+            organization_id: input.organizationId,
+            property_id: input.propertyId,
+            tax_policy_id: tax.taxPolicyId,
+            tax_policy_version_id: tax.taxPolicyVersionId,
+            tax_policy_code: tax.taxPolicyCode,
+            tax_policy_name: tax.taxPolicyName,
+            version_number: tax.version,
+            effective_from: tax.effectiveFrom,
+            component_code: tax.componentCode,
+            component_name: tax.componentName,
+            rate_basis_points: tax.rateBasisPoints,
+            price_mode: tax.priceMode,
+            charge_type: tax.chargeType,
+            stay_date: tax.stayDate,
+            final_fee_line_id: tax.feeLineKey ? (finalFeeIds.get(tax.feeLineKey) ?? null) : null,
+            taxable_basis_minor: tax.taxableBasisMinor,
+            tax_minor: tax.taxMinor
+          })
+          .execute();
+      }
+    }
+
+    return view(
+      quote,
+      units,
+      nights,
+      await this.loadCommercial(trx, id),
+      await this.loadPromotion(trx, id),
+      new Date()
+    );
   }
 
   async find(
@@ -641,13 +967,14 @@ export class QuoteRepository {
 
     if (!quote) return undefined;
 
-    const [units, nights, commercial] = await Promise.all([
+    const [units, nights, commercial, promotion] = await Promise.all([
       trx.selectFrom("quote_units").selectAll().where("quote_id", "=", quoteId).execute(),
       trx.selectFrom("quote_nights").selectAll().where("quote_id", "=", quoteId).execute(),
-      this.loadCommercial(trx, quoteId)
+      this.loadCommercial(trx, quoteId),
+      this.loadPromotion(trx, quoteId)
     ]);
 
-    return view(quote, units, nights, commercial, new Date());
+    return view(quote, units, nights, commercial, promotion, new Date());
   }
 
   async recordEvent(

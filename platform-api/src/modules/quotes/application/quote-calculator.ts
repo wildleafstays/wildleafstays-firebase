@@ -365,6 +365,7 @@ export function calculateQuote(
     holdEligible: false,
     units,
     nights: quoteNights,
-    commercial: null
+    commercial: null,
+    promotion: null
   };
 }

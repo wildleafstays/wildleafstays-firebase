@@ -17,6 +17,7 @@ export interface CreateQuoteInput {
   arrivalDate: string;
   departureDate: string;
   ttlSeconds: number;
+  promotionCode?: string | null;
   units: QuoteUnitRequest[];
 }
 
@@ -137,6 +138,71 @@ export interface QuoteCommercialCalculation extends JsonObject {
   cancellationPolicy: ResolvedCancellationPolicy;
 }
 
+export interface QuotePromotionLineCalculation extends JsonObject {
+  campaignId: string;
+  campaignCode: string;
+  campaignName: string;
+  promotionKind: "AUTOMATIC" | "PROMO_CODE";
+  publicCode: string | null;
+  campaignVersionId: string;
+  version: number;
+  effectiveFrom: string;
+  currencyCode: string;
+  bookingWindowStart: string | null;
+  bookingWindowEnd: string | null;
+  arrivalWindowStart: string | null;
+  arrivalWindowEnd: string | null;
+  minimumStayNights: number;
+  minimumSpendMinor: number | null;
+  discountType: "PERCENTAGE" | "FIXED_AMOUNT";
+  discountValue: number;
+  maximumDiscountMinor: number | null;
+  appliesTo: "ACCOMMODATION" | "ACCOMMODATION_AND_EXTRA_GUEST";
+  priority: number;
+  stackingMode: "EXCLUSIVE" | "STACKABLE";
+  stackGroup: string | null;
+  assignmentId: string;
+  assignmentScopeType: "PROPERTY" | "RATE_PLAN" | "RATE_PRODUCT";
+  assignmentRatePlanId: string | null;
+  assignmentRateProductId: string | null;
+  assignmentEffectiveFrom: string;
+  discountBasisMinor: number;
+  accommodationDiscountMinor: number;
+  extraGuestDiscountMinor: number;
+  discountMinor: number;
+}
+
+export interface QuotePromotionCalculation extends JsonObject {
+  promotionStatus: "EVALUATED";
+  holdEligible: true;
+  bookingDate: string;
+  requestedPromotionCode: string | null;
+  settingsVersionId: string;
+  settingsVersion: number;
+  settingsEffectiveFrom: string;
+  promotionMode: "NO_PROMOTIONS" | "POLICIES";
+  currencyCode: string;
+  grossAccommodationMinor: number;
+  grossExtraGuestMinor: number;
+  accommodationDiscountMinor: number;
+  extraGuestDiscountMinor: number;
+  discountMinor: number;
+  discountedAccommodationMinor: number;
+  discountedExtraGuestMinor: number;
+  inclusiveFeeMinor: number;
+  exclusiveFeeMinor: number;
+  feeMinor: number;
+  inclusiveTaxMinor: number;
+  exclusiveTaxMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+  lines: QuotePromotionLineCalculation[];
+  finalFeeLines: QuoteFeeLineCalculation[];
+  finalTaxLines: QuoteTaxLineCalculation[];
+}
+
+export type QuotePromotionSnapshotView = QuotePromotionCalculation;
+
 export interface QuoteCalculation extends JsonObject {
   ratePlanId: string;
   ratePlanCode: string;
@@ -163,6 +229,7 @@ export interface QuoteCalculation extends JsonObject {
   units: QuoteUnitSnapshot[];
   nights: QuoteNightSnapshot[];
   commercial: QuoteCommercialCalculation | null;
+  promotion: QuotePromotionCalculation | null;
 }
 
 export interface QuoteCommercialSnapshotView extends JsonObject {
@@ -202,6 +269,9 @@ export interface QuoteView extends JsonObject {
   taxMinor: number;
   feeMinor: number;
   totalMinor: number;
+  discountMinor: number;
+  discountedAccommodationMinor: number;
+  discountedExtraGuestMinor: number;
   inclusiveTaxMinor: number;
   exclusiveTaxMinor: number;
   inclusiveFeeMinor: number;
@@ -211,14 +281,15 @@ export interface QuoteView extends JsonObject {
   minimumStaySnapshot: number;
   maximumStaySnapshot: number | null;
   commercialStatus: "PRE_TAX_ONLY" | "COMMERCIAL_RULES_APPLIED";
-  promotionStatus: "NOT_EVALUATED" | null;
-  holdEligible: false;
+  promotionStatus: "NOT_EVALUATED" | "EVALUATED" | null;
+  holdEligible: boolean;
   expiresAt: string;
   expired: boolean;
   createdAt: string;
   units: QuoteUnitSnapshot[];
   nights: QuoteNightSnapshot[];
   commercial: QuoteCommercialSnapshotView | null;
+  promotion: QuotePromotionSnapshotView | null;
 }
 
 export interface CommercialQuoteResolutionInput {

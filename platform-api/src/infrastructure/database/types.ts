@@ -36,6 +36,12 @@ import type {
   QuoteTaxLinesTable,
   QuoteUnitAgeBreakdownsTable
 } from "../../modules/quotes/infrastructure/quote-commercial-database-types.js";
+import type {
+  QuoteFinalFeeLinesTable,
+  QuoteFinalTaxLinesTable,
+  QuotePromotionLinesTable,
+  QuotePromotionSnapshotsTable
+} from "../../modules/quotes/infrastructure/quote-promotion-database-types.js";
 
 import type {
   CancellationPoliciesTable,
@@ -419,6 +425,10 @@ export interface Database {
   quote_tax_lines: QuoteTaxLinesTable;
   quote_cancellation_snapshots: QuoteCancellationSnapshotsTable;
   quote_cancellation_tier_snapshots: QuoteCancellationTierSnapshotsTable;
+  quote_promotion_snapshots: QuotePromotionSnapshotsTable;
+  quote_promotion_lines: QuotePromotionLinesTable;
+  quote_final_fee_lines: QuoteFinalFeeLinesTable;
+  quote_final_tax_lines: QuoteFinalTaxLinesTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;

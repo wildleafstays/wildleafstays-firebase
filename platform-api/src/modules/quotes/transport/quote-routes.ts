@@ -32,6 +32,7 @@ interface CreateQuoteBody extends JsonObject {
   arrivalDate: string;
   departureDate: string;
   ttlSeconds?: number;
+  promotionCode?: string | null;
   units: QuoteUnitRequest[];
 }
 
@@ -93,7 +94,7 @@ export async function registerQuoteRoutes(
         tags: ["Quotes"],
         summary: "Create an immutable quote snapshot",
         description:
-          "Creates an immutable availability and price snapshot. When commercial rules are configured, tax, fee, guest-age and cancellation snapshots are applied; promotions remain deliberately unevaluated, so Phase 4B2 quotes are not yet hold-eligible.",
+          "Creates an immutable availability and price snapshot. Commercial tax, fee, guest-age and cancellation rules are snapshotted first; when promotion settings are explicitly configured, automatic or requested promotions are evaluated into a separate immutable final-pricing extension and the quote becomes hold-eligible.",
         security: [{ bearerAuth: [] }],
         params: propertyParamsSchema,
         headers: idempotencyHeaders,
@@ -106,6 +107,17 @@ export async function registerQuoteRoutes(
             arrivalDate: { type: "string", format: "date" },
             departureDate: { type: "string", format: "date" },
             ttlSeconds: { type: "integer", minimum: 60, maximum: 1800, default: 900 },
+            promotionCode: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 3,
+                  maxLength: 40,
+                  pattern: "^[A-Za-z0-9_-]+$"
+                },
+                { type: "null" }
+              ]
+            },
             units: {
               type: "array",
               minItems: 1,
@@ -138,6 +150,7 @@ export async function registerQuoteRoutes(
         arrivalDate: request.body.arrivalDate,
         departureDate: request.body.departureDate,
         ttlSeconds: request.body.ttlSeconds ?? 900,
+        promotionCode: request.body.promotionCode ?? null,
         units: request.body.units
       };
 
