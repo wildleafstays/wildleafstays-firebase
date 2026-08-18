@@ -9,6 +9,8 @@ import { InventoryHoldService } from "../src/modules/inventory/application/inven
 import { QuoteHoldService } from "../src/modules/quotes/application/quote-hold-service.js";
 import { HeldReservationService } from "../src/modules/reservations/application/held-reservation-service.js";
 import { StayLifecycleService } from "../src/modules/reservations/application/stay-lifecycle-service.js";
+import { RevenueRecognitionScheduleService } from "../src/modules/finance/application/revenue-recognition-schedule-service.js";
+import { buildRevenueRecognitionBasis } from "../src/modules/finance/domain/revenue-recognition.js";
 import { VerifiedPaymentEvidenceService } from "../src/modules/payments/application/verified-payment-evidence-service.js";
 import {
   RazorpayOrderService,
@@ -4290,5 +4292,338 @@ describe("Phase 5E2A canonical stay lifecycle", () => {
     expect(history).toHaveLength(1);
     expect(audits).toHaveLength(1);
     expect(outbox).toHaveLength(1);
+  });
+});
+describe("Phase 5E2B1 immutable revenue recognition schedule foundation", () => {
+  it("derives final net revenue from discounted stay, inclusive fees and embedded tax", () => {
+    const built = buildRevenueRecognitionBasis({
+      currencyCode: "INR",
+      acceptedTotalMinor: 10_900,
+      grossAccommodationMinor: 10_000,
+      grossExtraGuestMinor: 1_000,
+      accommodationDiscountMinor: 1_000,
+      extraGuestDiscountMinor: 100,
+      inclusiveFeeMinor: 900,
+      exclusiveFeeMinor: 500,
+      inclusiveTaxMinor: 900,
+      exclusiveTaxMinor: 500,
+      taxMinor: 1_400,
+      quoteNights: [
+        {
+          id: "night-1",
+          stayDate: "2034-02-10",
+          accommodationMinor: 6_000,
+          extraGuestMinor: 1_000
+        },
+        {
+          id: "night-2",
+          stayDate: "2034-02-11",
+          accommodationMinor: 4_000,
+          extraGuestMinor: 0
+        }
+      ],
+      feeLines: [
+        {
+          id: "fee-inclusive",
+          lineKey: "fee-inclusive",
+          stayDate: null,
+          priceMode: "INCLUSIVE",
+          feeMinor: 900
+        },
+        {
+          id: "fee-exclusive",
+          lineKey: "fee-exclusive",
+          stayDate: "2034-02-11",
+          priceMode: "EXCLUSIVE",
+          feeMinor: 500
+        }
+      ],
+      taxLines: [
+        {
+          id: "tax-a1-inclusive",
+          priceMode: "INCLUSIVE",
+          chargeType: "ACCOMMODATION",
+          stayDate: "2034-02-10",
+          finalFeeLineId: null,
+          taxMinor: 400
+        },
+        {
+          id: "tax-e1-inclusive",
+          priceMode: "INCLUSIVE",
+          chargeType: "EXTRA_GUEST",
+          stayDate: "2034-02-10",
+          finalFeeLineId: null,
+          taxMinor: 50
+        },
+        {
+          id: "tax-a2-inclusive",
+          priceMode: "INCLUSIVE",
+          chargeType: "ACCOMMODATION",
+          stayDate: "2034-02-11",
+          finalFeeLineId: null,
+          taxMinor: 250
+        },
+        {
+          id: "tax-fee-inclusive",
+          priceMode: "INCLUSIVE",
+          chargeType: "FEE",
+          stayDate: null,
+          finalFeeLineId: "fee-inclusive",
+          taxMinor: 100
+        },
+        {
+          id: "tax-fee-exclusive-embedded",
+          priceMode: "INCLUSIVE",
+          chargeType: "FEE",
+          stayDate: "2034-02-11",
+          finalFeeLineId: "fee-exclusive",
+          taxMinor: 100
+        },
+        {
+          id: "tax-a1-exclusive",
+          priceMode: "EXCLUSIVE",
+          chargeType: "ACCOMMODATION",
+          stayDate: "2034-02-10",
+          finalFeeLineId: null,
+          taxMinor: 300
+        },
+        {
+          id: "tax-a2-exclusive",
+          priceMode: "EXCLUSIVE",
+          chargeType: "ACCOMMODATION",
+          stayDate: "2034-02-11",
+          finalFeeLineId: null,
+          taxMinor: 200
+        }
+      ]
+    });
+
+    expect(built).toMatchObject({
+      allocationVersion: "REVENUE_BASIS_V1",
+      acceptedTotalMinor: 10_900,
+      considerationMinor: 10_400,
+      inclusiveTaxMinor: 900,
+      exclusiveTaxMinor: 500,
+      taxMinor: 1_400,
+      revenueBasisMinor: 9_500
+    });
+    expect(built.lines).toHaveLength(6);
+
+    expect(
+      built.lines.find(
+        (line) => line.lineType === "ACCOMMODATION" && line.stayDate === "2034-02-10"
+      )
+    ).toMatchObject({
+      considerationMinor: 4_909,
+      inclusiveTaxMinor: 400,
+      revenueMinor: 4_509
+    });
+    expect(
+      built.lines.find((line) => line.lineType === "EXTRA_GUEST" && line.stayDate === "2034-02-10")
+    ).toMatchObject({
+      considerationMinor: 818,
+      inclusiveTaxMinor: 50,
+      revenueMinor: 768
+    });
+    expect(
+      built.lines.find(
+        (line) => line.lineType === "ACCOMMODATION" && line.stayDate === "2034-02-11"
+      )
+    ).toMatchObject({
+      considerationMinor: 3_273,
+      inclusiveTaxMinor: 250,
+      revenueMinor: 3_023
+    });
+    expect(built.lines.find((line) => line.sourceFinalFeeLineId === "fee-inclusive")).toMatchObject(
+      {
+        serviceScope: "STAY",
+        considerationMinor: 900,
+        inclusiveTaxMinor: 100,
+        revenueMinor: 800
+      }
+    );
+    expect(built.lines.find((line) => line.sourceFinalFeeLineId === "fee-exclusive")).toMatchObject(
+      {
+        serviceScope: "NIGHT",
+        considerationMinor: 500,
+        inclusiveTaxMinor: 100,
+        revenueMinor: 400
+      }
+    );
+  });
+
+  async function scheduleFixture() {
+    const fixture = await createFixture();
+    await configureCommercialCore(fixture);
+    await setPromotionMode(fixture, "NO_PROMOTIONS");
+    const quoted = await createFinalQuote(fixture);
+    await createQuoteHold(fixture, quoted.quote.id);
+    const held = await createHeldReservation(fixture, quoted.quote.id);
+    return { fixture, quoted, held };
+  }
+
+  it("persists an immutable accepted revenue basis without recognizing revenue or moving money", async () => {
+    const { fixture, held } = await scheduleFixture();
+
+    const ledgerBefore = await db
+      .selectFrom("financial_ledger_journals")
+      .select("id")
+      .where("reservation_id", "=", held.reservation.id)
+      .execute();
+
+    const result = await db.transaction().execute((trx) =>
+      new RevenueRecognitionScheduleService().ensureForReservation(
+        trx,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id
+        },
+        metadata()
+      )
+    );
+
+    expect(result.created).toBe(true);
+    expect(result.schedule).toMatchObject({
+      reservationId: held.reservation.id,
+      quoteId: held.reservation.quoteId,
+      allocationVersion: "REVENUE_BASIS_V1",
+      currencyCode: "INR",
+      acceptedTotalMinor: held.reservation.totalMinor,
+      considerationMinor: held.reservation.totalMinor,
+      inclusiveTaxMinor: 0,
+      exclusiveTaxMinor: 0,
+      taxMinor: 0,
+      revenueBasisMinor: held.reservation.totalMinor,
+      lineCount: 4
+    });
+    expect(result.schedule.lines.map((line) => line.lineType)).toEqual([
+      "ACCOMMODATION",
+      "EXTRA_GUEST",
+      "ACCOMMODATION",
+      "EXTRA_GUEST"
+    ]);
+
+    const storedReservation = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", held.reservation.id)
+      .executeTakeFirstOrThrow();
+    expect(storedReservation.status).toBe("HELD");
+
+    const ledgerAfter = await db
+      .selectFrom("financial_ledger_journals")
+      .select("id")
+      .where("reservation_id", "=", held.reservation.id)
+      .execute();
+    expect(ledgerAfter).toEqual(ledgerBefore);
+  });
+
+  it("returns the same immutable schedule on an exact retry", async () => {
+    const { fixture, held } = await scheduleFixture();
+    const service = new RevenueRecognitionScheduleService();
+
+    const first = await db.transaction().execute((trx) =>
+      service.ensureForReservation(
+        trx,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id
+        },
+        metadata()
+      )
+    );
+    const second = await db.transaction().execute((trx) =>
+      service.ensureForReservation(
+        trx,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id
+        },
+        metadata()
+      )
+    );
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.schedule.id).toBe(first.schedule.id);
+    expect(second.schedule.lines.map((line) => line.id)).toEqual(
+      first.schedule.lines.map((line) => line.id)
+    );
+
+    const schedules = await db
+      .selectFrom("reservation_revenue_schedules")
+      .select("id")
+      .where("reservation_id", "=", held.reservation.id)
+      .execute();
+    expect(schedules).toHaveLength(1);
+  });
+
+  it("protects the persisted revenue schedule and lines from mutation", async () => {
+    const { fixture, held } = await scheduleFixture();
+
+    const result = await db.transaction().execute((trx) =>
+      new RevenueRecognitionScheduleService().ensureForReservation(
+        trx,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id
+        },
+        metadata()
+      )
+    );
+
+    await expect(
+      db
+        .updateTable("reservation_revenue_schedules")
+        .set({ revenue_basis_minor: result.schedule.revenueBasisMinor + 1 })
+        .where("id", "=", result.schedule.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    const firstLine = result.schedule.lines[0]!;
+    await expect(
+      db.deleteFrom("reservation_revenue_schedule_lines").where("id", "=", firstLine.id).execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+
+  it("rejects a schedule header that does not match the accepted financial snapshot", async () => {
+    const { fixture, held } = await scheduleFixture();
+    const financial = await db
+      .selectFrom("reservation_financial_snapshots")
+      .selectAll()
+      .where("reservation_id", "=", held.reservation.id)
+      .executeTakeFirstOrThrow();
+
+    await expect(
+      db.transaction().execute(async (trx) => {
+        await trx
+          .insertInto("reservation_revenue_schedules")
+          .values({
+            id: randomUUID(),
+            organization_id: fixture.organizationId,
+            property_id: fixture.propertyId,
+            reservation_id: held.reservation.id,
+            reservation_financial_snapshot_id: financial.id,
+            quote_id: held.reservation.quoteId,
+            allocation_version: "REVENUE_BASIS_V1",
+            currency_code: financial.currency_code,
+            accepted_total_minor: financial.total_minor + 1,
+            consideration_minor: financial.total_minor + 1,
+            inclusive_tax_minor: 0,
+            exclusive_tax_minor: 0,
+            tax_minor: 0,
+            revenue_basis_minor: financial.total_minor + 1,
+            line_count: 0,
+            source: "integration-test",
+            request_id: randomUUID(),
+            correlation_id: randomUUID()
+          })
+          .execute();
+      })
+    ).rejects.toThrow(/accepted financial snapshot/i);
   });
 });

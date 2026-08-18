@@ -4,6 +4,10 @@ import type {
   FinancialLedgerJournalsTable
 } from "../../modules/finance/infrastructure/financial-ledger-database-types.js";
 import type {
+  RevenueRecognitionScheduleLinesTable,
+  RevenueRecognitionSchedulesTable
+} from "../../modules/finance/infrastructure/revenue-recognition-database-types.js";
+import type {
   InventoryBlocksTable,
   InventoryDailyBucketsTable,
   InventoryEventsTable
@@ -473,6 +477,8 @@ export interface Database {
   payment_refund_submissions: PaymentRefundSubmissionsTable;
   financial_ledger_journals: FinancialLedgerJournalsTable;
   financial_ledger_entries: FinancialLedgerEntriesTable;
+  reservation_revenue_schedules: RevenueRecognitionSchedulesTable;
+  reservation_revenue_schedule_lines: RevenueRecognitionScheduleLinesTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;
