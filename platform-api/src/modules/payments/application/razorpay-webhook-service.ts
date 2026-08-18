@@ -10,6 +10,10 @@ import {
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import type { ProcessVerifiedPaymentResult } from "../domain/payment-processing.js";
 import { PaymentProviderOrderRepository } from "../infrastructure/payment-provider-order-repository.js";
+import {
+  RazorpayRefundWebhookService,
+  type RazorpayRefundWebhookResult
+} from "./razorpay-refund-webhook-service.js";
 import { VerifiedPaymentEvidenceService } from "./verified-payment-evidence-service.js";
 import { VerifiedPaymentProcessor } from "./verified-payment-processor.js";
 
@@ -32,6 +36,7 @@ export interface RazorpayWebhookHandleResult extends JsonObject {
   paymentEvidenceId: string | null;
   evidenceCreated: boolean;
   processing: ProcessVerifiedPaymentResult | null;
+  refund: RazorpayRefundWebhookResult | null;
 }
 
 interface CapturedPayment {
@@ -116,10 +121,21 @@ function parseCapturedPayment(root: Record<string, unknown>): CapturedPayment {
   };
 }
 
+function isRefundLifecycleEvent(
+  eventType: string
+): eventType is "refund.created" | "refund.processed" | "refund.failed" {
+  return (
+    eventType === "refund.created" ||
+    eventType === "refund.processed" ||
+    eventType === "refund.failed"
+  );
+}
+
 export class RazorpayWebhookService {
   private readonly evidence: VerifiedPaymentEvidenceService;
   private readonly processor: VerifiedPaymentProcessor;
   private readonly providerOrders: PaymentProviderOrderRepository;
+  private readonly refunds: RazorpayRefundWebhookService;
 
   constructor(
     private readonly db: Kysely<Database>,
@@ -128,11 +144,13 @@ export class RazorpayWebhookService {
       evidence?: VerifiedPaymentEvidenceService;
       processor?: VerifiedPaymentProcessor;
       providerOrders?: PaymentProviderOrderRepository;
+      refunds?: RazorpayRefundWebhookService;
     } = {}
   ) {
     this.evidence = dependencies.evidence ?? new VerifiedPaymentEvidenceService();
     this.processor = dependencies.processor ?? new VerifiedPaymentProcessor();
     this.providerOrders = dependencies.providerOrders ?? new PaymentProviderOrderRepository();
+    this.refunds = dependencies.refunds ?? new RazorpayRefundWebhookService(db);
   }
 
   async handle(
@@ -153,6 +171,30 @@ export class RazorpayWebhookService {
     const payloadSha256 = createHash("sha256").update(rawInput.rawBody).digest("hex");
     const envelope = parseWebhookEnvelope(rawInput.rawBody);
 
+    if (isRefundLifecycleEvent(envelope.eventType)) {
+      const refund = await this.refunds.handle(
+        {
+          eventType: envelope.eventType,
+          root: envelope.root,
+          providerEventId,
+          payloadSha256
+        },
+        request
+      );
+
+      return {
+        received: true,
+        handled: true,
+        eventType: envelope.eventType,
+        providerEventId,
+        paymentIntentId: refund.paymentIntentId,
+        paymentEvidenceId: refund.paymentEvidenceId,
+        evidenceCreated: false,
+        processing: null,
+        refund
+      };
+    }
+
     if (envelope.eventType !== "payment.captured") {
       return {
         received: true,
@@ -162,7 +204,8 @@ export class RazorpayWebhookService {
         paymentIntentId: null,
         paymentEvidenceId: null,
         evidenceCreated: false,
-        processing: null
+        processing: null,
+        refund: null
       };
     }
 
@@ -240,7 +283,8 @@ export class RazorpayWebhookService {
         paymentIntentId: providerOrder.payment_intent_id,
         paymentEvidenceId: evidence.evidence.id,
         evidenceCreated: evidence.created,
-        processing
+        processing,
+        refund: null
       };
     });
   }

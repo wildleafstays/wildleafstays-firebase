@@ -30,7 +30,8 @@ class CapturingHandler implements RazorpayWebhookHandler {
       paymentIntentId: null,
       paymentEvidenceId: null,
       evidenceCreated: false,
-      processing: null
+      processing: null,
+      refund: null
     };
   }
 }

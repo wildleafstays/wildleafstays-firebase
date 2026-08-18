@@ -2241,7 +2241,8 @@ describe("Phase 5C2 Razorpay refund submission", () => {
         refundRequestId: ready.refundRequest.id,
         paymentIntentId: ready.refundRequest.payment_intent_id,
         reconciliationCaseId: ready.refundRequest.reconciliation_case_id,
-        reasonCode: ready.refundRequest.reason_code
+        reasonCode: ready.refundRequest.reason_code,
+        refundAttemptSequence: "1"
       }
     });
 
@@ -2370,6 +2371,459 @@ describe("Phase 5C2 Razorpay refund submission", () => {
 
     await expect(
       db.deleteFrom("payment_refund_submissions").where("id", "=", result.submission.id).execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+});
+async function phase5c3ReadySubmission() {
+  const ready = await phase5c2ReadyRefundRequest();
+  const gateway = new FakeRazorpayRefundGateway();
+  gateway.status = "pending";
+  const submitted = await phase5c2Submit(ready, gateway);
+  return { ...ready, gateway, submitted };
+}
+
+function phase5c3RefundRawBody(
+  ready: Awaited<ReturnType<typeof phase5c2ReadyRefundRequest>>,
+  options: {
+    eventType: "refund.created" | "refund.processed" | "refund.failed";
+    providerRefundId: string;
+    attemptSequence?: number;
+    amountMinor?: number;
+    currencyCode?: string;
+    providerPaymentId?: string;
+    status?: "pending" | "processed" | "failed";
+    eventCreatedAt?: number;
+  }
+): Buffer {
+  const status =
+    options.status ??
+    (options.eventType === "refund.processed"
+      ? "processed"
+      : options.eventType === "refund.failed"
+        ? "failed"
+        : "pending");
+  const providerPaymentId = options.providerPaymentId ?? ready.refundRequest.provider_payment_id;
+  const currencyCode = options.currencyCode ?? ready.refundRequest.currency_code;
+
+  return Buffer.from(
+    JSON.stringify({
+      entity: "event",
+      account_id: "acc_phase5c3",
+      event: options.eventType,
+      contains: ["refund", "payment"],
+      payload: {
+        refund: {
+          entity: {
+            id: options.providerRefundId,
+            entity: "refund",
+            amount: options.amountMinor ?? ready.refundRequest.amount_minor,
+            currency: currencyCode,
+            payment_id: providerPaymentId,
+            notes: {
+              refundRequestId: ready.refundRequest.id,
+              paymentIntentId: ready.refundRequest.payment_intent_id,
+              reconciliationCaseId: ready.refundRequest.reconciliation_case_id,
+              reasonCode: ready.refundRequest.reason_code,
+              refundAttemptSequence: String(options.attemptSequence ?? 1)
+            },
+            receipt: null,
+            acquirer_data: { arn: null },
+            created_at: 2_024_000_000,
+            batch_id: null,
+            status,
+            speed_processed: "normal",
+            speed_requested: "normal"
+          }
+        },
+        payment: {
+          entity: {
+            id: providerPaymentId,
+            entity: "payment",
+            amount: ready.refundRequest.amount_minor,
+            currency: currencyCode,
+            status: "captured",
+            captured: true
+          }
+        }
+      },
+      created_at: options.eventCreatedAt ?? 2_024_000_100
+    }),
+    "utf8"
+  );
+}
+
+function phase5c3Handle(rawBody: Buffer, providerEventId: string) {
+  return new RazorpayWebhookService(db, phase5b3cProvider()).handle(
+    {
+      rawBody,
+      signature: phase5b3cSignature(rawBody),
+      providerEventId
+    },
+    metadata()
+  );
+}
+
+describe("Phase 5C3 Razorpay refund webhook finalization", () => {
+  it("records a signed refund.created event without prematurely resolving reconciliation", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const rawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.created",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+
+    const result = await phase5c3Handle(
+      rawBody,
+      `evt_refund_created_${randomUUID().replaceAll("-", "")}`
+    );
+
+    expect(result.handled).toBe(true);
+    expect(result.refund).toMatchObject({
+      refundSubmissionId: ready.submitted.submission.id,
+      providerRefundId: ready.submitted.submission.providerRefundId,
+      lifecycleEventCreated: true,
+      submissionRecovered: false,
+      finalizationId: null,
+      finalizationStatus: null,
+      reconciliationResolved: false
+    });
+
+    const [eventRows, finalizationRows, reconciliation] = await Promise.all([
+      db
+        .selectFrom("payment_refund_provider_events")
+        .select("id")
+        .where("refund_submission_id", "=", ready.submitted.submission.id)
+        .execute(),
+      db
+        .selectFrom("payment_refund_finalizations")
+        .select("id")
+        .where("refund_submission_id", "=", ready.submitted.submission.id)
+        .execute(),
+      db
+        .selectFrom("payment_reconciliation_cases")
+        .select("status")
+        .where("id", "=", ready.refundRequest.reconciliation_case_id)
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(eventRows).toHaveLength(1);
+    expect(finalizationRows).toHaveLength(0);
+    expect(reconciliation.status).toBe("OPEN");
+  });
+
+  it("finalizes refund.processed and resolves the refund-required reconciliation atomically", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const providerEventId = `evt_refund_processed_${randomUUID().replaceAll("-", "")}`;
+    const rawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+
+    const result = await phase5c3Handle(rawBody, providerEventId);
+
+    expect(result.refund).toMatchObject({
+      refundSubmissionId: ready.submitted.submission.id,
+      lifecycleEventCreated: true,
+      finalizationCreated: true,
+      finalizationStatus: "PROCESSED",
+      reconciliationResolved: true
+    });
+
+    const [reconciliation, finalization, event, audit, outbox] = await Promise.all([
+      db
+        .selectFrom("payment_reconciliation_cases")
+        .select(["status", "resolved_at", "resolution_note"])
+        .where("id", "=", ready.refundRequest.reconciliation_case_id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("payment_refund_finalizations")
+        .selectAll()
+        .where("refund_submission_id", "=", ready.submitted.submission.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("payment_events")
+        .select("event_type")
+        .where("payment_intent_id", "=", ready.refundRequest.payment_intent_id)
+        .where("event_type", "=", "REFUND_PROCESSED")
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("audit_events")
+        .select(["action", "actor_type"])
+        .where("entity_type", "=", "payment_refund_finalization")
+        .where("entity_id", "=", result.refund?.finalizationId as string)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("outbox_events")
+        .select("event_type")
+        .where("aggregate_id", "=", ready.refundRequest.payment_intent_id)
+        .where("event_type", "=", "payment.refund.processed.v1")
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(reconciliation.status).toBe("RESOLVED");
+    expect(reconciliation.resolved_at).not.toBeNull();
+    expect(reconciliation.resolution_note).toContain(ready.submitted.submission.providerRefundId);
+    expect(finalization.status).toBe("PROCESSED");
+    expect(finalization.provider_event_id).toBe(providerEventId);
+    expect(event.event_type).toBe("REFUND_PROCESSED");
+    expect(audit).toEqual({ action: "payment.refund.processed", actor_type: "SYSTEM" });
+    expect(outbox.event_type).toBe("payment.refund.processed.v1");
+  });
+
+  it("is idempotent when Razorpay retries the exact same refund terminal event", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const providerEventId = `evt_refund_retry_${randomUUID().replaceAll("-", "")}`;
+    const rawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+
+    const first = await phase5c3Handle(rawBody, providerEventId);
+    const second = await phase5c3Handle(rawBody, providerEventId);
+
+    expect(first.refund?.lifecycleEventCreated).toBe(true);
+    expect(first.refund?.finalizationCreated).toBe(true);
+    expect(second.refund?.lifecycleEventCreated).toBe(false);
+    expect(second.refund?.finalizationCreated).toBe(false);
+    expect(second.refund?.finalizationId).toBe(first.refund?.finalizationId);
+
+    const [providerEvents, finalizations, paymentEvents] = await Promise.all([
+      db
+        .selectFrom("payment_refund_provider_events")
+        .select("id")
+        .where("provider_event_id", "=", providerEventId)
+        .execute(),
+      db
+        .selectFrom("payment_refund_finalizations")
+        .select("id")
+        .where("refund_submission_id", "=", ready.submitted.submission.id)
+        .execute(),
+      db
+        .selectFrom("payment_events")
+        .select("id")
+        .where("payment_intent_id", "=", ready.refundRequest.payment_intent_id)
+        .where("event_type", "=", "REFUND_PROCESSED")
+        .execute()
+    ]);
+
+    expect(providerEvents).toHaveLength(1);
+    expect(finalizations).toHaveLength(1);
+    expect(paymentEvents).toHaveLength(1);
+  });
+
+  it("keeps reconciliation open on refund.failed and allows a new deterministic submission attempt", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const failedRawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.failed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+
+    const failed = await phase5c3Handle(
+      failedRawBody,
+      `evt_refund_failed_${randomUUID().replaceAll("-", "")}`
+    );
+    expect(failed.refund).toMatchObject({
+      finalizationCreated: true,
+      finalizationStatus: "FAILED",
+      reconciliationResolved: false
+    });
+
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select("status")
+      .where("id", "=", ready.refundRequest.reconciliation_case_id)
+      .executeTakeFirstOrThrow();
+    expect(reconciliation.status).toBe("OPEN");
+
+    const retryGateway = new FakeRazorpayRefundGateway();
+    const retry = await phase5c2Submit(ready, retryGateway);
+
+    expect(retry.created).toBe(true);
+    expect(retry.submission.attemptSequence).toBe(2);
+    expect(retryGateway.calls).toHaveLength(1);
+    expect(retryGateway.calls[0]?.idempotencyKey).toBe(
+      `wl_refund_${ready.refundRequest.id.replaceAll("-", "")}_2`
+    );
+    expect(retryGateway.calls[0]?.notes?.["refundAttemptSequence"]).toBe("2");
+
+    const submissions = await db
+      .selectFrom("payment_refund_submissions")
+      .select("attempt_sequence")
+      .where("refund_request_id", "=", ready.refundRequest.id)
+      .orderBy("attempt_sequence")
+      .execute();
+    expect(submissions.map((row) => row.attempt_sequence)).toEqual([1, 2]);
+  });
+
+  it("handles refund.processed before refund.created without reopening or duplicating final state", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const providerRefundId = ready.submitted.submission.providerRefundId;
+
+    const processedRawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId,
+      eventCreatedAt: 2_024_000_200
+    });
+    await phase5c3Handle(
+      processedRawBody,
+      `evt_refund_processed_first_${randomUUID().replaceAll("-", "")}`
+    );
+
+    const createdRawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.created",
+      providerRefundId,
+      eventCreatedAt: 2_024_000_100
+    });
+    const created = await phase5c3Handle(
+      createdRawBody,
+      `evt_refund_created_late_${randomUUID().replaceAll("-", "")}`
+    );
+
+    expect(created.refund).toMatchObject({
+      lifecycleEventCreated: true,
+      finalizationCreated: false,
+      finalizationStatus: "PROCESSED",
+      reconciliationResolved: false
+    });
+
+    const [events, finalizations, reconciliation] = await Promise.all([
+      db
+        .selectFrom("payment_refund_provider_events")
+        .select("event_type")
+        .where("refund_submission_id", "=", ready.submitted.submission.id)
+        .execute(),
+      db
+        .selectFrom("payment_refund_finalizations")
+        .select("status")
+        .where("refund_submission_id", "=", ready.submitted.submission.id)
+        .execute(),
+      db
+        .selectFrom("payment_reconciliation_cases")
+        .select("status")
+        .where("id", "=", ready.refundRequest.reconciliation_case_id)
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(events).toHaveLength(2);
+    expect(finalizations).toEqual([{ status: "PROCESSED" }]);
+    expect(reconciliation.status).toBe("RESOLVED");
+  });
+
+  it("rejects signed refund lifecycle evidence that changes immutable refund economics", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const rawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId: ready.submitted.submission.providerRefundId,
+      amountMinor: ready.refundRequest.amount_minor + 1
+    });
+
+    await expect(
+      phase5c3Handle(rawBody, `evt_refund_bad_amount_${randomUUID().replaceAll("-", "")}`)
+    ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+
+    const rows = await db
+      .selectFrom("payment_refund_provider_events")
+      .select("id")
+      .where("refund_submission_id", "=", ready.submitted.submission.id)
+      .execute();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("recovers an accepted Razorpay refund from signed webhook notes when local submission persistence was lost", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const providerRefundId = `rfnd_recovered_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
+    const rawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId,
+      attemptSequence: 1
+    });
+
+    const result = await phase5c3Handle(
+      rawBody,
+      `evt_refund_recovery_${randomUUID().replaceAll("-", "")}`
+    );
+
+    expect(result.refund).toMatchObject({
+      providerRefundId,
+      submissionRecovered: true,
+      finalizationCreated: true,
+      finalizationStatus: "PROCESSED",
+      reconciliationResolved: true
+    });
+
+    const submission = await db
+      .selectFrom("payment_refund_submissions")
+      .selectAll()
+      .where("refund_request_id", "=", ready.refundRequest.id)
+      .where("attempt_sequence", "=", 1)
+      .executeTakeFirstOrThrow();
+
+    expect(submission.provider_refund_id).toBe(providerRefundId);
+    expect(submission.idempotency_key).toBe(
+      `wl_refund_${ready.refundRequest.id.replaceAll("-", "")}_1`
+    );
+
+    const submittedEvents = await db
+      .selectFrom("payment_events")
+      .select("details_json")
+      .where("payment_intent_id", "=", ready.refundRequest.payment_intent_id)
+      .where("event_type", "=", "REFUND_SUBMITTED")
+      .execute();
+    expect(submittedEvents).toHaveLength(1);
+    expect(submittedEvents[0]?.details_json).toMatchObject({ recoveredFromWebhook: true });
+  });
+
+  it("rejects reuse of a Razorpay event id with changed refund payload", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const providerEventId = `evt_refund_conflict_${randomUUID().replaceAll("-", "")}`;
+    const firstBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.created",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+    await phase5c3Handle(firstBody, providerEventId);
+
+    const changedBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.created",
+      providerRefundId: ready.submitted.submission.providerRefundId,
+      eventCreatedAt: 2_024_000_101
+    });
+
+    await expect(phase5c3Handle(changedBody, providerEventId)).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    const rows = await db
+      .selectFrom("payment_refund_provider_events")
+      .select("id")
+      .where("provider_event_id", "=", providerEventId)
+      .execute();
+    expect(rows).toHaveLength(1);
+  });
+
+  it("protects refund lifecycle evidence and finalization from mutation", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const rawBody = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+    const result = await phase5c3Handle(
+      rawBody,
+      `evt_refund_immutable_${randomUUID().replaceAll("-", "")}`
+    );
+
+    await expect(
+      db
+        .updateTable("payment_refund_provider_events")
+        .set({ provider_status: "FAILED" })
+        .where("id", "=", result.refund?.lifecycleEventId as string)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db
+        .deleteFrom("payment_refund_finalizations")
+        .where("id", "=", result.refund?.finalizationId as string)
+        .execute()
     ).rejects.toThrow(/immutable/i);
   });
 });

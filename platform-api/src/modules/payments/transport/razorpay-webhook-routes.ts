@@ -59,9 +59,9 @@ export async function registerRazorpayWebhookRoutes(
         bodyLimit: 256 * 1024,
         schema: {
           tags: ["Payments"],
-          summary: "Receive verified Razorpay payment webhooks",
+          summary: "Receive verified Razorpay payment and refund webhooks",
           description:
-            "Receives Razorpay webhooks using the untouched raw request bytes for signature verification. Only payment.captured is converted into canonical verified payment evidence; other valid signed events are acknowledged without changing booking state.",
+            "Receives Razorpay webhooks using the untouched raw request bytes for signature verification. payment.captured is converted into canonical verified payment evidence. refund.created, refund.processed and refund.failed are matched against immutable refund submissions and recorded as canonical refund lifecycle evidence; other valid signed events are acknowledged without changing canonical state.",
           headers: webhookHeadersSchema
         }
       },

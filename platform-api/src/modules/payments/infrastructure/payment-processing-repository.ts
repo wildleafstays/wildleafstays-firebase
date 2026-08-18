@@ -112,6 +112,47 @@ export class PaymentProcessingRepository {
       .executeTakeFirst();
   }
 
+  async findReconciliationByIdForUpdate(
+    trx: Transaction<Database>,
+    reconciliationCaseId: string
+  ): Promise<PaymentReconciliationRecord | undefined> {
+    return trx
+      .selectFrom("payment_reconciliation_cases")
+      .selectAll()
+      .where("id", "=", reconciliationCaseId)
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
+  async resolveRefundRequiredReconciliation(
+    trx: Transaction<Database>,
+    input: {
+      reconciliationCaseId: string;
+      organizationId: string;
+      propertyId: string;
+      reservationId: string;
+      resolvedAt: Date;
+      resolutionNote: string;
+    }
+  ): Promise<PaymentReconciliationRecord | undefined> {
+    return trx
+      .updateTable("payment_reconciliation_cases")
+      .set({
+        status: "RESOLVED",
+        resolved_at: input.resolvedAt,
+        resolved_by_user_id: null,
+        resolution_note: input.resolutionNote
+      })
+      .where("id", "=", input.reconciliationCaseId)
+      .where("organization_id", "=", input.organizationId)
+      .where("property_id", "=", input.propertyId)
+      .where("reservation_id", "=", input.reservationId)
+      .where("required_action", "=", "REFUND_REQUIRED")
+      .where("status", "=", "OPEN")
+      .returningAll()
+      .executeTakeFirst();
+  }
+
   async createReconciliation(
     trx: Transaction<Database>,
     input: {

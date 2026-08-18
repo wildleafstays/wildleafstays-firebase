@@ -43,6 +43,18 @@ export class PaymentRefundRequestRepository {
       .executeTakeFirst();
   }
 
+  async findByIdForUpdate(
+    trx: Transaction<Database>,
+    refundRequestId: string
+  ): Promise<PaymentRefundRequestRecord | undefined> {
+    return trx
+      .selectFrom("payment_refund_requests")
+      .selectAll()
+      .where("id", "=", refundRequestId)
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
   async findByReconciliationCase(
     trx: Transaction<Database>,
     organizationId: string,

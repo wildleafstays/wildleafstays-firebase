@@ -17,6 +17,7 @@ import {
   PaymentProcessingRepository,
   type PaymentReconciliationRecord
 } from "../infrastructure/payment-processing-repository.js";
+import { PaymentRefundLifecycleRepository } from "../infrastructure/payment-refund-lifecycle-repository.js";
 import {
   PaymentRefundRequestRepository,
   type PaymentRefundRequestRecord
@@ -38,9 +39,10 @@ interface SubmitInput {
   refundRequestId: string;
 }
 
-const FIRST_ATTEMPT_SEQUENCE = 1;
-
-function idempotencyForRefundRequest(refundRequestId: string, attemptSequence: number): string {
+export function razorpayRefundIdempotencyKey(
+  refundRequestId: string,
+  attemptSequence: number
+): string {
   const compact = refundRequestId.replaceAll("-", "");
   const key = `wl_refund_${compact}_${attemptSequence}`;
   if (!/^wl_refund_[A-Fa-f0-9]{32}_[1-9][0-9]*$/.test(key) || key.length > 200) {
@@ -70,6 +72,7 @@ export class RazorpayRefundSubmissionService {
     private readonly refunds = new PaymentRefundRequestRepository(),
     private readonly submissions = new PaymentRefundSubmissionRepository(),
     private readonly processing = new PaymentProcessingRepository(),
+    private readonly lifecycle = new PaymentRefundLifecycleRepository(),
     private readonly payments = new PaymentRepository()
   ) {}
 
@@ -217,30 +220,57 @@ export class RazorpayRefundSubmissionService {
       if (!refund) throw new NotFoundError("Refund request not found");
       this.assertRequest(refund);
 
-      const reconciliation = await this.processing.findReconciliationByEvidence(
-        trx,
-        refund.payment_evidence_id
-      );
-      this.assertOpenReconciliation(reconciliation, refund);
-
-      const attemptSequence = FIRST_ATTEMPT_SEQUENCE;
-      const idempotencyKey = idempotencyForRefundRequest(refund.id, attemptSequence);
-      const existing = await this.submissions.findByRefundRequestAttempt(
+      const latest = await this.submissions.findLatestByRefundRequestForUpdate(
         trx,
         input.organizationId,
         input.propertyId,
         input.reservationId,
-        refund.id,
-        attemptSequence
+        refund.id
       );
-      if (existing) {
-        this.assertStoredSubmission(existing, refund, attemptSequence, idempotencyKey);
+
+      if (latest) {
+        const expectedIdempotency = razorpayRefundIdempotencyKey(
+          refund.id,
+          latest.attempt_sequence
+        );
+        this.assertStoredSubmission(latest, refund, latest.attempt_sequence, expectedIdempotency);
+
+        const finalization = await this.lifecycle.findFinalizationBySubmission(trx, latest.id);
+        if (!finalization || finalization.status !== "FAILED") {
+          return {
+            refund,
+            attemptSequence: latest.attempt_sequence,
+            idempotencyKey: expectedIdempotency,
+            existing: latest,
+            submitToProvider: false
+          };
+        }
       }
 
-      return { refund, attemptSequence, idempotencyKey, existing };
+      const reconciliation = await this.processing.findReconciliationByIdForUpdate(
+        trx,
+        refund.reconciliation_case_id
+      );
+      this.assertOpenReconciliation(reconciliation, refund);
+
+      const attemptSequence = latest ? latest.attempt_sequence + 1 : 1;
+      if (!Number.isSafeInteger(attemptSequence) || attemptSequence <= 0) {
+        throw new ConflictError("Refund attempt sequence is no longer safe to increment", {
+          refundRequestId: refund.id
+        });
+      }
+      const idempotencyKey = razorpayRefundIdempotencyKey(refund.id, attemptSequence);
+
+      return {
+        refund,
+        attemptSequence,
+        idempotencyKey,
+        existing: null,
+        submitToProvider: true
+      };
     });
 
-    if (initial.existing) {
+    if (!initial.submitToProvider && initial.existing) {
       return {
         created: false,
         submission: this.submissions.view(initial.existing)
@@ -257,7 +287,8 @@ export class RazorpayRefundSubmissionService {
           refundRequestId: initial.refund.id,
           paymentIntentId: initial.refund.payment_intent_id,
           reconciliationCaseId: initial.refund.reconciliation_case_id,
-          reasonCode: initial.refund.reason_code
+          reasonCode: initial.refund.reason_code,
+          refundAttemptSequence: String(initial.attemptSequence)
         }
       });
     } catch (error) {
@@ -279,7 +310,7 @@ export class RazorpayRefundSubmissionService {
       if (!refund) throw new NotFoundError("Refund request not found");
       this.assertRequest(refund);
 
-      const idempotencyKey = idempotencyForRefundRequest(refund.id, initial.attemptSequence);
+      const idempotencyKey = razorpayRefundIdempotencyKey(refund.id, initial.attemptSequence);
       if (idempotencyKey !== initial.idempotencyKey) {
         throw new ConflictError("Refund idempotency identity changed during provider submission", {
           refundRequestId: refund.id
@@ -368,7 +399,8 @@ export class RazorpayRefundSubmissionService {
             providerRefundId: stored.provider_refund_id,
             amountMinor: refund.amount_minor,
             currencyCode: refund.currency_code,
-            initialProviderStatus: stored.initial_provider_status
+            initialProviderStatus: stored.initial_provider_status,
+            recoveredFromWebhook: false
           },
           actorUserId: null,
           request

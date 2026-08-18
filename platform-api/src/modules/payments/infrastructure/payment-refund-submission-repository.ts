@@ -53,6 +53,39 @@ export class PaymentRefundSubmissionRepository {
       .executeTakeFirst();
   }
 
+  async findLatestByRefundRequestForUpdate(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reservationId: string,
+    refundRequestId: string
+  ): Promise<PaymentRefundSubmissionRecord | undefined> {
+    return trx
+      .selectFrom("payment_refund_submissions")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("reservation_id", "=", reservationId)
+      .where("refund_request_id", "=", refundRequestId)
+      .orderBy("attempt_sequence", "desc")
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
+  async findByProviderRefundForUpdate(
+    trx: Transaction<Database>,
+    provider: string,
+    providerRefundId: string
+  ): Promise<PaymentRefundSubmissionRecord | undefined> {
+    return trx
+      .selectFrom("payment_refund_submissions")
+      .selectAll()
+      .where("provider", "=", provider)
+      .where("provider_refund_id", "=", providerRefundId)
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
   async create(
     trx: Transaction<Database>,
     input: {
