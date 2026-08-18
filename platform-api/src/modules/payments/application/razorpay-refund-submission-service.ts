@@ -1,5 +1,6 @@
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
+import type { ActorContext } from "../../access/domain/actor-context.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
 import { AppError, ConflictError, NotFoundError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
@@ -208,7 +209,11 @@ export class RazorpayRefundSubmissionService {
     throw error;
   }
 
-  async submit(input: SubmitInput, request: RequestMetadata): Promise<SubmitRazorpayRefundResult> {
+  async submit(
+    input: SubmitInput,
+    request: RequestMetadata,
+    actor: ActorContext | null = null
+  ): Promise<SubmitRazorpayRefundResult> {
     const initial = await this.db.transaction().execute(async (trx) => {
       const refund = await this.refunds.findById(
         trx,
@@ -402,15 +407,14 @@ export class RazorpayRefundSubmissionService {
             initialProviderStatus: stored.initial_provider_status,
             recoveredFromWebhook: false
           },
-          actorUserId: null,
+          actorUserId: actor?.userId ?? null,
           request
         });
 
         const submissionView = this.submissions.view(stored);
 
         await new AuditService(trx).record({
-          actor: null,
-          actorType: "SYSTEM",
+          actor,
           organizationId: refund.organization_id,
           propertyId: refund.property_id,
           action: "payment.refund.submitted",

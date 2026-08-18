@@ -10,6 +10,7 @@ import type { AccessRepository } from "../../access/infrastructure/access-reposi
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import { RazorpayOrderService } from "../application/razorpay-order-service.js";
 import { PaymentFinanceReadService } from "../application/payment-finance-read-service.js";
+import { PaymentRefundCommandService } from "../application/payment-refund-command-service.js";
 import { RazorpayWebhookService } from "../application/razorpay-webhook-service.js";
 import { registerRazorpayWebhookRoutes } from "./razorpay-webhook-routes.js";
 import type { RazorpayProvider } from "../infrastructure/razorpay-provider.js";
@@ -149,6 +150,9 @@ export async function registerPaymentRoutes(
   const idempotency = new IdempotencyService(deps.db);
   const service = new BeginPaymentService();
   const financeRead = new PaymentFinanceReadService();
+  const refundCommand = deps.razorpayProvider
+    ? new PaymentRefundCommandService(deps.db, deps.razorpayProvider)
+    : null;
   const razorpayOrders = deps.razorpayProvider
     ? new RazorpayOrderService(deps.db, deps.razorpayProvider)
     : null;
@@ -312,6 +316,39 @@ export async function registerPaymentRoutes(
       );
     }
   );
+  if (refundCommand) {
+    app.post<{ Params: ReconciliationParams }>(
+      "/v1/partner/organizations/:organizationId/properties/:propertyId/payment-reconciliations/:reconciliationCaseId/refund-submission",
+      {
+        preHandler: authenticate,
+        schema: {
+          tags: ["Payments"],
+          summary: "Submit or resume the canonical refund for a reconciliation case",
+          description:
+            "Requires settlement.manage. The server resolves the immutable refund request from the reconciliation case and never accepts amount, currency, provider payment identity, provider refund identity or provider idempotency identity from the client. Repeated commands reuse the existing non-failed attempt; a new provider attempt is permitted only after a verified failed refund lifecycle.",
+          security: [{ bearerAuth: [] }],
+          params: reconciliationParamsSchema
+        }
+      },
+      async (request, reply) => {
+        const actor = request.actor;
+        if (!actor) throw new AuthenticationError();
+
+        const result = await refundCommand.submit(
+          actor,
+          {
+            organizationId: request.params.organizationId,
+            propertyId: request.params.propertyId,
+            reconciliationCaseId: request.params.reconciliationCaseId
+          },
+          requestMetadata(request, "partner-api")
+        );
+
+        return reply.status(result.created ? 201 : 200).send(result);
+      }
+    );
+  }
+
   if (razorpayOrders) {
     app.put<{ Params: PaymentIntentParams }>(
       "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations/:reservationId/payment-intents/:paymentIntentId/razorpay-order",

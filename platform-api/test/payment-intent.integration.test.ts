@@ -19,6 +19,7 @@ import {
 } from "../src/modules/payments/application/razorpay-refund-submission-service.js";
 import { RazorpayWebhookService } from "../src/modules/payments/application/razorpay-webhook-service.js";
 import { PaymentFinanceReadService } from "../src/modules/payments/application/payment-finance-read-service.js";
+import { PaymentRefundCommandService } from "../src/modules/payments/application/payment-refund-command-service.js";
 import { VerifiedPaymentProcessor } from "../src/modules/payments/application/verified-payment-processor.js";
 import {
   RazorpayProvider,
@@ -3048,5 +3049,189 @@ describe("Phase 5D1 finance and reconciliation read layer", () => {
         })
       )
     ).rejects.toMatchObject({ code: "ACCESS_DENIED", statusCode: 403 });
+  });
+});
+function phase5d2SettlementActor(
+  ready: Awaited<ReturnType<typeof phase5c2ReadyRefundRequest>>
+): ActorContext {
+  return {
+    ...ready.fixture.actor,
+    platformRoles: ["FINANCE_MANAGER"]
+  };
+}
+
+function phase5d2Submit(
+  ready: Awaited<ReturnType<typeof phase5c2ReadyRefundRequest>>,
+  gateway: RazorpayRefundGateway,
+  actor: ActorContext = phase5d2SettlementActor(ready)
+) {
+  return new PaymentRefundCommandService(db, gateway).submit(
+    actor,
+    {
+      organizationId: ready.fixture.organizationId,
+      propertyId: ready.fixture.propertyId,
+      reconciliationCaseId: ready.refundRequest.reconciliation_case_id
+    },
+    metadata()
+  );
+}
+
+describe("Phase 5D2 authorized refund submission command", () => {
+  it("submits only the canonical refund and attributes the money-moving command to the settlement actor", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const gateway = new FakeRazorpayRefundGateway();
+    const actor = phase5d2SettlementActor(ready);
+
+    const result = await phase5d2Submit(ready, gateway, actor);
+
+    expect(result.created).toBe(true);
+    expect(result.reconciliationCaseId).toBe(ready.refundRequest.reconciliation_case_id);
+    expect(result.refundRequestId).toBe(ready.refundRequest.id);
+    expect(result.submission).toMatchObject({
+      refundRequestId: ready.refundRequest.id,
+      attemptSequence: 1,
+      paymentIntentId: ready.refundRequest.payment_intent_id,
+      paymentEvidenceId: ready.refundRequest.payment_evidence_id,
+      reconciliationCaseId: ready.refundRequest.reconciliation_case_id,
+      provider: "RAZORPAY",
+      providerPaymentId: ready.refundRequest.provider_payment_id,
+      providerRefundId: gateway.refundId,
+      amountMinor: ready.refundRequest.amount_minor,
+      currencyCode: ready.refundRequest.currency_code
+    });
+    expect(result.submission).not.toHaveProperty("idempotencyKey");
+
+    expect(gateway.calls).toHaveLength(1);
+    expect(gateway.calls[0]).toEqual({
+      providerPaymentId: ready.refundRequest.provider_payment_id,
+      amountMinor: ready.refundRequest.amount_minor,
+      idempotencyKey: `wl_refund_${ready.refundRequest.id.replaceAll("-", "")}_1`,
+      notes: {
+        refundRequestId: ready.refundRequest.id,
+        paymentIntentId: ready.refundRequest.payment_intent_id,
+        reconciliationCaseId: ready.refundRequest.reconciliation_case_id,
+        reasonCode: ready.refundRequest.reason_code,
+        refundAttemptSequence: "1"
+      }
+    });
+
+    const [event, audit] = await Promise.all([
+      db
+        .selectFrom("payment_events")
+        .select(["event_type", "actor_user_id"])
+        .where("payment_intent_id", "=", ready.refundRequest.payment_intent_id)
+        .where("event_type", "=", "REFUND_SUBMITTED")
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("audit_events")
+        .select(["action", "actor_type", "actor_user_id"])
+        .where("entity_type", "=", "payment_refund_submission")
+        .where("entity_id", "=", result.submission.id)
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(event).toEqual({
+      event_type: "REFUND_SUBMITTED",
+      actor_user_id: actor.userId
+    });
+    expect(audit).toEqual({
+      action: "payment.refund.submitted",
+      actor_type: "USER",
+      actor_user_id: actor.userId
+    });
+  });
+
+  it("reuses the existing refund attempt on a repeated settlement command without calling Razorpay again", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const gateway = new FakeRazorpayRefundGateway();
+    const actor = phase5d2SettlementActor(ready);
+
+    const first = await phase5d2Submit(ready, gateway, actor);
+    const second = await phase5d2Submit(ready, gateway, actor);
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.submission.id).toBe(first.submission.id);
+    expect(second.submission).not.toHaveProperty("idempotencyKey");
+    expect(gateway.calls).toHaveLength(1);
+  });
+
+  it("denies an organization OWNER who has finance visibility but lacks SETTLEMENT_MANAGE", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const gateway = new FakeRazorpayRefundGateway();
+
+    await expect(phase5d2Submit(ready, gateway, ready.fixture.actor)).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
+    expect(gateway.calls).toHaveLength(0);
+    const submissions = await db
+      .selectFrom("payment_refund_submissions")
+      .select("id")
+      .where("refund_request_id", "=", ready.refundRequest.id)
+      .execute();
+    expect(submissions).toHaveLength(0);
+  });
+
+  it("refuses to turn a MANUAL_REVIEW reconciliation into a provider refund", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    await db
+      .updateTable("reservations")
+      .set({ status: "CANCELLED" })
+      .where("id", "=", ready.held.reservation.id)
+      .execute();
+
+    const processed = await phase5c1Process(ready);
+    expect(processed.outcome).toBe("RECONCILIATION_REQUIRED");
+    expect(processed.reconciliationCaseId).toBeTruthy();
+
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select(["required_action", "status"])
+      .where("id", "=", processed.reconciliationCaseId as string)
+      .executeTakeFirstOrThrow();
+    expect(reconciliation).toEqual({ required_action: "MANUAL_REVIEW", status: "OPEN" });
+
+    const actor: ActorContext = {
+      ...ready.fixture.actor,
+      platformRoles: ["FINANCE_MANAGER"]
+    };
+    const gateway = new FakeRazorpayRefundGateway();
+
+    await expect(
+      new PaymentRefundCommandService(db, gateway).submit(
+        actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reconciliationCaseId: processed.reconciliationCaseId as string
+        },
+        metadata()
+      )
+    ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+
+    expect(gateway.calls).toHaveLength(0);
+  });
+
+  it("allows the authorized command to create attempt two only after verified refund failure", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const failedRaw = phase5c3RefundRawBody(ready, {
+      eventType: "refund.failed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+    await phase5c3Handle(failedRaw, `evt_refund_5d2_failed_${randomUUID().replaceAll("-", "")}`);
+
+    const gateway = new FakeRazorpayRefundGateway();
+    gateway.status = "pending";
+    const actor = phase5d2SettlementActor(ready);
+
+    const retry = await phase5d2Submit(ready, gateway, actor);
+
+    expect(retry.created).toBe(true);
+    expect(retry.submission.attemptSequence).toBe(2);
+    expect(retry.submission).not.toHaveProperty("idempotencyKey");
+    expect(gateway.calls).toHaveLength(1);
+    expect(gateway.calls[0]?.notes?.["refundAttemptSequence"]).toBe("2");
   });
 });
