@@ -23,4 +23,18 @@ describe("loadConfig", () => {
       })
     ).toThrow(/DATABASE_URL/);
   });
+  it("parses optional Razorpay configuration", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      DATABASE_URL: "postgres://user:password@localhost:5432/wildleaf",
+      FIREBASE_PROJECT_ID: "wildleaf-test",
+      RAZORPAY_KEY_ID: "rzp_test_key",
+      RAZORPAY_KEY_SECRET: "test_key_secret",
+      RAZORPAY_WEBHOOK_SECRET: "test_webhook_secret"
+    });
+
+    expect(config.RAZORPAY_KEY_ID).toBe("rzp_test_key");
+    expect(config.RAZORPAY_KEY_SECRET).toBe("test_key_secret");
+    expect(config.RAZORPAY_WEBHOOK_SECRET).toBe("test_webhook_secret");
+  });
 });

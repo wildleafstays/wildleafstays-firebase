@@ -7,7 +7,10 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   DATABASE_URL: z.string().min(1),
   DB_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(100).default(10),
-  FIREBASE_PROJECT_ID: z.string().min(1)
+  FIREBASE_PROJECT_ID: z.string().min(1),
+  RAZORPAY_KEY_ID: z.string().min(1).optional(),
+  RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional()
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
