@@ -55,6 +55,7 @@ import type {
 } from "../../modules/payments/infrastructure/payment-database-types.js";
 import type { PaymentProviderEvidenceTable } from "../../modules/payments/infrastructure/payment-evidence-database-types.js";
 import type { PaymentProviderOrdersTable } from "../../modules/payments/infrastructure/payment-provider-order-database-types.js";
+import type { PaymentRefundRequestsTable } from "../../modules/payments/infrastructure/payment-refund-database-types.js";
 import type {
   PaymentReconciliationCasesTable,
   PaymentSuccessesTable
@@ -457,6 +458,7 @@ export interface Database {
   payment_provider_orders: PaymentProviderOrdersTable;
   payment_successes: PaymentSuccessesTable;
   payment_reconciliation_cases: PaymentReconciliationCasesTable;
+  payment_refund_requests: PaymentRefundRequestsTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;

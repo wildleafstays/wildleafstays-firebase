@@ -1921,3 +1921,233 @@ describe("Phase 5B3C Razorpay webhook verification and canonical processing", ()
     });
   });
 });
+async function phase5c1ReadyEvidence() {
+  const ready = await phase5b3bReadyPayment();
+  const evidence = await db.transaction().execute((trx) =>
+    new VerifiedPaymentEvidenceService().record(
+      trx,
+      {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reservationId: ready.held.reservation.id,
+        paymentIntentId: ready.payment.paymentIntent.id,
+        provider: "RAZORPAY",
+        providerEventId: `evt_${randomUUID()}`,
+        providerPaymentId: `pay_${randomUUID()}`,
+        providerOrderId: `order_${randomUUID()}`,
+        amountMinor: ready.payment.paymentIntent.amountMinor,
+        currencyCode: ready.payment.paymentIntent.currencyCode,
+        verificationMethod: "WEBHOOK_SIGNATURE",
+        payloadSha256: "e".repeat(64)
+      },
+      metadata()
+    )
+  );
+  return { ...ready, evidence };
+}
+
+async function phase5c1Process(
+  ready: Awaited<ReturnType<typeof phase5c1ReadyEvidence>>,
+  evidenceId = ready.evidence.evidence.id,
+  processor = new VerifiedPaymentProcessor()
+) {
+  return db.transaction().execute((trx) =>
+    processor.process(
+      trx,
+      {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reservationId: ready.held.reservation.id,
+        paymentIntentId: ready.payment.paymentIntent.id,
+        paymentEvidenceId: evidenceId
+      },
+      metadata()
+    )
+  );
+}
+
+describe("Phase 5C1 canonical refund request foundation", () => {
+  it("automatically creates one immutable refund request when reconciliation requires a refund", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    const afterExpiry = new Date(new Date(ready.payment.paymentIntent.expiresAt).getTime() + 1_000);
+
+    const result = await phase5c1Process(
+      ready,
+      ready.evidence.evidence.id,
+      new VerifiedPaymentProcessor(() => afterExpiry)
+    );
+
+    expect(result.outcome).toBe("RECONCILIATION_REQUIRED");
+    expect(result.reconciliationCaseId).toBeTruthy();
+
+    const refund = await db
+      .selectFrom("payment_refund_requests")
+      .selectAll()
+      .where("reconciliation_case_id", "=", result.reconciliationCaseId as string)
+      .executeTakeFirstOrThrow();
+
+    expect(refund).toMatchObject({
+      payment_intent_id: ready.payment.paymentIntent.id,
+      payment_evidence_id: ready.evidence.evidence.id,
+      reconciliation_case_id: result.reconciliationCaseId,
+      organization_id: ready.fixture.organizationId,
+      property_id: ready.fixture.propertyId,
+      reservation_id: ready.held.reservation.id,
+      provider: "RAZORPAY",
+      provider_payment_id: ready.evidence.evidence.providerPaymentId,
+      amount_minor: ready.payment.paymentIntent.amountMinor,
+      currency_code: ready.payment.paymentIntent.currencyCode,
+      reason_code: "INVENTORY_HOLD_EXPIRED"
+    });
+
+    const [event, audit, outbox] = await Promise.all([
+      db
+        .selectFrom("payment_events")
+        .select("event_type")
+        .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+        .where("event_type", "=", "REFUND_REQUESTED")
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("audit_events")
+        .select(["action", "actor_type"])
+        .where("entity_type", "=", "payment_refund_request")
+        .where("entity_id", "=", refund.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("outbox_events")
+        .select("event_type")
+        .where("aggregate_type", "=", "payment_intent")
+        .where("aggregate_id", "=", ready.payment.paymentIntent.id)
+        .where("event_type", "=", "payment.refund.requested.v1")
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(event.event_type).toBe("REFUND_REQUESTED");
+    expect(audit).toEqual({ action: "payment.refund.requested", actor_type: "SYSTEM" });
+    expect(outbox.event_type).toBe("payment.refund.requested.v1");
+  });
+
+  it("targets the duplicate provider payment rather than the canonical first payment", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    const first = await phase5c1Process(ready);
+    expect(first.outcome).toBe("RESERVATION_CONFIRMED");
+
+    const duplicatePaymentId = `pay_${randomUUID()}`;
+    const duplicateEvidence = await db.transaction().execute((trx) =>
+      new VerifiedPaymentEvidenceService().record(
+        trx,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id,
+          paymentIntentId: ready.payment.paymentIntent.id,
+          provider: "RAZORPAY",
+          providerEventId: `evt_${randomUUID()}`,
+          providerPaymentId: duplicatePaymentId,
+          providerOrderId: `order_${randomUUID()}`,
+          amountMinor: ready.payment.paymentIntent.amountMinor,
+          currencyCode: ready.payment.paymentIntent.currencyCode,
+          verificationMethod: "WEBHOOK_SIGNATURE",
+          payloadSha256: "f".repeat(64)
+        },
+        metadata()
+      )
+    );
+
+    const duplicate = await phase5c1Process(ready, duplicateEvidence.evidence.id);
+    expect(duplicate.outcome).toBe("RECONCILIATION_REQUIRED");
+
+    const refund = await db
+      .selectFrom("payment_refund_requests")
+      .select(["payment_evidence_id", "provider_payment_id", "reason_code"])
+      .where("reconciliation_case_id", "=", duplicate.reconciliationCaseId as string)
+      .executeTakeFirstOrThrow();
+
+    expect(refund).toEqual({
+      payment_evidence_id: duplicateEvidence.evidence.id,
+      provider_payment_id: duplicatePaymentId,
+      reason_code: "DUPLICATE_VERIFIED_PAYMENT"
+    });
+  });
+
+  it("does not create a refund request for MANUAL_REVIEW reconciliation", async () => {
+    const ready = await phase5c1ReadyEvidence();
+
+    await db
+      .updateTable("reservations")
+      .set({ status: "CANCELLED" })
+      .where("id", "=", ready.held.reservation.id)
+      .execute();
+
+    const result = await phase5c1Process(ready);
+    expect(result.outcome).toBe("RECONCILIATION_REQUIRED");
+
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select("required_action")
+      .where("id", "=", result.reconciliationCaseId as string)
+      .executeTakeFirstOrThrow();
+    expect(reconciliation.required_action).toBe("MANUAL_REVIEW");
+
+    const refunds = await db
+      .selectFrom("payment_refund_requests")
+      .select("id")
+      .where("payment_evidence_id", "=", ready.evidence.evidence.id)
+      .execute();
+    expect(refunds).toHaveLength(0);
+  });
+
+  it("keeps refund creation idempotent when the same refund-required evidence is processed again", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    const afterExpiry = new Date(new Date(ready.payment.paymentIntent.expiresAt).getTime() + 1_000);
+    const processor = new VerifiedPaymentProcessor(() => afterExpiry);
+
+    const first = await phase5c1Process(ready, ready.evidence.evidence.id, processor);
+    const second = await phase5c1Process(ready, ready.evidence.evidence.id, processor);
+
+    expect(first.reconciliationCaseId).toBe(second.reconciliationCaseId);
+
+    const refunds = await db
+      .selectFrom("payment_refund_requests")
+      .select("id")
+      .where("reconciliation_case_id", "=", first.reconciliationCaseId as string)
+      .execute();
+    expect(refunds).toHaveLength(1);
+
+    const events = await db
+      .selectFrom("payment_events")
+      .select("id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .where("event_type", "=", "REFUND_REQUESTED")
+      .execute();
+    expect(events).toHaveLength(1);
+  });
+
+  it("protects canonical refund request identity and economics from mutation", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    const afterExpiry = new Date(new Date(ready.payment.paymentIntent.expiresAt).getTime() + 1_000);
+    const result = await phase5c1Process(
+      ready,
+      ready.evidence.evidence.id,
+      new VerifiedPaymentProcessor(() => afterExpiry)
+    );
+
+    const refund = await db
+      .selectFrom("payment_refund_requests")
+      .selectAll()
+      .where("reconciliation_case_id", "=", result.reconciliationCaseId as string)
+      .executeTakeFirstOrThrow();
+
+    await expect(
+      db
+        .updateTable("payment_refund_requests")
+        .set({ amount_minor: refund.amount_minor + 1 })
+        .where("id", "=", refund.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db.deleteFrom("payment_refund_requests").where("id", "=", refund.id).execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+});

@@ -17,12 +17,16 @@ import {
   type ProcessVerifiedPaymentResult
 } from "../domain/payment-processing.js";
 import type { PaymentIntentStatus } from "../domain/payment.js";
-import { PaymentEvidenceRepository } from "../infrastructure/payment-evidence-repository.js";
+import {
+  PaymentEvidenceRepository,
+  type PaymentProviderEvidenceRecord
+} from "../infrastructure/payment-evidence-repository.js";
 import {
   PaymentProcessingRepository,
   type PaymentReconciliationRecord,
   type PaymentSuccessRecord
 } from "../infrastructure/payment-processing-repository.js";
+import { PaymentRefundRequestService } from "./payment-refund-request-service.js";
 import {
   PaymentRepository,
   type PaymentIntentRecord
@@ -45,7 +49,8 @@ export class VerifiedPaymentProcessor {
     private readonly processing = new PaymentProcessingRepository(),
     private readonly holds = new InventoryHoldRepository(),
     private readonly allocations = new InventoryAllocationRepository(),
-    private readonly inventoryAllocations = new InventoryAllocationService()
+    private readonly inventoryAllocations = new InventoryAllocationService(),
+    private readonly refundRequests = new PaymentRefundRequestService()
   ) {}
 
   private result(
@@ -148,13 +153,8 @@ export class VerifiedPaymentProcessor {
     trx: Transaction<Database>,
     input: ProcessInput,
     intent: PaymentIntentRecord,
-    evidence: {
-      id: string;
-      provider: string;
-      provider_event_id: string;
-      provider_payment_id: string;
-      provider_order_id: string | null;
-    },
+    evidence: PaymentProviderEvidenceRecord,
+
     reasonCode: PaymentReconciliationReason,
     requiredAction: PaymentReconciliationAction,
     details: JsonObject,
@@ -163,6 +163,13 @@ export class VerifiedPaymentProcessor {
   ): Promise<ProcessVerifiedPaymentResult> {
     const existingCase = await this.processing.findReconciliationByEvidence(trx, evidence.id);
     if (existingCase) {
+      if (existingCase.required_action === "REFUND_REQUIRED" && existingCase.status === "OPEN") {
+        await this.refundRequests.ensureForReconciliation(
+          trx,
+          { reconciliation: existingCase, evidence },
+          request
+        );
+      }
       return this.result(false, input, canonicalSuccess, existingCase);
     }
 
@@ -184,6 +191,13 @@ export class VerifiedPaymentProcessor {
         throw new ConflictError("Payment reconciliation case could not be persisted", {
           paymentEvidenceId: evidence.id
         });
+      }
+      if (raced.required_action === "REFUND_REQUIRED" && raced.status === "OPEN") {
+        await this.refundRequests.ensureForReconciliation(
+          trx,
+          { reconciliation: raced, evidence },
+          request
+        );
       }
       return this.result(false, input, canonicalSuccess, raced);
     }
@@ -235,6 +249,14 @@ export class VerifiedPaymentProcessor {
         requiredAction
       }
     });
+
+    if (created.required_action === "REFUND_REQUIRED") {
+      await this.refundRequests.ensureForReconciliation(
+        trx,
+        { reconciliation: created, evidence },
+        request
+      );
+    }
 
     return this.result(true, input, canonicalSuccess, created);
   }
