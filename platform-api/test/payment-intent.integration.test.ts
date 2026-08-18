@@ -9,7 +9,16 @@ import { InventoryHoldService } from "../src/modules/inventory/application/inven
 import { QuoteHoldService } from "../src/modules/quotes/application/quote-hold-service.js";
 import { HeldReservationService } from "../src/modules/reservations/application/held-reservation-service.js";
 import { VerifiedPaymentEvidenceService } from "../src/modules/payments/application/verified-payment-evidence-service.js";
+import {
+  RazorpayOrderService,
+  type RazorpayOrderGateway
+} from "../src/modules/payments/application/razorpay-order-service.js";
 import { VerifiedPaymentProcessor } from "../src/modules/payments/application/verified-payment-processor.js";
+import {
+  RazorpayProviderError,
+  type RazorpayCreateOrderInput,
+  type RazorpayOrder
+} from "../src/modules/payments/infrastructure/razorpay-provider.js";
 import { BeginPaymentService } from "../src/modules/reservations/application/begin-payment-service.js";
 import { PromotionRuleService } from "../src/modules/commercial/application/promotion-rule-service.js";
 import { CreateOrganizationService } from "../src/modules/organizations/application/create-organization-service.js";
@@ -1280,5 +1289,301 @@ describe("Phase 5B2 canonical verified payment processing", () => {
       .where("id", "=", result.inventoryAllocationId as string)
       .executeTakeFirstOrThrow();
     expect(allocation.status).toBe("CONFIRMED");
+  });
+});
+class FakeRazorpayOrderGateway implements RazorpayOrderGateway {
+  public readonly orders: RazorpayOrder[] = [];
+  public findCalls = 0;
+  public createCalls = 0;
+  public duplicateOnCreate = false;
+
+  publicKeyId(): string {
+    return "rzp_test_public";
+  }
+
+  async findOrdersByReceipt(receipt: string): Promise<RazorpayOrder[]> {
+    this.findCalls += 1;
+    return this.orders.filter((order) => order.receipt === receipt);
+  }
+
+  async createOrder(input: RazorpayCreateOrderInput): Promise<RazorpayOrder> {
+    this.createCalls += 1;
+    const order: RazorpayOrder = {
+      id: `order_${randomUUID().replaceAll("-", "").slice(0, 18)}`,
+      amount: input.amountMinor,
+      amountPaid: 0,
+      amountDue: input.amountMinor,
+      currency: input.currencyCode.toUpperCase(),
+      receipt: input.receipt,
+      status: "created",
+      attempts: 0,
+      createdAt: 2_023_000_000
+    };
+    this.orders.push(order);
+    if (this.duplicateOnCreate) {
+      this.duplicateOnCreate = false;
+      throw new RazorpayProviderError("Duplicate request", 400);
+    }
+    return order;
+  }
+}
+
+async function phase5b3bReadyPayment() {
+  const fixture = await createFixture();
+  await configureCommercialCore(fixture);
+  await setPromotionMode(fixture, "NO_PROMOTIONS");
+  const quoted = await createFinalQuote(fixture);
+  await createQuoteHold(fixture, quoted.quote.id);
+  const held = await createHeldReservation(fixture, quoted.quote.id);
+  const payment = await beginPayment(fixture, held.reservation.id);
+  return { fixture, held, payment };
+}
+
+function expectedRazorpayReceipt(paymentIntentId: string): string {
+  return `WL-${paymentIntentId.replaceAll("-", "")}`;
+}
+
+describe("Phase 5B3B Razorpay provider-order mapping and checkout", () => {
+  it("creates and durably links one Razorpay order to the immutable pending payment intent", async () => {
+    const ready = await phase5b3bReadyPayment();
+    const gateway = new FakeRazorpayOrderGateway();
+    const result = await new RazorpayOrderService(db, gateway).prepareCheckout(
+      ready.fixture.actor,
+      {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reservationId: ready.held.reservation.id,
+        paymentIntentId: ready.payment.paymentIntent.id
+      },
+      metadata()
+    );
+
+    expect(result.created).toBe(true);
+    expect(result.recovered).toBe(false);
+    expect(result.checkout).toMatchObject({
+      keyId: "rzp_test_public",
+      orderId: result.providerOrder.providerOrderId,
+      paymentIntentId: ready.payment.paymentIntent.id,
+      reservationId: ready.held.reservation.id,
+      amountMinor: ready.payment.paymentIntent.amountMinor,
+      currencyCode: ready.payment.paymentIntent.currencyCode,
+      receipt: expectedRazorpayReceipt(ready.payment.paymentIntent.id)
+    });
+    expect(gateway.createCalls).toBe(1);
+
+    const stored = await db
+      .selectFrom("payment_provider_orders")
+      .selectAll()
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+    expect(stored.provider_order_id).toBe(result.checkout.orderId);
+    expect(stored.amount_minor).toBe(ready.payment.paymentIntent.amountMinor);
+    expect(stored.currency_code).toBe(ready.payment.paymentIntent.currencyCode);
+
+    const providerEvents = await db
+      .selectFrom("payment_events")
+      .select("event_type")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .where("event_type", "=", "PROVIDER_ORDER_LINKED")
+      .execute();
+    expect(providerEvents).toHaveLength(1);
+
+    const audit = await db
+      .selectFrom("audit_events")
+      .select("action")
+      .where("entity_type", "=", "payment_provider_order")
+      .where("entity_id", "=", result.providerOrder.id)
+      .executeTakeFirstOrThrow();
+    expect(audit.action).toBe("payment.provider_order.linked");
+
+    const outbox = await db
+      .selectFrom("outbox_events")
+      .select("event_type")
+      .where("aggregate_type", "=", "payment_intent")
+      .where("aggregate_id", "=", ready.payment.paymentIntent.id)
+      .where("event_type", "=", "payment.provider_order.linked.v1")
+      .executeTakeFirstOrThrow();
+    expect(outbox.event_type).toBe("payment.provider_order.linked.v1");
+  });
+
+  it("returns the existing mapping on retry without creating or searching Razorpay again", async () => {
+    const ready = await phase5b3bReadyPayment();
+    const gateway = new FakeRazorpayOrderGateway();
+    const service = new RazorpayOrderService(db, gateway);
+    const input = {
+      organizationId: ready.fixture.organizationId,
+      propertyId: ready.fixture.propertyId,
+      reservationId: ready.held.reservation.id,
+      paymentIntentId: ready.payment.paymentIntent.id
+    };
+
+    const first = await service.prepareCheckout(ready.fixture.actor, input, metadata());
+    const callsAfterFirst = {
+      create: gateway.createCalls,
+      find: gateway.findCalls
+    };
+    const second = await service.prepareCheckout(ready.fixture.actor, input, metadata());
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.providerOrder.id).toBe(first.providerOrder.id);
+    expect(second.checkout.orderId).toBe(first.checkout.orderId);
+    expect(gateway.createCalls).toBe(callsAfterFirst.create);
+    expect(gateway.findCalls).toBe(callsAfterFirst.find);
+
+    const stored = await db
+      .selectFrom("payment_provider_orders")
+      .select("id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(stored).toHaveLength(1);
+  });
+
+  it("recovers a pre-existing Razorpay order by the deterministic unique receipt", async () => {
+    const ready = await phase5b3bReadyPayment();
+    const gateway = new FakeRazorpayOrderGateway();
+    const recoveredOrderId = `order_recovered_${randomUUID().replaceAll("-", "").slice(0, 18)}`;
+
+    gateway.orders.push({
+      id: recoveredOrderId,
+      amount: ready.payment.paymentIntent.amountMinor,
+      amountPaid: 0,
+      amountDue: ready.payment.paymentIntent.amountMinor,
+      currency: ready.payment.paymentIntent.currencyCode,
+      receipt: expectedRazorpayReceipt(ready.payment.paymentIntent.id),
+      status: "created",
+      attempts: 0,
+      createdAt: 2_023_000_001
+    });
+
+    const result = await new RazorpayOrderService(db, gateway).prepareCheckout(
+      ready.fixture.actor,
+      {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reservationId: ready.held.reservation.id,
+        paymentIntentId: ready.payment.paymentIntent.id
+      },
+      metadata()
+    );
+
+    expect(result.created).toBe(true);
+    expect(result.recovered).toBe(true);
+    expect(result.checkout.orderId).toBe(recoveredOrderId);
+    expect(gateway.createCalls).toBe(0);
+  });
+
+  it("recovers safely when Razorpay reports a duplicate receipt after an ambiguous create", async () => {
+    const ready = await phase5b3bReadyPayment();
+    const gateway = new FakeRazorpayOrderGateway();
+    gateway.duplicateOnCreate = true;
+
+    const result = await new RazorpayOrderService(db, gateway).prepareCheckout(
+      ready.fixture.actor,
+      {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reservationId: ready.held.reservation.id,
+        paymentIntentId: ready.payment.paymentIntent.id
+      },
+      metadata()
+    );
+
+    expect(result.created).toBe(true);
+    expect(result.recovered).toBe(true);
+    expect(gateway.createCalls).toBe(1);
+    expect(gateway.findCalls).toBe(2);
+
+    const stored = await db
+      .selectFrom("payment_provider_orders")
+      .select("provider_order_id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+    expect(stored.provider_order_id).toBe(result.checkout.orderId);
+  });
+
+  it("rejects provider economics that do not match the immutable payment intent", async () => {
+    const ready = await phase5b3bReadyPayment();
+    const gateway = new FakeRazorpayOrderGateway();
+    gateway.orders.push({
+      id: "order_wrong_amount",
+      amount: ready.payment.paymentIntent.amountMinor + 1,
+      amountPaid: 0,
+      amountDue: ready.payment.paymentIntent.amountMinor + 1,
+      currency: ready.payment.paymentIntent.currencyCode,
+      receipt: expectedRazorpayReceipt(ready.payment.paymentIntent.id),
+      status: "created",
+      attempts: 0,
+      createdAt: 2_023_000_002
+    });
+
+    await expect(
+      new RazorpayOrderService(db, gateway).prepareCheckout(
+        ready.fixture.actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id,
+          paymentIntentId: ready.payment.paymentIntent.id
+        },
+        metadata()
+      )
+    ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+
+    const stored = await db
+      .selectFrom("payment_provider_orders")
+      .select("id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .executeTakeFirst();
+    expect(stored).toBeUndefined();
+  });
+
+  it("refuses to contact Razorpay when the payment intent is already expired", async () => {
+    const ready = await phase5b3bReadyPayment();
+    const gateway = new FakeRazorpayOrderGateway();
+    const afterExpiry = new Date(new Date(ready.payment.paymentIntent.expiresAt).getTime() + 1_000);
+
+    await expect(
+      new RazorpayOrderService(db, gateway, () => afterExpiry).prepareCheckout(
+        ready.fixture.actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id,
+          paymentIntentId: ready.payment.paymentIntent.id
+        },
+        metadata()
+      )
+    ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+
+    expect(gateway.findCalls).toBe(0);
+    expect(gateway.createCalls).toBe(0);
+  });
+
+  it("keeps the provider-order identity and economics immutable after linking", async () => {
+    const ready = await phase5b3bReadyPayment();
+    const gateway = new FakeRazorpayOrderGateway();
+    const result = await new RazorpayOrderService(db, gateway).prepareCheckout(
+      ready.fixture.actor,
+      {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reservationId: ready.held.reservation.id,
+        paymentIntentId: ready.payment.paymentIntent.id
+      },
+      metadata()
+    );
+
+    await expect(
+      db
+        .updateTable("payment_provider_orders")
+        .set({ provider_order_id: "order_tampered" })
+        .where("id", "=", result.providerOrder.id)
+        .execute()
+    ).rejects.toThrow(/immutable/);
+
+    await expect(
+      db.deleteFrom("payment_provider_orders").where("id", "=", result.providerOrder.id).execute()
+    ).rejects.toThrow(/immutable/);
   });
 });

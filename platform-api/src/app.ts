@@ -16,6 +16,7 @@ import { registerInventoryAllocationRoutes } from "./modules/inventory/transport
 import { registerInventoryHoldRoutes } from "./modules/inventory/transport/inventory-hold-routes.js";
 import { registerInventoryRoutes } from "./modules/inventory/transport/inventory-routes.js";
 import { registerOrganizationRoutes } from "./modules/organizations/transport/organization-routes.js";
+import { RazorpayProvider } from "./modules/payments/infrastructure/razorpay-provider.js";
 import { registerPaymentRoutes } from "./modules/payments/transport/payment-routes.js";
 import { registerPropertyOnboardingRoutes } from "./modules/property-onboarding/transport/property-onboarding-routes.js";
 import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
@@ -140,6 +141,16 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   const userRepository = new UserRepository(deps.db);
   const accessRepository = new AccessRepository(deps.db);
+  const razorpayProvider =
+    deps.config.RAZORPAY_KEY_ID &&
+    deps.config.RAZORPAY_KEY_SECRET &&
+    deps.config.RAZORPAY_WEBHOOK_SECRET
+      ? new RazorpayProvider({
+          keyId: deps.config.RAZORPAY_KEY_ID,
+          keySecret: deps.config.RAZORPAY_KEY_SECRET,
+          webhookSecret: deps.config.RAZORPAY_WEBHOOK_SECRET
+        })
+      : null;
 
   await registerSessionRoutes(app, {
     identityVerifier: deps.identityVerifier,
@@ -221,7 +232,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,
-    accessRepository
+    accessRepository,
+    razorpayProvider
   });
 
   await registerCommercialRuleRoutes(app, {

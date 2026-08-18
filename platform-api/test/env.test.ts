@@ -37,4 +37,14 @@ describe("loadConfig", () => {
     expect(config.RAZORPAY_KEY_SECRET).toBe("test_key_secret");
     expect(config.RAZORPAY_WEBHOOK_SECRET).toBe("test_webhook_secret");
   });
+  it("rejects partial Razorpay configuration", () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "test",
+        DATABASE_URL: "postgres://user:password@localhost:5432/wildleaf",
+        FIREBASE_PROJECT_ID: "wildleaf-test",
+        RAZORPAY_KEY_ID: "rzp_test_key"
+      })
+    ).toThrow(/configured together/);
+  });
 });

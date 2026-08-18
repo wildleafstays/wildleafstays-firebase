@@ -8,6 +8,8 @@ import { requestMetadata } from "../../../shared/http/request-metadata.js";
 import { IdempotencyService } from "../../../shared/idempotency/idempotency-service.js";
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
+import { RazorpayOrderService } from "../application/razorpay-order-service.js";
+import type { RazorpayProvider } from "../infrastructure/razorpay-provider.js";
 import { BeginPaymentService } from "../../reservations/application/begin-payment-service.js";
 
 export interface PaymentRouteDependencies {
@@ -15,6 +17,7 @@ export interface PaymentRouteDependencies {
   identityVerifier: IdentityVerifier;
   userRepository: UserRepository;
   accessRepository: AccessRepository;
+  razorpayProvider: RazorpayProvider | null;
 }
 
 interface ReservationParams {
@@ -78,6 +81,9 @@ export async function registerPaymentRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new BeginPaymentService();
+  const razorpayOrders = deps.razorpayProvider
+    ? new RazorpayOrderService(deps.db, deps.razorpayProvider)
+    : null;
 
   app.post<{ Params: ReservationParams }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations/:reservationId/payment-intent",
@@ -149,4 +155,37 @@ export async function registerPaymentRoutes(
       );
     }
   );
+  if (razorpayOrders) {
+    app.put<{ Params: PaymentIntentParams }>(
+      "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations/:reservationId/payment-intents/:paymentIntentId/razorpay-order",
+      {
+        preHandler: authenticate,
+        schema: {
+          tags: ["Payments"],
+          summary: "Prepare or resume Razorpay checkout for a payment intent",
+          description:
+            "Creates or reuses one server-owned Razorpay order for the immutable PENDING payment intent. The operation is idempotent by payment intent and deterministic Razorpay receipt. It never accepts amount, currency or provider order identity from the client.",
+          security: [{ bearerAuth: [] }],
+          params: paymentIntentParamsSchema
+        }
+      },
+      async (request, reply) => {
+        const actor = request.actor;
+        if (!actor) throw new AuthenticationError();
+
+        const result = await razorpayOrders.prepareCheckout(
+          actor,
+          {
+            organizationId: request.params.organizationId,
+            propertyId: request.params.propertyId,
+            reservationId: request.params.reservationId,
+            paymentIntentId: request.params.paymentIntentId
+          },
+          requestMetadata(request, "partner-api")
+        );
+
+        return reply.status(result.created ? 201 : 200).send(result);
+      }
+    );
+  }
 }
