@@ -4,6 +4,7 @@ import { AuditService } from "../../../shared/audit/audit-service.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
+import { FinancialLedgerPostingService } from "../../finance/application/financial-ledger-posting-service.js";
 import type { PaymentRefundProviderStatus } from "../domain/payment-refund.js";
 import {
   PaymentProcessingRepository,
@@ -167,7 +168,8 @@ export class RazorpayRefundWebhookService {
     private readonly submissions = new PaymentRefundSubmissionRepository(),
     private readonly lifecycle = new PaymentRefundLifecycleRepository(),
     private readonly processing = new PaymentProcessingRepository(),
-    private readonly payments = new PaymentRepository()
+    private readonly payments = new PaymentRepository(),
+    private readonly ledger = new FinancialLedgerPostingService()
   ) {}
 
   private assertSubmission(
@@ -674,6 +676,23 @@ export class RazorpayRefundWebhookService {
             existingStatus: finalization.status,
             observedStatus: terminalStatus
           });
+        }
+
+        if (finalization.status === "PROCESSED") {
+          await this.ledger.postRefundProcessed(
+            trx,
+            {
+              organizationId: finalization.organization_id,
+              propertyId: finalization.property_id,
+              reservationId: finalization.reservation_id,
+              paymentIntentId: finalization.payment_intent_id,
+              refundFinalizationId: finalization.id,
+              amountMinor: finalization.amount_minor,
+              currencyCode: finalization.currency_code,
+              occurredAt: finalization.provider_event_created_at
+            },
+            request
+          );
         }
 
         if (finalizationCreated) {

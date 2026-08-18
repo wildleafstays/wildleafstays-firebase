@@ -4,12 +4,16 @@ import { AuditService } from "../../../shared/audit/audit-service.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
+import { FinancialLedgerPostingService } from "../../finance/application/financial-ledger-posting-service.js";
 import { ReservationRepository } from "../../reservations/infrastructure/reservation-repository.js";
 import type {
   PaymentVerificationMethod,
   RecordVerifiedPaymentEvidenceResult
 } from "../domain/payment-evidence.js";
-import { PaymentEvidenceRepository } from "../infrastructure/payment-evidence-repository.js";
+import {
+  PaymentEvidenceRepository,
+  type PaymentProviderEvidenceRecord
+} from "../infrastructure/payment-evidence-repository.js";
 import { PaymentRepository } from "../infrastructure/payment-repository.js";
 
 interface EvidenceInput {
@@ -106,8 +110,32 @@ export class VerifiedPaymentEvidenceService {
   constructor(
     private readonly evidence = new PaymentEvidenceRepository(),
     private readonly payments = new PaymentRepository(),
-    private readonly reservations = new ReservationRepository()
+    private readonly reservations = new ReservationRepository(),
+    private readonly ledger = new FinancialLedgerPostingService()
   ) {}
+
+  private async ensureFinancialLedger(
+    trx: Transaction<Database>,
+    evidence: PaymentProviderEvidenceRecord,
+    request: RequestMetadata
+  ): Promise<void> {
+    if (evidence.amount_minor <= 0) return;
+
+    await this.ledger.postPaymentReceived(
+      trx,
+      {
+        organizationId: evidence.organization_id,
+        propertyId: evidence.property_id,
+        reservationId: evidence.reservation_id,
+        paymentIntentId: evidence.payment_intent_id,
+        paymentEvidenceId: evidence.id,
+        amountMinor: evidence.amount_minor,
+        currencyCode: evidence.currency_code,
+        occurredAt: evidence.received_at
+      },
+      request
+    );
+  }
 
   async record(
     trx: Transaction<Database>,
@@ -141,6 +169,7 @@ export class VerifiedPaymentEvidenceService {
     const existing = byEvent ?? byPayment;
     if (existing) {
       assertSame(existing, input);
+      await this.ensureFinancialLedger(trx, existing, request);
       return { created: false, evidence: this.evidence.view(existing) };
     }
 
@@ -159,8 +188,11 @@ export class VerifiedPaymentEvidenceService {
         (await this.evidence.findByProviderPayment(trx, input.provider, input.providerPaymentId));
       if (!raced) throw new ConflictError("Verified provider evidence could not be persisted");
       assertSame(raced, input);
+      await this.ensureFinancialLedger(trx, raced, request);
       return { created: false, evidence: this.evidence.view(raced) };
     }
+
+    await this.ensureFinancialLedger(trx, created, request);
 
     await this.payments.recordEvent(trx, {
       paymentIntentId: intent.id,

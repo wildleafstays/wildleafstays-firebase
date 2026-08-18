@@ -3570,3 +3570,356 @@ describe("Phase 5D3 authorized manual reconciliation resolution", () => {
     });
   });
 });
+
+async function phase5e1JournalByPaymentEvidence(paymentEvidenceId: string) {
+  return db
+    .selectFrom("financial_ledger_journals")
+    .selectAll()
+    .where("payment_evidence_id", "=", paymentEvidenceId)
+    .executeTakeFirstOrThrow();
+}
+
+async function phase5e1JournalEntries(journalId: string) {
+  return db
+    .selectFrom("financial_ledger_entries")
+    .select(["line_number", "account_code", "direction", "amount_minor", "currency_code"])
+    .where("journal_id", "=", journalId)
+    .orderBy("line_number", "asc")
+    .execute();
+}
+
+describe("Phase 5E1 immutable double-entry money movement ledger", () => {
+  it("posts verified payment evidence immediately as guest funds held", async () => {
+    const ready = await phase5c1ReadyEvidence();
+
+    const journal = await phase5e1JournalByPaymentEvidence(ready.evidence.evidence.id);
+    expect(journal).toMatchObject({
+      organization_id: ready.fixture.organizationId,
+      property_id: ready.fixture.propertyId,
+      reservation_id: ready.held.reservation.id,
+      payment_intent_id: ready.payment.paymentIntent.id,
+      journal_type: "PAYMENT_RECEIVED",
+      payment_evidence_id: ready.evidence.evidence.id,
+      refund_finalization_id: null,
+      amount_minor: ready.payment.paymentIntent.amountMinor,
+      currency_code: ready.payment.paymentIntent.currencyCode
+    });
+
+    expect(await phase5e1JournalEntries(journal.id)).toEqual([
+      {
+        line_number: 1,
+        account_code: "PAYMENT_PROVIDER_CLEARING",
+        direction: "DEBIT",
+        amount_minor: ready.payment.paymentIntent.amountMinor,
+        currency_code: ready.payment.paymentIntent.currencyCode
+      },
+      {
+        line_number: 2,
+        account_code: "GUEST_FUNDS_HELD",
+        direction: "CREDIT",
+        amount_minor: ready.payment.paymentIntent.amountMinor,
+        currency_code: ready.payment.paymentIntent.currencyCode
+      }
+    ]);
+
+    const reservation = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", ready.held.reservation.id)
+      .executeTakeFirstOrThrow();
+    expect(reservation.status).toBe("PAYMENT_PENDING");
+  });
+
+  it("keeps the payment-received journal idempotent on exact evidence retry", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    const evidence = ready.evidence.evidence;
+
+    const retry = await db.transaction().execute((trx) =>
+      new VerifiedPaymentEvidenceService().record(
+        trx,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id,
+          paymentIntentId: ready.payment.paymentIntent.id,
+          provider: evidence.provider,
+          providerEventId: evidence.providerEventId,
+          providerPaymentId: evidence.providerPaymentId,
+          providerOrderId: evidence.providerOrderId,
+          amountMinor: evidence.amountMinor,
+          currencyCode: evidence.currencyCode,
+          verificationMethod: evidence.verificationMethod,
+          payloadSha256: evidence.payloadSha256
+        },
+        metadata()
+      )
+    );
+
+    expect(retry.created).toBe(false);
+    expect(retry.evidence.id).toBe(evidence.id);
+
+    const journals = await db
+      .selectFrom("financial_ledger_journals")
+      .select("id")
+      .where("payment_evidence_id", "=", evidence.id)
+      .execute();
+    expect(journals).toHaveLength(1);
+
+    const entries = await db
+      .selectFrom("financial_ledger_entries")
+      .select("id")
+      .where("journal_id", "=", journals[0]!.id)
+      .execute();
+    expect(entries).toHaveLength(2);
+  });
+
+  it("posts a second receipt for a distinct duplicate verified payment", async () => {
+    const ready = await phase5c1ReadyEvidence();
+
+    const duplicate = await db.transaction().execute((trx) =>
+      new VerifiedPaymentEvidenceService().record(
+        trx,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id,
+          paymentIntentId: ready.payment.paymentIntent.id,
+          provider: "RAZORPAY",
+          providerEventId: `evt_5e1_duplicate_${randomUUID().replaceAll("-", "")}`,
+          providerPaymentId: `pay_5e1_duplicate_${randomUUID().replaceAll("-", "")}`,
+          providerOrderId: `order_5e1_duplicate_${randomUUID().replaceAll("-", "")}`,
+          amountMinor: ready.payment.paymentIntent.amountMinor,
+          currencyCode: ready.payment.paymentIntent.currencyCode,
+          verificationMethod: "WEBHOOK_SIGNATURE",
+          payloadSha256: "a".repeat(64)
+        },
+        metadata()
+      )
+    );
+
+    const journals = await db
+      .selectFrom("financial_ledger_journals")
+      .select(["journal_type", "payment_evidence_id", "amount_minor"])
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .orderBy("created_at", "asc")
+      .execute();
+
+    expect(journals).toHaveLength(2);
+    expect(journals).toEqual(
+      expect.arrayContaining([
+        {
+          journal_type: "PAYMENT_RECEIVED",
+          payment_evidence_id: ready.evidence.evidence.id,
+          amount_minor: ready.payment.paymentIntent.amountMinor
+        },
+        {
+          journal_type: "PAYMENT_RECEIVED",
+          payment_evidence_id: duplicate.evidence.id,
+          amount_minor: ready.payment.paymentIntent.amountMinor
+        }
+      ])
+    );
+  });
+
+  it("does not invent another money movement when finance retains a manual-review payment", async () => {
+    const ready = await phase5d3ReadyManualReview();
+
+    const before = await db
+      .selectFrom("financial_ledger_journals")
+      .select(["id", "journal_type"])
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(before).toHaveLength(1);
+    expect(before[0]?.journal_type).toBe("PAYMENT_RECEIVED");
+
+    await phase5d3Resolve(
+      ready,
+      "Finance reviewed the verified payment and intentionally retained the guest funds."
+    );
+
+    const after = await db
+      .selectFrom("financial_ledger_journals")
+      .select(["id", "journal_type"])
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+
+    expect(after).toEqual(before);
+  });
+
+  it("posts a processed refund as the exact reverse money movement", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const raw = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+
+    const result = await phase5c3Handle(
+      raw,
+      `evt_refund_5e1_processed_${randomUUID().replaceAll("-", "")}`
+    );
+
+    expect(result.refund!.finalizationStatus).toBe("PROCESSED");
+    expect(result.refund!.finalizationId).toBeTruthy();
+
+    const journal = await db
+      .selectFrom("financial_ledger_journals")
+      .selectAll()
+      .where("refund_finalization_id", "=", result.refund!.finalizationId as string)
+      .executeTakeFirstOrThrow();
+
+    expect(journal).toMatchObject({
+      journal_type: "REFUND_PROCESSED",
+      payment_evidence_id: null,
+      refund_finalization_id: result.refund!.finalizationId,
+      payment_intent_id: ready.payment.paymentIntent.id,
+      amount_minor: ready.refundRequest.amount_minor,
+      currency_code: ready.refundRequest.currency_code
+    });
+
+    expect(await phase5e1JournalEntries(journal.id)).toEqual([
+      {
+        line_number: 1,
+        account_code: "GUEST_FUNDS_HELD",
+        direction: "DEBIT",
+        amount_minor: ready.refundRequest.amount_minor,
+        currency_code: ready.refundRequest.currency_code
+      },
+      {
+        line_number: 2,
+        account_code: "PAYMENT_PROVIDER_CLEARING",
+        direction: "CREDIT",
+        amount_minor: ready.refundRequest.amount_minor,
+        currency_code: ready.refundRequest.currency_code
+      }
+    ]);
+
+    const journals = await db
+      .selectFrom("financial_ledger_journals")
+      .select("journal_type")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(journals).toHaveLength(2);
+  });
+
+  it("does not post money movement for a failed refund", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const raw = phase5c3RefundRawBody(ready, {
+      eventType: "refund.failed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+
+    const result = await phase5c3Handle(
+      raw,
+      `evt_refund_5e1_failed_${randomUUID().replaceAll("-", "")}`
+    );
+
+    expect(result.refund!.finalizationStatus).toBe("FAILED");
+    expect(result.refund!.finalizationId).toBeTruthy();
+
+    const refundJournals = await db
+      .selectFrom("financial_ledger_journals")
+      .select("id")
+      .where("refund_finalization_id", "=", result.refund!.finalizationId as string)
+      .execute();
+    expect(refundJournals).toHaveLength(0);
+
+    const journals = await db
+      .selectFrom("financial_ledger_journals")
+      .select("journal_type")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(journals).toEqual([{ journal_type: "PAYMENT_RECEIVED" }]);
+  });
+
+  it("keeps journal and entry history immutable at the database boundary", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    const journal = await phase5e1JournalByPaymentEvidence(ready.evidence.evidence.id);
+    const entries = await db
+      .selectFrom("financial_ledger_entries")
+      .select("id")
+      .where("journal_id", "=", journal.id)
+      .orderBy("line_number", "asc")
+      .execute();
+
+    await expect(
+      db
+        .updateTable("financial_ledger_journals")
+        .set({ amount_minor: journal.amount_minor + 1 })
+        .where("id", "=", journal.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db.deleteFrom("financial_ledger_entries").where("id", "=", entries[0]!.id).execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+
+  it("rejects an incomplete journal at the deferred database balance boundary", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    const request = metadata();
+
+    await expect(
+      db.transaction().execute(async (trx) => {
+        const evidenceId = randomUUID();
+        const evidence = await trx
+          .insertInto("payment_provider_evidence")
+          .values({
+            id: evidenceId,
+            payment_intent_id: ready.payment.paymentIntent.id,
+            organization_id: ready.fixture.organizationId,
+            property_id: ready.fixture.propertyId,
+            reservation_id: ready.held.reservation.id,
+            provider: "RAZORPAY",
+            provider_event_id: `evt_5e1_balance_${randomUUID().replaceAll("-", "")}`,
+            provider_payment_id: `pay_5e1_balance_${randomUUID().replaceAll("-", "")}`,
+            provider_order_id: null,
+            amount_minor: ready.payment.paymentIntent.amountMinor,
+            currency_code: ready.payment.paymentIntent.currencyCode,
+            verification_method: "WEBHOOK_SIGNATURE",
+            payload_sha256: "b".repeat(64),
+            source: request.source,
+            request_id: request.requestId,
+            correlation_id: request.correlationId
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+
+        const journalId = randomUUID();
+        await trx
+          .insertInto("financial_ledger_journals")
+          .values({
+            id: journalId,
+            organization_id: ready.fixture.organizationId,
+            property_id: ready.fixture.propertyId,
+            reservation_id: ready.held.reservation.id,
+            payment_intent_id: ready.payment.paymentIntent.id,
+            journal_type: "PAYMENT_RECEIVED",
+            payment_evidence_id: evidence.id,
+            refund_finalization_id: null,
+            amount_minor: evidence.amount_minor,
+            currency_code: evidence.currency_code,
+            occurred_at: evidence.received_at,
+            source: request.source,
+            request_id: request.requestId,
+            correlation_id: request.correlationId
+          })
+          .execute();
+
+        await trx
+          .insertInto("financial_ledger_entries")
+          .values({
+            id: randomUUID(),
+            journal_id: journalId,
+            organization_id: ready.fixture.organizationId,
+            property_id: ready.fixture.propertyId,
+            line_number: 1,
+            account_code: "PAYMENT_PROVIDER_CLEARING",
+            direction: "DEBIT",
+            amount_minor: evidence.amount_minor,
+            currency_code: evidence.currency_code
+          })
+          .execute();
+      })
+    ).rejects.toThrow(/exactly two balanced entries/i);
+  });
+});

@@ -1,5 +1,9 @@
 import type { ColumnType, Generated } from "kysely";
 import type {
+  FinancialLedgerEntriesTable,
+  FinancialLedgerJournalsTable
+} from "../../modules/finance/infrastructure/financial-ledger-database-types.js";
+import type {
   InventoryBlocksTable,
   InventoryDailyBucketsTable,
   InventoryEventsTable
@@ -467,6 +471,8 @@ export interface Database {
   payment_refund_provider_events: PaymentRefundProviderEventsTable;
   payment_refund_finalizations: PaymentRefundFinalizationsTable;
   payment_refund_submissions: PaymentRefundSubmissionsTable;
+  financial_ledger_journals: FinancialLedgerJournalsTable;
+  financial_ledger_entries: FinancialLedgerEntriesTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;
