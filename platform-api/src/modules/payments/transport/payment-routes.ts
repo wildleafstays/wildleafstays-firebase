@@ -9,6 +9,8 @@ import { IdempotencyService } from "../../../shared/idempotency/idempotency-serv
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import { RazorpayOrderService } from "../application/razorpay-order-service.js";
+import { RazorpayWebhookService } from "../application/razorpay-webhook-service.js";
+import { registerRazorpayWebhookRoutes } from "./razorpay-webhook-routes.js";
 import type { RazorpayProvider } from "../infrastructure/razorpay-provider.js";
 import { BeginPaymentService } from "../../reservations/application/begin-payment-service.js";
 
@@ -84,6 +86,13 @@ export async function registerPaymentRoutes(
   const razorpayOrders = deps.razorpayProvider
     ? new RazorpayOrderService(deps.db, deps.razorpayProvider)
     : null;
+  const razorpayWebhook = deps.razorpayProvider
+    ? new RazorpayWebhookService(deps.db, deps.razorpayProvider)
+    : null;
+
+  if (razorpayWebhook) {
+    await registerRazorpayWebhookRoutes(app, razorpayWebhook);
+  }
 
   app.post<{ Params: ReservationParams }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations/:reservationId/payment-intent",

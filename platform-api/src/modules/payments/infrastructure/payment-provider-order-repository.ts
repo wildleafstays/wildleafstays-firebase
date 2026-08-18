@@ -42,6 +42,20 @@ export class PaymentProviderOrderRepository {
       .executeTakeFirst();
   }
 
+  async findByProviderOrderForUpdate(
+    trx: Transaction<Database>,
+    provider: string,
+    providerOrderId: string
+  ): Promise<PaymentProviderOrderRecord | undefined> {
+    return trx
+      .selectFrom("payment_provider_orders")
+      .selectAll()
+      .where("provider", "=", provider)
+      .where("provider_order_id", "=", providerOrderId)
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
   async create(
     trx: Transaction<Database>,
     input: {

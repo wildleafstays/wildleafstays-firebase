@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/env.js";
 import { createDatabase } from "../src/infrastructure/database/database.js";
@@ -13,8 +13,10 @@ import {
   RazorpayOrderService,
   type RazorpayOrderGateway
 } from "../src/modules/payments/application/razorpay-order-service.js";
+import { RazorpayWebhookService } from "../src/modules/payments/application/razorpay-webhook-service.js";
 import { VerifiedPaymentProcessor } from "../src/modules/payments/application/verified-payment-processor.js";
 import {
+  RazorpayProvider,
   RazorpayProviderError,
   type RazorpayCreateOrderInput,
   type RazorpayOrder
@@ -1585,5 +1587,337 @@ describe("Phase 5B3B Razorpay provider-order mapping and checkout", () => {
     await expect(
       db.deleteFrom("payment_provider_orders").where("id", "=", result.providerOrder.id).execute()
     ).rejects.toThrow(/immutable/);
+  });
+});
+const phase5b3cWebhookConfig = {
+  keyId: "rzp_test_webhook_key",
+  keySecret: "phase5b3c_key_secret",
+  webhookSecret: "phase5b3c_webhook_secret"
+};
+
+function phase5b3cProvider() {
+  return new RazorpayProvider(phase5b3cWebhookConfig, async () => {
+    throw new Error("Phase 5B3C webhook verification must not call Razorpay over the network");
+  });
+}
+
+async function phase5b3cReadyCheckout() {
+  const ready = await phase5b3bReadyPayment();
+  const gateway = new FakeRazorpayOrderGateway();
+  const checkout = await new RazorpayOrderService(db, gateway).prepareCheckout(
+    ready.fixture.actor,
+    {
+      organizationId: ready.fixture.organizationId,
+      propertyId: ready.fixture.propertyId,
+      reservationId: ready.held.reservation.id,
+      paymentIntentId: ready.payment.paymentIntent.id
+    },
+    metadata()
+  );
+  return { ...ready, checkout };
+}
+
+function phase5b3cRawBody(
+  ready: Awaited<ReturnType<typeof phase5b3cReadyCheckout>>,
+  options: {
+    eventType?: string;
+    providerPaymentId?: string;
+    providerOrderId?: string;
+    amountMinor?: number;
+    currencyCode?: string;
+    status?: string;
+    captured?: boolean;
+  } = {}
+): Buffer {
+  return Buffer.from(
+    JSON.stringify({
+      entity: "event",
+      account_id: "acc_phase5b3c",
+      event: options.eventType ?? "payment.captured",
+      contains: ["payment"],
+      payload: {
+        payment: {
+          entity: {
+            id: options.providerPaymentId ?? `pay_${randomUUID().replaceAll("-", "").slice(0, 18)}`,
+            entity: "payment",
+            amount: options.amountMinor ?? ready.payment.paymentIntent.amountMinor,
+            currency: options.currencyCode ?? ready.payment.paymentIntent.currencyCode,
+            status: options.status ?? "captured",
+            order_id: options.providerOrderId ?? ready.checkout.checkout.orderId,
+            captured: options.captured ?? true
+          }
+        }
+      }
+    }),
+    "utf8"
+  );
+}
+
+function phase5b3cSignature(rawBody: Buffer): string {
+  return createHmac("sha256", phase5b3cWebhookConfig.webhookSecret).update(rawBody).digest("hex");
+}
+
+async function phase5b3cHandle(
+  ready: Awaited<ReturnType<typeof phase5b3cReadyCheckout>>,
+  rawBody: Buffer,
+  providerEventId: string,
+  processor?: VerifiedPaymentProcessor
+) {
+  const service = processor
+    ? new RazorpayWebhookService(db, phase5b3cProvider(), { processor })
+    : new RazorpayWebhookService(db, phase5b3cProvider());
+
+  return service.handle(
+    {
+      rawBody,
+      signature: phase5b3cSignature(rawBody),
+      providerEventId
+    },
+    metadata()
+  );
+}
+
+describe("Phase 5B3C Razorpay webhook verification and canonical processing", () => {
+  it("turns a valid signed payment.captured webhook into verified evidence and a confirmed reservation", async () => {
+    const ready = await phase5b3cReadyCheckout();
+    const providerPaymentId = `pay_${randomUUID().replaceAll("-", "").slice(0, 18)}`;
+    const rawBody = phase5b3cRawBody(ready, { providerPaymentId });
+    const providerEventId = `evt_${randomUUID().replaceAll("-", "")}`;
+
+    const result = await phase5b3cHandle(ready, rawBody, providerEventId);
+
+    expect(result.handled).toBe(true);
+    expect(result.evidenceCreated).toBe(true);
+    expect(result.processing).toMatchObject({
+      processed: true,
+      outcome: "RESERVATION_CONFIRMED",
+      paymentIntentId: ready.payment.paymentIntent.id,
+      reservationId: ready.held.reservation.id
+    });
+
+    const [intent, reservation, evidence, allocation] = await Promise.all([
+      db
+        .selectFrom("payment_intents")
+        .select("status")
+        .where("id", "=", ready.payment.paymentIntent.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("reservations")
+        .select("status")
+        .where("id", "=", ready.held.reservation.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("payment_provider_evidence")
+        .selectAll()
+        .where("id", "=", result.paymentEvidenceId as string)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("inventory_allocations")
+        .select("status")
+        .where("id", "=", result.processing?.inventoryAllocationId as string)
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(intent.status).toBe("SUCCEEDED");
+    expect(reservation.status).toBe("CONFIRMED");
+    expect(allocation.status).toBe("CONFIRMED");
+    expect(evidence.provider).toBe("RAZORPAY");
+    expect(evidence.provider_event_id).toBe(providerEventId);
+    expect(evidence.provider_payment_id).toBe(providerPaymentId);
+    expect(evidence.provider_order_id).toBe(ready.checkout.checkout.orderId);
+    expect(evidence.verification_method).toBe("WEBHOOK_SIGNATURE");
+    expect(evidence.payload_sha256).toBe(createHash("sha256").update(rawBody).digest("hex"));
+  });
+
+  it("is idempotent when Razorpay retries the exact same signed event", async () => {
+    const ready = await phase5b3cReadyCheckout();
+    const rawBody = phase5b3cRawBody(ready);
+    const providerEventId = `evt_${randomUUID().replaceAll("-", "")}`;
+
+    const first = await phase5b3cHandle(ready, rawBody, providerEventId);
+    const second = await phase5b3cHandle(ready, rawBody, providerEventId);
+
+    expect(first.handled).toBe(true);
+    expect(first.evidenceCreated).toBe(true);
+    expect(second.handled).toBe(true);
+    expect(second.evidenceCreated).toBe(false);
+    expect(second.paymentEvidenceId).toBe(first.paymentEvidenceId);
+    expect(second.processing?.processed).toBe(false);
+
+    const [evidenceRows, successRows] = await Promise.all([
+      db
+        .selectFrom("payment_provider_evidence")
+        .select("id")
+        .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+        .execute(),
+      db
+        .selectFrom("payment_successes")
+        .select("id")
+        .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+        .execute()
+    ]);
+    expect(evidenceRows).toHaveLength(1);
+    expect(successRows).toHaveLength(1);
+  });
+
+  it("acknowledges a valid signed non-captured event without changing booking state", async () => {
+    const ready = await phase5b3cReadyCheckout();
+    const rawBody = phase5b3cRawBody(ready, {
+      eventType: "payment.authorized",
+      status: "authorized",
+      captured: false
+    });
+
+    const result = await phase5b3cHandle(ready, rawBody, `evt_${randomUUID().replaceAll("-", "")}`);
+
+    expect(result).toMatchObject({
+      received: true,
+      handled: false,
+      eventType: "payment.authorized",
+      paymentEvidenceId: null,
+      evidenceCreated: false,
+      processing: null
+    });
+
+    const [evidenceRows, reservation] = await Promise.all([
+      db
+        .selectFrom("payment_provider_evidence")
+        .select("id")
+        .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+        .execute(),
+      db
+        .selectFrom("reservations")
+        .select("status")
+        .where("id", "=", ready.held.reservation.id)
+        .executeTakeFirstOrThrow()
+    ]);
+    expect(evidenceRows).toHaveLength(0);
+    expect(reservation.status).toBe("PAYMENT_PENDING");
+  });
+
+  it("rejects an invalid webhook signature before creating provider evidence", async () => {
+    const ready = await phase5b3cReadyCheckout();
+    const rawBody = phase5b3cRawBody(ready);
+    const service = new RazorpayWebhookService(db, phase5b3cProvider());
+
+    await expect(
+      service.handle(
+        {
+          rawBody,
+          signature: "0".repeat(64),
+          providerEventId: `evt_${randomUUID().replaceAll("-", "")}`
+        },
+        metadata()
+      )
+    ).rejects.toMatchObject({
+      code: "INVALID_WEBHOOK_SIGNATURE",
+      statusCode: 401
+    });
+
+    const evidenceRows = await db
+      .selectFrom("payment_provider_evidence")
+      .select("id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(evidenceRows).toHaveLength(0);
+  });
+
+  it("rejects a signed captured payment whose amount differs from the server-owned order", async () => {
+    const ready = await phase5b3cReadyCheckout();
+    const rawBody = phase5b3cRawBody(ready, {
+      amountMinor: ready.payment.paymentIntent.amountMinor + 1
+    });
+
+    await expect(
+      phase5b3cHandle(ready, rawBody, `evt_${randomUUID().replaceAll("-", "")}`)
+    ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+
+    const evidenceRows = await db
+      .selectFrom("payment_provider_evidence")
+      .select("id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(evidenceRows).toHaveLength(0);
+  });
+
+  it("rejects a signed captured payment for an unknown Razorpay order", async () => {
+    const ready = await phase5b3cReadyCheckout();
+    const unknownOrderId = `order_unknown_${randomUUID().replaceAll("-", "").slice(0, 18)}`;
+    const rawBody = phase5b3cRawBody(ready, { providerOrderId: unknownOrderId });
+
+    await expect(
+      phase5b3cHandle(ready, rawBody, `evt_${randomUUID().replaceAll("-", "")}`)
+    ).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+
+    const evidenceRows = await db
+      .selectFrom("payment_provider_evidence")
+      .select("id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(evidenceRows).toHaveLength(0);
+  });
+
+  it("rejects payment.captured when the embedded payment is not actually captured", async () => {
+    const ready = await phase5b3cReadyCheckout();
+    const rawBody = phase5b3cRawBody(ready, {
+      status: "authorized",
+      captured: false
+    });
+
+    await expect(
+      phase5b3cHandle(ready, rawBody, `evt_${randomUUID().replaceAll("-", "")}`)
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+
+    const evidenceRows = await db
+      .selectFrom("payment_provider_evidence")
+      .select("id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(evidenceRows).toHaveLength(0);
+  });
+
+  it("acknowledges verified money after hold expiry while canonical processing opens refund reconciliation", async () => {
+    const ready = await phase5b3cReadyCheckout();
+    const rawBody = phase5b3cRawBody(ready);
+    const afterExpiry = new Date(new Date(ready.payment.paymentIntent.expiresAt).getTime() + 1_000);
+    const result = await phase5b3cHandle(
+      ready,
+      rawBody,
+      `evt_${randomUUID().replaceAll("-", "")}`,
+      new VerifiedPaymentProcessor(() => afterExpiry)
+    );
+
+    expect(result.handled).toBe(true);
+    expect(result.evidenceCreated).toBe(true);
+    expect(result.processing).toMatchObject({
+      processed: true,
+      outcome: "RECONCILIATION_REQUIRED"
+    });
+
+    const [intent, reservation, reconciliation] = await Promise.all([
+      db
+        .selectFrom("payment_intents")
+        .select("status")
+        .where("id", "=", ready.payment.paymentIntent.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("reservations")
+        .select("status")
+        .where("id", "=", ready.held.reservation.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("payment_reconciliation_cases")
+        .select(["reason_code", "required_action", "status"])
+        .where("id", "=", result.processing?.reconciliationCaseId as string)
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(intent.status).toBe("SUCCEEDED");
+    expect(reservation.status).toBe("PAYMENT_PENDING");
+    expect(reconciliation).toEqual({
+      reason_code: "INVENTORY_HOLD_EXPIRED",
+      required_action: "REFUND_REQUIRED",
+      status: "OPEN"
+    });
   });
 });
