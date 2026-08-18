@@ -8,6 +8,7 @@ import { InventoryAllocationService } from "../src/modules/inventory/application
 import { InventoryHoldService } from "../src/modules/inventory/application/inventory-hold-service.js";
 import { QuoteHoldService } from "../src/modules/quotes/application/quote-hold-service.js";
 import { HeldReservationService } from "../src/modules/reservations/application/held-reservation-service.js";
+import { StayLifecycleService } from "../src/modules/reservations/application/stay-lifecycle-service.js";
 import { VerifiedPaymentEvidenceService } from "../src/modules/payments/application/verified-payment-evidence-service.js";
 import {
   RazorpayOrderService,
@@ -3921,5 +3922,373 @@ describe("Phase 5E1 immutable double-entry money movement ledger", () => {
           .execute();
       })
     ).rejects.toThrow(/exactly two balanced entries/i);
+  });
+});
+
+describe("Phase 5E2A canonical stay lifecycle", () => {
+  function lifecycleEvidenceInput(
+    fixture: Fixture,
+    payment: Awaited<ReturnType<typeof beginPayment>>
+  ) {
+    return {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      reservationId: payment.reservation.id,
+      paymentIntentId: payment.paymentIntent.id,
+      provider: "RAZORPAY",
+      providerEventId: `evt_${randomUUID()}`,
+      providerPaymentId: `pay_${randomUUID()}`,
+      providerOrderId: `order_${randomUUID()}`,
+      amountMinor: payment.paymentIntent.amountMinor,
+      currencyCode: payment.paymentIntent.currencyCode,
+      verificationMethod: "WEBHOOK_SIGNATURE" as const,
+      payloadSha256: "5".repeat(64)
+    };
+  }
+
+  function frontDeskActor(fixture: Fixture): ActorContext {
+    return {
+      userId: fixture.actor.userId,
+      email: fixture.actor.email,
+      platformRoles: [],
+      organizationMemberships: [],
+      propertyGrants: [
+        {
+          grantId: randomUUID(),
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          role: "FRONT_DESK"
+        }
+      ]
+    };
+  }
+
+  function financeActor(fixture: Fixture): ActorContext {
+    return {
+      userId: fixture.actor.userId,
+      email: fixture.actor.email,
+      platformRoles: [],
+      organizationMemberships: [],
+      propertyGrants: [
+        {
+          grantId: randomUUID(),
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          role: "FINANCE"
+        }
+      ]
+    };
+  }
+
+  async function confirmedStayFixture() {
+    const fixture = await createFixture();
+    await configureCommercialCore(fixture);
+    await setPromotionMode(fixture, "NO_PROMOTIONS");
+
+    const quoted = await createFinalQuote(fixture);
+    await createQuoteHold(fixture, quoted.quote.id);
+    const held = await createHeldReservation(fixture, quoted.quote.id);
+    const payment = await beginPayment(fixture, held.reservation.id);
+
+    const evidence = await db
+      .transaction()
+      .execute((trx) =>
+        new VerifiedPaymentEvidenceService().record(
+          trx,
+          lifecycleEvidenceInput(fixture, payment),
+          metadata()
+        )
+      );
+
+    const processed = await db.transaction().execute((trx) =>
+      new VerifiedPaymentProcessor().process(
+        trx,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id,
+          paymentIntentId: payment.paymentIntent.id,
+          paymentEvidenceId: evidence.evidence.id
+        },
+        metadata()
+      )
+    );
+
+    expect(processed.outcome).toBe("RESERVATION_CONFIRMED");
+
+    return {
+      fixture,
+      held,
+      payment,
+      evidence,
+      processed
+    };
+  }
+
+  async function checkIn(
+    ready: Awaited<ReturnType<typeof confirmedStayFixture>>,
+    actor: ActorContext,
+    service = new StayLifecycleService()
+  ) {
+    return db.transaction().execute((trx) =>
+      service.checkIn(
+        trx,
+        actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id
+        },
+        metadata()
+      )
+    );
+  }
+
+  async function checkOut(
+    ready: Awaited<ReturnType<typeof confirmedStayFixture>>,
+    actor: ActorContext,
+    service = new StayLifecycleService()
+  ) {
+    return db.transaction().execute((trx) =>
+      service.checkOut(
+        trx,
+        actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id
+        },
+        metadata()
+      )
+    );
+  }
+
+  it("lets FRONT_DESK check in a confirmed reservation and records one canonical boundary", async () => {
+    const ready = await confirmedStayFixture();
+    const actor = frontDeskActor(ready.fixture);
+
+    const result = await checkIn(ready, actor);
+
+    expect(result.transitioned).toBe(true);
+    expect(result.reservation.status).toBe("CHECKED_IN");
+
+    const history = await db
+      .selectFrom("reservation_status_history")
+      .select(["from_status", "to_status", "reason", "actor_user_id"])
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .where("to_status", "=", "CHECKED_IN")
+      .executeTakeFirstOrThrow();
+
+    expect(history).toEqual({
+      from_status: "CONFIRMED",
+      to_status: "CHECKED_IN",
+      reason: "FRONT_DESK_CHECK_IN",
+      actor_user_id: actor.userId
+    });
+
+    const audit = await db
+      .selectFrom("audit_events")
+      .select("action")
+      .where("entity_type", "=", "reservation")
+      .where("entity_id", "=", ready.held.reservation.id)
+      .where("action", "=", "reservation.checked_in")
+      .executeTakeFirstOrThrow();
+
+    expect(audit.action).toBe("reservation.checked_in");
+
+    const outbox = await db
+      .selectFrom("outbox_events")
+      .select("event_type")
+      .where("aggregate_type", "=", "reservation")
+      .where("aggregate_id", "=", ready.held.reservation.id)
+      .where("event_type", "=", "reservation.checked_in.v1")
+      .executeTakeFirstOrThrow();
+
+    expect(outbox.event_type).toBe("reservation.checked_in.v1");
+  });
+
+  it("replays check-in semantically without duplicating history, audit or outbox effects", async () => {
+    const ready = await confirmedStayFixture();
+    const actor = frontDeskActor(ready.fixture);
+
+    const first = await checkIn(ready, actor);
+    const second = await checkIn(ready, actor);
+
+    expect(first.transitioned).toBe(true);
+    expect(second.transitioned).toBe(false);
+    expect(second.reservation.status).toBe("CHECKED_IN");
+
+    const [history, audits, outbox] = await Promise.all([
+      db
+        .selectFrom("reservation_status_history")
+        .select("id")
+        .where("reservation_id", "=", ready.held.reservation.id)
+        .where("to_status", "=", "CHECKED_IN")
+        .execute(),
+      db
+        .selectFrom("audit_events")
+        .select("id")
+        .where("entity_type", "=", "reservation")
+        .where("entity_id", "=", ready.held.reservation.id)
+        .where("action", "=", "reservation.checked_in")
+        .execute(),
+      db
+        .selectFrom("outbox_events")
+        .select("id")
+        .where("aggregate_type", "=", "reservation")
+        .where("aggregate_id", "=", ready.held.reservation.id)
+        .where("event_type", "=", "reservation.checked_in.v1")
+        .execute()
+    ]);
+
+    expect(history).toHaveLength(1);
+    expect(audits).toHaveLength(1);
+    expect(outbox).toHaveLength(1);
+  });
+
+  it("rejects checkout before check-in and leaves a confirmed reservation unchanged", async () => {
+    const ready = await confirmedStayFixture();
+    const actor = frontDeskActor(ready.fixture);
+
+    await expect(checkOut(ready, actor)).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    const reservation = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", ready.held.reservation.id)
+      .executeTakeFirstOrThrow();
+
+    expect(reservation.status).toBe("CONFIRMED");
+  });
+
+  it("does not let a FINANCE property role mutate the stay lifecycle", async () => {
+    const ready = await confirmedStayFixture();
+    const actor = financeActor(ready.fixture);
+
+    await expect(checkIn(ready, actor)).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
+    const reservation = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", ready.held.reservation.id)
+      .executeTakeFirstOrThrow();
+
+    expect(reservation.status).toBe("CONFIRMED");
+  });
+
+  it("records CHECKED_OUT as an immutable stay-completion boundary without moving money", async () => {
+    const ready = await confirmedStayFixture();
+    const actor = frontDeskActor(ready.fixture);
+
+    const ledgerBefore = await db
+      .selectFrom("financial_ledger_journals")
+      .select("id")
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .execute();
+
+    await checkIn(ready, actor);
+    const result = await checkOut(ready, actor);
+
+    expect(result.transitioned).toBe(true);
+    expect(result.reservation.status).toBe("CHECKED_OUT");
+
+    const checkoutHistory = await db
+      .selectFrom("reservation_status_history")
+      .select(["id", "from_status", "to_status", "reason", "actor_user_id", "created_at"])
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .where("to_status", "=", "CHECKED_OUT")
+      .executeTakeFirstOrThrow();
+
+    expect(checkoutHistory.from_status).toBe("CHECKED_IN");
+    expect(checkoutHistory.to_status).toBe("CHECKED_OUT");
+    expect(checkoutHistory.reason).toBe("FRONT_DESK_CHECK_OUT");
+    expect(checkoutHistory.actor_user_id).toBe(actor.userId);
+    expect(checkoutHistory.created_at).toBeInstanceOf(Date);
+
+    await expect(
+      db
+        .updateTable("reservation_status_history")
+        .set({ reason: "MUTATION_MUST_FAIL" })
+        .where("id", "=", checkoutHistory.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db.deleteFrom("reservation_status_history").where("id", "=", checkoutHistory.id).execute()
+    ).rejects.toThrow(/immutable/i);
+
+    const ledgerAfter = await db
+      .selectFrom("financial_ledger_journals")
+      .select("id")
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .execute();
+
+    expect(ledgerAfter).toHaveLength(ledgerBefore.length);
+
+    const audit = await db
+      .selectFrom("audit_events")
+      .select("action")
+      .where("entity_type", "=", "reservation")
+      .where("entity_id", "=", ready.held.reservation.id)
+      .where("action", "=", "reservation.checked_out")
+      .executeTakeFirstOrThrow();
+
+    expect(audit.action).toBe("reservation.checked_out");
+
+    const outbox = await db
+      .selectFrom("outbox_events")
+      .select("event_type")
+      .where("aggregate_type", "=", "reservation")
+      .where("aggregate_id", "=", ready.held.reservation.id)
+      .where("event_type", "=", "reservation.checked_out.v1")
+      .executeTakeFirstOrThrow();
+
+    expect(outbox.event_type).toBe("reservation.checked_out.v1");
+  });
+
+  it("replays checkout semantically without duplicating the stay-completion boundary", async () => {
+    const ready = await confirmedStayFixture();
+    const actor = frontDeskActor(ready.fixture);
+
+    await checkIn(ready, actor);
+    const first = await checkOut(ready, actor);
+    const second = await checkOut(ready, actor);
+
+    expect(first.transitioned).toBe(true);
+    expect(second.transitioned).toBe(false);
+    expect(second.reservation.status).toBe("CHECKED_OUT");
+
+    const [history, audits, outbox] = await Promise.all([
+      db
+        .selectFrom("reservation_status_history")
+        .select("id")
+        .where("reservation_id", "=", ready.held.reservation.id)
+        .where("to_status", "=", "CHECKED_OUT")
+        .execute(),
+      db
+        .selectFrom("audit_events")
+        .select("id")
+        .where("entity_type", "=", "reservation")
+        .where("entity_id", "=", ready.held.reservation.id)
+        .where("action", "=", "reservation.checked_out")
+        .execute(),
+      db
+        .selectFrom("outbox_events")
+        .select("id")
+        .where("aggregate_type", "=", "reservation")
+        .where("aggregate_id", "=", ready.held.reservation.id)
+        .where("event_type", "=", "reservation.checked_out.v1")
+        .execute()
+    ]);
+
+    expect(history).toHaveLength(1);
+    expect(audits).toHaveLength(1);
+    expect(outbox).toHaveLength(1);
   });
 });

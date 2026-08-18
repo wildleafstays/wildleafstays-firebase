@@ -9,6 +9,7 @@ import { IdempotencyService } from "../../../shared/idempotency/idempotency-serv
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import { HeldReservationService } from "../application/held-reservation-service.js";
+import { StayLifecycleService } from "../application/stay-lifecycle-service.js";
 
 export interface ReservationRouteDependencies {
   db: Kysely<Database>;
@@ -87,6 +88,7 @@ export async function registerReservationRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new HeldReservationService();
+  const stayLifecycle = new StayLifecycleService();
 
   app.post<{ Params: QuoteParams; Body: CreateHeldReservationBody }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/quotes/:quoteId/reservation",
@@ -155,6 +157,98 @@ export async function registerReservationRoutes(
             requestMetadata(request, "partner-api")
           );
           return { statusCode: response.created ? 201 : 200, body: response };
+        }
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{ Params: ReservationParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations/:reservationId/check-in",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reservations"],
+        summary: "Check in a confirmed reservation",
+        description:
+          "Applies the canonical CONFIRMED to CHECKED_IN transition. The transition is server-owned, permission-checked, audited, recorded in immutable reservation status history, and emitted through the outbox.",
+        security: [{ bearerAuth: [] }],
+        params: reservationParamsSchema,
+        headers: idempotencyHeaders
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      const key = requireIdempotencyKey(request.headers);
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `reservation.check-in:${request.params.reservationId}:user:${actor.userId}`,
+          key,
+          requestBody: {}
+        },
+        async (trx) => {
+          const response = await stayLifecycle.checkIn(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              reservationId: request.params.reservationId
+            },
+            requestMetadata(request, "partner-api")
+          );
+          return { statusCode: response.transitioned ? 201 : 200, body: response };
+        }
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{ Params: ReservationParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations/:reservationId/check-out",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reservations"],
+        summary: "Check out a checked-in reservation",
+        description:
+          "Applies the canonical CHECKED_IN to CHECKED_OUT transition. The immutable CHECKED_OUT history row becomes the trusted stay-completion boundary for later revenue-recognition work; this command itself moves no money and recognizes no revenue.",
+        security: [{ bearerAuth: [] }],
+        params: reservationParamsSchema,
+        headers: idempotencyHeaders
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      const key = requireIdempotencyKey(request.headers);
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `reservation.check-out:${request.params.reservationId}:user:${actor.userId}`,
+          key,
+          requestBody: {}
+        },
+        async (trx) => {
+          const response = await stayLifecycle.checkOut(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              reservationId: request.params.reservationId
+            },
+            requestMetadata(request, "partner-api")
+          );
+          return { statusCode: response.transitioned ? 201 : 200, body: response };
         }
       );
 
