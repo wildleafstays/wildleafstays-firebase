@@ -26,6 +26,22 @@ export interface RazorpayOrder {
   createdAt: number;
 }
 
+export interface RazorpayCreateRefundInput {
+  providerPaymentId: string;
+  amountMinor: number;
+  idempotencyKey: string;
+  notes?: Record<string, string>;
+}
+
+export interface RazorpayRefund {
+  id: string;
+  amount: number;
+  currency: string;
+  paymentId: string;
+  status: "pending" | "processed" | "failed";
+  createdAt: number;
+}
+
 export type RazorpayFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 export class RazorpayProviderError extends Error {
@@ -47,6 +63,16 @@ interface RazorpayOrderWire {
   receipt?: unknown;
   status?: unknown;
   attempts?: unknown;
+  created_at?: unknown;
+}
+
+interface RazorpayRefundWire {
+  id?: unknown;
+  entity?: unknown;
+  amount?: unknown;
+  currency?: unknown;
+  payment_id?: unknown;
+  status?: unknown;
   created_at?: unknown;
 }
 
@@ -76,6 +102,24 @@ function normalizedCurrency(value: string): string {
   const normalized = value.trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(normalized)) {
     throw new RazorpayProviderError("currencyCode must be a three-letter code");
+  }
+  return normalized;
+}
+
+function normalizedProviderIdentifier(value: string, field: string): string {
+  const normalized = value.trim();
+  if (normalized.length < 1 || normalized.length > 200) {
+    throw new RazorpayProviderError(`${field} must contain between 1 and 200 characters`);
+  }
+  return normalized;
+}
+
+function normalizedRefundIdempotency(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length < 10 || normalized.length > 200 || !/^[A-Za-z0-9_-]+$/.test(normalized)) {
+    throw new RazorpayProviderError(
+      "refund idempotency key must be 10 to 200 alphanumeric, underscore or hyphen characters"
+    );
   }
   return normalized;
 }
@@ -129,6 +173,44 @@ function parseOrder(value: unknown): RazorpayOrder {
     receipt: row.receipt,
     status: row.status,
     attempts: row.attempts,
+    createdAt: row.created_at
+  };
+}
+
+function parseRefund(value: unknown): RazorpayRefund {
+  if (typeof value !== "object" || value === null) {
+    throw new RazorpayProviderError("Razorpay returned an invalid refund response");
+  }
+  const row = value as RazorpayRefundWire;
+  if (
+    typeof row.id !== "string" ||
+    row.id.trim().length < 1 ||
+    row.entity !== "refund" ||
+    typeof row.amount !== "number" ||
+    !Number.isSafeInteger(row.amount) ||
+    row.amount <= 0 ||
+    typeof row.currency !== "string" ||
+    typeof row.payment_id !== "string" ||
+    row.payment_id.trim().length < 1 ||
+    (row.status !== "pending" && row.status !== "processed" && row.status !== "failed") ||
+    typeof row.created_at !== "number" ||
+    !Number.isSafeInteger(row.created_at) ||
+    row.created_at <= 0
+  ) {
+    throw new RazorpayProviderError("Razorpay returned an incomplete refund response");
+  }
+
+  const currency = row.currency.trim().toUpperCase();
+  if (currency.length > 0 && !/^[A-Z]{3}$/.test(currency)) {
+    throw new RazorpayProviderError("Razorpay returned an invalid refund currency");
+  }
+
+  return {
+    id: row.id.trim(),
+    amount: row.amount,
+    currency,
+    paymentId: row.payment_id.trim(),
+    status: row.status,
     createdAt: row.created_at
   };
 }
@@ -258,5 +340,43 @@ export class RazorpayProvider {
       throw new RazorpayProviderError("Razorpay returned an invalid order collection");
     }
     return items.map(parseOrder);
+  }
+
+  async createRefund(input: RazorpayCreateRefundInput): Promise<RazorpayRefund> {
+    const providerPaymentId = normalizedProviderIdentifier(
+      input.providerPaymentId,
+      "providerPaymentId"
+    );
+    if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+      throw new RazorpayProviderError("amountMinor must be a positive safe integer");
+    }
+    const idempotencyKey = normalizedRefundIdempotency(input.idempotencyKey);
+    const notes = normalizedNotes(input.notes);
+
+    const body: {
+      amount: number;
+      notes?: Record<string, string>;
+    } = {
+      amount: input.amountMinor
+    };
+    if (notes) body.notes = notes;
+
+    const refund = parseRefund(
+      await this.request(`/v1/payments/${encodeURIComponent(providerPaymentId)}/refund`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-refund-idempotency": idempotencyKey
+        },
+        body: JSON.stringify(body)
+      })
+    );
+
+    if (refund.amount !== input.amountMinor || refund.paymentId !== providerPaymentId) {
+      throw new RazorpayProviderError(
+        "Razorpay refund response does not match the requested payment and amount"
+      );
+    }
+    return refund;
   }
 }

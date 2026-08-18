@@ -147,4 +147,91 @@ describe("RazorpayProvider", () => {
       })
     ).rejects.toBeInstanceOf(RazorpayProviderError);
   });
+
+  it("submits a normal refund with deterministic provider idempotency", async () => {
+    let observedUrl = "";
+    let observedInit: RequestInit | undefined;
+    const fetchFn: RazorpayFetch = async (input, init) => {
+      observedUrl = String(input);
+      observedInit = init;
+      return new Response(
+        JSON.stringify({
+          id: "rfnd_test_123",
+          entity: "refund",
+          amount: 250000,
+          currency: "",
+          payment_id: "pay_test_123",
+          status: "pending",
+          created_at: 1760000000
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+    const provider = new RazorpayProvider(config, fetchFn);
+
+    const refund = await provider.createRefund({
+      providerPaymentId: "pay_test_123",
+      amountMinor: 250000,
+      idempotencyKey: "wl_refund_0123456789abcdef0123456789abcdef_1",
+      notes: { refundRequestId: "refund_request_123" }
+    });
+
+    expect(refund).toMatchObject({
+      id: "rfnd_test_123",
+      amount: 250000,
+      currency: "",
+      paymentId: "pay_test_123",
+      status: "pending"
+    });
+    expect(observedUrl).toBe("https://api.razorpay.com/v1/payments/pay_test_123/refund");
+    expect(observedInit?.method).toBe("POST");
+    const headers = observedInit?.headers as Record<string, string>;
+    expect(headers["x-refund-idempotency"]).toBe("wl_refund_0123456789abcdef0123456789abcdef_1");
+    expect(JSON.parse(String(observedInit?.body))).toEqual({
+      amount: 250000,
+      notes: { refundRequestId: "refund_request_123" }
+    });
+  });
+
+  it("rejects a refund response that changes the requested payment or amount", async () => {
+    const fetchFn: RazorpayFetch = async () =>
+      new Response(
+        JSON.stringify({
+          id: "rfnd_bad",
+          entity: "refund",
+          amount: 250001,
+          currency: "INR",
+          payment_id: "pay_test_123",
+          status: "processed",
+          created_at: 1760000000
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    const provider = new RazorpayProvider(config, fetchFn);
+
+    await expect(
+      provider.createRefund({
+        providerPaymentId: "pay_test_123",
+        amountMinor: 250000,
+        idempotencyKey: "wl_refund_0123456789abcdef0123456789abcdef_1"
+      })
+    ).rejects.toBeInstanceOf(RazorpayProviderError);
+  });
+
+  it("rejects an invalid refund idempotency key before contacting Razorpay", async () => {
+    let calls = 0;
+    const provider = new RazorpayProvider(config, async () => {
+      calls += 1;
+      throw new Error("network should not be called");
+    });
+
+    await expect(
+      provider.createRefund({
+        providerPaymentId: "pay_test_123",
+        amountMinor: 250000,
+        idempotencyKey: "short"
+      })
+    ).rejects.toBeInstanceOf(RazorpayProviderError);
+    expect(calls).toBe(0);
+  });
 });

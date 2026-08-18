@@ -13,13 +13,19 @@ import {
   RazorpayOrderService,
   type RazorpayOrderGateway
 } from "../src/modules/payments/application/razorpay-order-service.js";
+import {
+  RazorpayRefundSubmissionService,
+  type RazorpayRefundGateway
+} from "../src/modules/payments/application/razorpay-refund-submission-service.js";
 import { RazorpayWebhookService } from "../src/modules/payments/application/razorpay-webhook-service.js";
 import { VerifiedPaymentProcessor } from "../src/modules/payments/application/verified-payment-processor.js";
 import {
   RazorpayProvider,
   RazorpayProviderError,
   type RazorpayCreateOrderInput,
-  type RazorpayOrder
+  type RazorpayCreateRefundInput,
+  type RazorpayOrder,
+  type RazorpayRefund
 } from "../src/modules/payments/infrastructure/razorpay-provider.js";
 import { BeginPaymentService } from "../src/modules/reservations/application/begin-payment-service.js";
 import { PromotionRuleService } from "../src/modules/commercial/application/promotion-rule-service.js";
@@ -2148,6 +2154,222 @@ describe("Phase 5C1 canonical refund request foundation", () => {
 
     await expect(
       db.deleteFrom("payment_refund_requests").where("id", "=", refund.id).execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+});
+async function phase5c2ReadyRefundRequest() {
+  const ready = await phase5c1ReadyEvidence();
+  const afterExpiry = new Date(new Date(ready.payment.paymentIntent.expiresAt).getTime() + 1_000);
+  const processing = await phase5c1Process(
+    ready,
+    ready.evidence.evidence.id,
+    new VerifiedPaymentProcessor(() => afterExpiry)
+  );
+  const refundRequest = await db
+    .selectFrom("payment_refund_requests")
+    .selectAll()
+    .where("reconciliation_case_id", "=", processing.reconciliationCaseId as string)
+    .executeTakeFirstOrThrow();
+
+  return { ...ready, processing, refundRequest };
+}
+
+class FakeRazorpayRefundGateway implements RazorpayRefundGateway {
+  calls: RazorpayCreateRefundInput[] = [];
+  failCalls = 0;
+  amountDelta = 0;
+  paymentIdOverride: string | null = null;
+  currencyOverride: string | null = null;
+  status: RazorpayRefund["status"] = "pending";
+  readonly refundId = `rfnd_${randomUUID().replaceAll("-", "").slice(0, 18)}`;
+
+  async createRefund(input: RazorpayCreateRefundInput): Promise<RazorpayRefund> {
+    const observed: RazorpayCreateRefundInput = {
+      providerPaymentId: input.providerPaymentId,
+      amountMinor: input.amountMinor,
+      idempotencyKey: input.idempotencyKey
+    };
+    if (input.notes) observed.notes = { ...input.notes };
+    this.calls.push(observed);
+
+    if (this.failCalls > 0) {
+      this.failCalls -= 1;
+      throw new RazorpayProviderError("simulated ambiguous refund transport failure");
+    }
+
+    return {
+      id: this.refundId,
+      amount: input.amountMinor + this.amountDelta,
+      currency: this.currencyOverride ?? "INR",
+      paymentId: this.paymentIdOverride ?? input.providerPaymentId,
+      status: this.status,
+      createdAt: 2_024_000_000
+    };
+  }
+}
+
+function phase5c2Submit(
+  ready: Awaited<ReturnType<typeof phase5c2ReadyRefundRequest>>,
+  gateway: RazorpayRefundGateway
+) {
+  return new RazorpayRefundSubmissionService(db, gateway).submit(
+    {
+      organizationId: ready.fixture.organizationId,
+      propertyId: ready.fixture.propertyId,
+      reservationId: ready.held.reservation.id,
+      refundRequestId: ready.refundRequest.id
+    },
+    metadata()
+  );
+}
+
+describe("Phase 5C2 Razorpay refund submission", () => {
+  it("submits the exact immutable refund request and keeps reconciliation open", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const gateway = new FakeRazorpayRefundGateway();
+    gateway.status = "processed";
+
+    const result = await phase5c2Submit(ready, gateway);
+
+    expect(result.created).toBe(true);
+    expect(gateway.calls).toHaveLength(1);
+    expect(gateway.calls[0]).toEqual({
+      providerPaymentId: ready.refundRequest.provider_payment_id,
+      amountMinor: ready.refundRequest.amount_minor,
+      idempotencyKey: `wl_refund_${ready.refundRequest.id.replaceAll("-", "")}_1`,
+      notes: {
+        refundRequestId: ready.refundRequest.id,
+        paymentIntentId: ready.refundRequest.payment_intent_id,
+        reconciliationCaseId: ready.refundRequest.reconciliation_case_id,
+        reasonCode: ready.refundRequest.reason_code
+      }
+    });
+
+    expect(result.submission).toMatchObject({
+      refundRequestId: ready.refundRequest.id,
+      attemptSequence: 1,
+      paymentIntentId: ready.refundRequest.payment_intent_id,
+      paymentEvidenceId: ready.refundRequest.payment_evidence_id,
+      reconciliationCaseId: ready.refundRequest.reconciliation_case_id,
+      provider: "RAZORPAY",
+      providerPaymentId: ready.refundRequest.provider_payment_id,
+      providerRefundId: gateway.refundId,
+      amountMinor: ready.refundRequest.amount_minor,
+      currencyCode: ready.refundRequest.currency_code,
+      initialProviderStatus: "PROCESSED"
+    });
+
+    const [reconciliation, event, audit, outbox] = await Promise.all([
+      db
+        .selectFrom("payment_reconciliation_cases")
+        .select(["status", "required_action"])
+        .where("id", "=", ready.refundRequest.reconciliation_case_id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("payment_events")
+        .select("event_type")
+        .where("payment_intent_id", "=", ready.refundRequest.payment_intent_id)
+        .where("event_type", "=", "REFUND_SUBMITTED")
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("audit_events")
+        .select(["action", "actor_type"])
+        .where("entity_type", "=", "payment_refund_submission")
+        .where("entity_id", "=", result.submission.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("outbox_events")
+        .select("event_type")
+        .where("aggregate_type", "=", "payment_intent")
+        .where("aggregate_id", "=", ready.refundRequest.payment_intent_id)
+        .where("event_type", "=", "payment.refund.submitted.v1")
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(reconciliation).toEqual({ status: "OPEN", required_action: "REFUND_REQUIRED" });
+    expect(event.event_type).toBe("REFUND_SUBMITTED");
+    expect(audit).toEqual({ action: "payment.refund.submitted", actor_type: "SYSTEM" });
+    expect(outbox.event_type).toBe("payment.refund.submitted.v1");
+  });
+
+  it("returns the stored submission on retry without contacting Razorpay again", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const gateway = new FakeRazorpayRefundGateway();
+
+    const first = await phase5c2Submit(ready, gateway);
+    const second = await phase5c2Submit(ready, gateway);
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.submission.id).toBe(first.submission.id);
+    expect(gateway.calls).toHaveLength(1);
+  });
+
+  it("reuses the exact provider idempotency request after an ambiguous failure", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const gateway = new FakeRazorpayRefundGateway();
+    gateway.failCalls = 1;
+
+    await expect(phase5c2Submit(ready, gateway)).rejects.toMatchObject({
+      code: "PAYMENT_PROVIDER_ERROR",
+      statusCode: 502
+    });
+
+    const rowsAfterFailure = await db
+      .selectFrom("payment_refund_submissions")
+      .select("id")
+      .where("refund_request_id", "=", ready.refundRequest.id)
+      .execute();
+    expect(rowsAfterFailure).toHaveLength(0);
+
+    const retry = await phase5c2Submit(ready, gateway);
+
+    expect(retry.created).toBe(true);
+    expect(gateway.calls).toHaveLength(2);
+    expect(gateway.calls[1]).toEqual(gateway.calls[0]);
+
+    const rows = await db
+      .selectFrom("payment_refund_submissions")
+      .select(["id", "attempt_sequence"])
+      .where("refund_request_id", "=", ready.refundRequest.id)
+      .execute();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.attempt_sequence).toBe(1);
+  });
+
+  it("rejects a provider response with changed refund economics", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const gateway = new FakeRazorpayRefundGateway();
+    gateway.amountDelta = 1;
+
+    await expect(phase5c2Submit(ready, gateway)).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    const rows = await db
+      .selectFrom("payment_refund_submissions")
+      .select("id")
+      .where("refund_request_id", "=", ready.refundRequest.id)
+      .execute();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("protects the persisted Razorpay refund submission from mutation", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const gateway = new FakeRazorpayRefundGateway();
+    const result = await phase5c2Submit(ready, gateway);
+
+    await expect(
+      db
+        .updateTable("payment_refund_submissions")
+        .set({ provider_refund_id: "rfnd_tampered" })
+        .where("id", "=", result.submission.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db.deleteFrom("payment_refund_submissions").where("id", "=", result.submission.id).execute()
     ).rejects.toThrow(/immutable/i);
   });
 });
