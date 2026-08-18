@@ -9,6 +9,7 @@ import { IdempotencyService } from "../../../shared/idempotency/idempotency-serv
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import { RazorpayOrderService } from "../application/razorpay-order-service.js";
+import { PaymentFinanceReadService } from "../application/payment-finance-read-service.js";
 import { RazorpayWebhookService } from "../application/razorpay-webhook-service.js";
 import { registerRazorpayWebhookRoutes } from "./razorpay-webhook-routes.js";
 import type { RazorpayProvider } from "../infrastructure/razorpay-provider.js";
@@ -32,6 +33,28 @@ interface PaymentIntentParams extends ReservationParams {
   paymentIntentId: string;
 }
 
+interface PropertyParams {
+  organizationId: string;
+  propertyId: string;
+}
+
+interface ReconciliationParams extends PropertyParams {
+  reconciliationCaseId: string;
+}
+
+interface ReconciliationListQuery {
+  status?: "OPEN" | "RESOLVED";
+  requiredAction?: "REFUND_REQUIRED" | "MANUAL_REVIEW";
+  reasonCode?:
+    | "INVENTORY_HOLD_EXPIRED"
+    | "INVENTORY_HOLD_NOT_ACTIVE"
+    | "INVENTORY_HOLD_UNAVAILABLE"
+    | "RESERVATION_STATE_MISMATCH"
+    | "DUPLICATE_VERIFIED_PAYMENT";
+  limit?: number;
+  cursor?: string;
+}
+
 const reservationParamsSchema = {
   type: "object",
   additionalProperties: false,
@@ -52,6 +75,48 @@ const paymentIntentParamsSchema = {
     propertyId: { type: "string", format: "uuid" },
     reservationId: { type: "string", format: "uuid" },
     paymentIntentId: { type: "string", format: "uuid" }
+  }
+} as const;
+
+const propertyParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["organizationId", "propertyId"],
+  properties: {
+    organizationId: { type: "string", format: "uuid" },
+    propertyId: { type: "string", format: "uuid" }
+  }
+} as const;
+
+const reconciliationParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["organizationId", "propertyId", "reconciliationCaseId"],
+  properties: {
+    organizationId: { type: "string", format: "uuid" },
+    propertyId: { type: "string", format: "uuid" },
+    reconciliationCaseId: { type: "string", format: "uuid" }
+  }
+} as const;
+
+const reconciliationListQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    status: { type: "string", enum: ["OPEN", "RESOLVED"] },
+    requiredAction: { type: "string", enum: ["REFUND_REQUIRED", "MANUAL_REVIEW"] },
+    reasonCode: {
+      type: "string",
+      enum: [
+        "INVENTORY_HOLD_EXPIRED",
+        "INVENTORY_HOLD_NOT_ACTIVE",
+        "INVENTORY_HOLD_UNAVAILABLE",
+        "RESERVATION_STATE_MISMATCH",
+        "DUPLICATE_VERIFIED_PAYMENT"
+      ]
+    },
+    limit: { type: "integer", minimum: 1, maximum: 100 },
+    cursor: { type: "string", minLength: 1, maxLength: 500, pattern: "^[A-Za-z0-9_-]+$" }
   }
 } as const;
 
@@ -83,6 +148,7 @@ export async function registerPaymentRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new BeginPaymentService();
+  const financeRead = new PaymentFinanceReadService();
   const razorpayOrders = deps.razorpayProvider
     ? new RazorpayOrderService(deps.db, deps.razorpayProvider)
     : null;
@@ -160,6 +226,88 @@ export async function registerPaymentRoutes(
           propertyId: request.params.propertyId,
           reservationId: request.params.reservationId,
           paymentIntentId: request.params.paymentIntentId
+        })
+      );
+    }
+  );
+
+  app.get<{ Params: ReservationParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations/:reservationId/payment-history",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Payments"],
+        summary: "Get finance payment history for a reservation",
+        description:
+          "Returns the server-owned payment, verified evidence, reconciliation and refund lifecycle for one reservation. Provider payload hashes and refund idempotency keys are deliberately not exposed.",
+        security: [{ bearerAuth: [] }],
+        params: reservationParamsSchema
+      }
+    },
+    async (request) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      return deps.db.transaction().execute((trx) =>
+        financeRead.getReservationPaymentHistory(trx, actor, {
+          organizationId: request.params.organizationId,
+          propertyId: request.params.propertyId,
+          reservationId: request.params.reservationId
+        })
+      );
+    }
+  );
+
+  app.get<{ Params: PropertyParams; Querystring: ReconciliationListQuery }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/payment-reconciliations",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Payments"],
+        summary: "List payment reconciliation cases for finance operations",
+        description:
+          "Returns a read-only, cursor-paginated reconciliation queue scoped to one property. Filters never mutate payment, reservation, inventory or refund state.",
+        security: [{ bearerAuth: [] }],
+        params: propertyParamsSchema,
+        querystring: reconciliationListQuerySchema
+      }
+    },
+    async (request) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      return deps.db.transaction().execute((trx) =>
+        financeRead.listReconciliations(trx, actor, {
+          organizationId: request.params.organizationId,
+          propertyId: request.params.propertyId,
+          filters: request.query
+        })
+      );
+    }
+  );
+
+  app.get<{ Params: ReconciliationParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/payment-reconciliations/:reconciliationCaseId",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Payments"],
+        summary: "Get payment reconciliation detail",
+        description:
+          "Returns verified payment evidence plus the complete immutable refund request, submission, provider-event and finalization history for one reconciliation case.",
+        security: [{ bearerAuth: [] }],
+        params: reconciliationParamsSchema
+      }
+    },
+    async (request) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      return deps.db.transaction().execute((trx) =>
+        financeRead.getReconciliationDetail(trx, actor, {
+          organizationId: request.params.organizationId,
+          propertyId: request.params.propertyId,
+          reconciliationCaseId: request.params.reconciliationCaseId
         })
       );
     }

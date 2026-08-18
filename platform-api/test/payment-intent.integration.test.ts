@@ -18,6 +18,7 @@ import {
   type RazorpayRefundGateway
 } from "../src/modules/payments/application/razorpay-refund-submission-service.js";
 import { RazorpayWebhookService } from "../src/modules/payments/application/razorpay-webhook-service.js";
+import { PaymentFinanceReadService } from "../src/modules/payments/application/payment-finance-read-service.js";
 import { VerifiedPaymentProcessor } from "../src/modules/payments/application/verified-payment-processor.js";
 import {
   RazorpayProvider,
@@ -2825,5 +2826,227 @@ describe("Phase 5C3 Razorpay refund webhook finalization", () => {
         .where("id", "=", result.refund?.finalizationId as string)
         .execute()
     ).rejects.toThrow(/immutable/i);
+  });
+});
+
+describe("Phase 5D1 finance and reconciliation read layer", () => {
+  it("returns complete reservation payment history without exposing provider hashes or refund idempotency keys", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const service = new PaymentFinanceReadService();
+
+    const result = await db.transaction().execute((trx) =>
+      service.getReservationPaymentHistory(trx, ready.fixture.actor, {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reservationId: ready.held.reservation.id
+      })
+    );
+
+    expect(result.reservation).toMatchObject({
+      id: ready.held.reservation.id,
+      reservationReference: ready.held.reservation.reservationReference,
+      totalMinor: ready.payment.paymentIntent.amountMinor,
+      currencyCode: ready.payment.paymentIntent.currencyCode
+    });
+    expect(result.paymentIntents).toHaveLength(1);
+    expect(result.verifiedPayments).toHaveLength(1);
+    expect(result.reconciliations).toHaveLength(1);
+    expect(result.refundRequests).toHaveLength(1);
+    expect(result.refundSubmissions).toHaveLength(1);
+    expect(result.refundSubmissions[0]).toMatchObject({
+      attemptSequence: 1,
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+    expect(result.verifiedPayments[0]).not.toHaveProperty("payloadSha256");
+    expect(result.refundSubmissions[0]).not.toHaveProperty("idempotencyKey");
+  });
+
+  it("lists an OPEN refund reconciliation with its current operational refund state", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const service = new PaymentFinanceReadService();
+
+    const result = await db.transaction().execute((trx) =>
+      service.listReconciliations(trx, ready.fixture.actor, {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        filters: {
+          status: "OPEN",
+          requiredAction: "REFUND_REQUIRED",
+          reasonCode: "INVENTORY_HOLD_EXPIRED",
+          limit: 20
+        }
+      })
+    );
+
+    expect(result.nextCursor).toBeNull();
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      refundRequestId: ready.refundRequest.id,
+      latestRefundSubmissionId: ready.submitted.submission.id,
+      latestRefundAttemptSequence: 1,
+      latestProviderRefundId: ready.submitted.submission.providerRefundId,
+      refundState: "SUBMITTED"
+    });
+    expect(result.items[0]?.paymentEvidence).toMatchObject({
+      id: ready.evidence.evidence.id,
+      providerPaymentId: ready.refundRequest.provider_payment_id,
+      amountMinor: ready.refundRequest.amount_minor,
+      currencyCode: ready.refundRequest.currency_code
+    });
+    expect(result.items[0]?.paymentEvidence).not.toHaveProperty("payloadSha256");
+  });
+
+  it("shows failed refund lifecycle detail and the subsequent deterministic retry attempt", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const failedRaw = phase5c3RefundRawBody(ready, {
+      eventType: "refund.failed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+    await phase5c3Handle(failedRaw, `evt_refund_5d1_failed_${randomUUID().replaceAll("-", "")}`);
+
+    const retryGateway = new FakeRazorpayRefundGateway();
+    retryGateway.status = "pending";
+    const retry = await phase5c2Submit(ready, retryGateway);
+    expect(retry.submission.attemptSequence).toBe(2);
+
+    const service = new PaymentFinanceReadService();
+    const detail = await db.transaction().execute((trx) =>
+      service.getReconciliationDetail(trx, ready.fixture.actor, {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reconciliationCaseId: ready.refundRequest.reconciliation_case_id
+      })
+    );
+
+    expect(detail.reconciliation.status).toBe("OPEN");
+    expect(detail.refundRequest?.id).toBe(ready.refundRequest.id);
+    expect(detail.refundSubmissions.map((item) => item.attemptSequence)).toEqual([1, 2]);
+    expect(detail.refundFinalizations).toHaveLength(1);
+    expect(detail.refundFinalizations[0]?.status).toBe("FAILED");
+    expect(detail.refundProviderEvents).toHaveLength(1);
+    expect(detail.refundProviderEvents[0]?.eventType).toBe("refund.failed");
+    expect(detail.refundSubmissions[0]).not.toHaveProperty("idempotencyKey");
+    expect(detail.refundProviderEvents[0]).not.toHaveProperty("payloadSha256");
+  });
+
+  it("moves a processed refund out of the OPEN queue while keeping it visible as RESOLVED", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const processedRaw = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+    await phase5c3Handle(
+      processedRaw,
+      `evt_refund_5d1_processed_${randomUUID().replaceAll("-", "")}`
+    );
+
+    const service = new PaymentFinanceReadService();
+    const [open, resolved] = await db.transaction().execute(async (trx) => {
+      const openResult = await service.listReconciliations(trx, ready.fixture.actor, {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        filters: { status: "OPEN", limit: 20 }
+      });
+      const resolvedResult = await service.listReconciliations(trx, ready.fixture.actor, {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        filters: { status: "RESOLVED", limit: 20 }
+      });
+      return [openResult, resolvedResult] as const;
+    });
+
+    expect(open.items).toHaveLength(0);
+    expect(resolved.items).toHaveLength(1);
+    expect(resolved.items[0]).toMatchObject({
+      refundRequestId: ready.refundRequest.id,
+      refundState: "PROCESSED"
+    });
+    expect(resolved.items[0]?.reconciliation.status).toBe("RESOLVED");
+  });
+
+  it("paginates the property reconciliation queue without repeating a case", async () => {
+    const ready = await phase5c1ReadyEvidence();
+    const confirmed = await phase5c1Process(ready);
+    expect(confirmed.outcome).toBe("RESERVATION_CONFIRMED");
+
+    const reconciliationIds: string[] = [];
+    for (const marker of ["a", "b"]) {
+      const evidence = await db.transaction().execute((trx) =>
+        new VerifiedPaymentEvidenceService().record(
+          trx,
+          {
+            organizationId: ready.fixture.organizationId,
+            propertyId: ready.fixture.propertyId,
+            reservationId: ready.held.reservation.id,
+            paymentIntentId: ready.payment.paymentIntent.id,
+            provider: "RAZORPAY",
+            providerEventId: `evt_5d1_${marker}_${randomUUID()}`,
+            providerPaymentId: `pay_5d1_${marker}_${randomUUID()}`,
+            providerOrderId: `order_5d1_${marker}_${randomUUID()}`,
+            amountMinor: ready.payment.paymentIntent.amountMinor,
+            currencyCode: ready.payment.paymentIntent.currencyCode,
+            verificationMethod: "WEBHOOK_SIGNATURE",
+            payloadSha256: marker.repeat(64)
+          },
+          metadata()
+        )
+      );
+      const processed = await phase5c1Process(ready, evidence.evidence.id);
+      expect(processed.outcome).toBe("RECONCILIATION_REQUIRED");
+      reconciliationIds.push(processed.reconciliationCaseId as string);
+    }
+
+    const service = new PaymentFinanceReadService();
+    const first = await db.transaction().execute((trx) =>
+      service.listReconciliations(trx, ready.fixture.actor, {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        filters: { status: "OPEN", requiredAction: "REFUND_REQUIRED", limit: 1 }
+      })
+    );
+    expect(first.items).toHaveLength(1);
+    expect(first.nextCursor).toBeTruthy();
+
+    const second = await db.transaction().execute((trx) =>
+      service.listReconciliations(trx, ready.fixture.actor, {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        filters: {
+          status: "OPEN",
+          requiredAction: "REFUND_REQUIRED",
+          limit: 1,
+          cursor: first.nextCursor
+        }
+      })
+    );
+
+    expect(second.items).toHaveLength(1);
+    expect(second.items[0]?.reconciliation.id).not.toBe(first.items[0]?.reconciliation.id);
+    expect(
+      new Set([first.items[0]?.reconciliation.id, second.items[0]?.reconciliation.id])
+    ).toEqual(new Set(reconciliationIds));
+  });
+
+  it("requires FINANCE_READ even when the user can otherwise read the reservation", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const viewer: ActorContext = {
+      ...ready.fixture.actor,
+      organizationMemberships: ready.fixture.actor.organizationMemberships.map((membership) => ({
+        ...membership,
+        role: "VIEWER" as const
+      })),
+      propertyGrants: []
+    };
+
+    const service = new PaymentFinanceReadService();
+    await expect(
+      db.transaction().execute((trx) =>
+        service.getReservationPaymentHistory(trx, viewer, {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id
+        })
+      )
+    ).rejects.toMatchObject({ code: "ACCESS_DENIED", statusCode: 403 });
   });
 });
