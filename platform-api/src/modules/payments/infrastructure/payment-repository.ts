@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Selectable, Transaction } from "kysely";
+import { sql, type Selectable, type Transaction } from "kysely";
 import type { Database, JsonObject } from "../../../infrastructure/database/types.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import type { PaymentIntentStatus, PaymentIntentView } from "../domain/payment.js";
@@ -56,6 +56,49 @@ export class PaymentRepository {
       .where("property_id", "=", propertyId)
       .where("reservation_id", "=", reservationId)
       .where("id", "=", paymentIntentId)
+      .executeTakeFirst();
+  }
+
+  async findByIdForUpdate(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reservationId: string,
+    paymentIntentId: string
+  ): Promise<PaymentIntentRecord | undefined> {
+    return trx
+      .selectFrom("payment_intents")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("reservation_id", "=", reservationId)
+      .where("id", "=", paymentIntentId)
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
+  async transitionStatus(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reservationId: string,
+    paymentIntentId: string,
+    fromStatus: PaymentIntentStatus,
+    toStatus: PaymentIntentStatus
+  ): Promise<PaymentIntentRecord | undefined> {
+    return trx
+      .updateTable("payment_intents")
+      .set({
+        status: toStatus,
+        version: sql<number>`version + 1`,
+        updated_at: sql<Date>`now()`
+      })
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("reservation_id", "=", reservationId)
+      .where("id", "=", paymentIntentId)
+      .where("status", "=", fromStatus)
+      .returningAll()
       .executeTakeFirst();
   }
 

@@ -20,7 +20,8 @@ import {
 } from "../infrastructure/inventory-allocation-repository.js";
 import {
   InventoryHoldRepository,
-  type InventoryHoldItemRecord
+  type InventoryHoldItemRecord,
+  type InventoryHoldRecord
 } from "../infrastructure/inventory-hold-repository.js";
 import { InventoryRepository } from "../infrastructure/inventory-repository.js";
 
@@ -83,6 +84,14 @@ export class InventoryAllocationService {
     }
   }
 
+  private normalizedReference(confirmationReference: string): string {
+    const normalizedReference = confirmationReference.trim();
+    if (normalizedReference.length < 3 || normalizedReference.length > 200) {
+      throw new ValidationError("confirmationReference must contain between 3 and 200 characters");
+    }
+    return normalizedReference;
+  }
+
   private async assertNotReservationOwnedHold(
     trx: Transaction<Database>,
     organizationId: string,
@@ -126,34 +135,21 @@ export class InventoryAllocationService {
     return { allocation: allocationView(allocation, items) };
   }
 
-  async confirmHold(
+  private async confirmLockedHold(
     trx: Transaction<Database>,
-    actor: ActorContext,
     organizationId: string,
     propertyId: string,
-    holdId: string,
-    confirmationReference: string,
+    hold: InventoryHoldRecord,
+    normalizedReference: string,
+    actor: ActorContext | null,
+    actorType: "USER" | "PROVIDER",
     request: RequestMetadata
   ): Promise<InventoryAllocationResult> {
-    const normalizedReference = confirmationReference.trim();
-    if (normalizedReference.length < 3 || normalizedReference.length > 200) {
-      throw new ValidationError("confirmationReference must contain between 3 and 200 characters");
-    }
-
-    await this.property(trx, actor, organizationId, propertyId, Permissions.INVENTORY_MANAGE);
-
-    const hold = await this.holds.findHoldForUpdate(trx, organizationId, propertyId, holdId);
-    if (!hold) {
-      throw new NotFoundError("Inventory hold not found");
-    }
-
-    await this.assertNotReservationOwnedHold(trx, organizationId, propertyId, holdId);
-
     const existingForHold = await this.allocations.findByHold(
       trx,
       organizationId,
       propertyId,
-      holdId
+      hold.id
     );
     if (existingForHold) {
       return this.existingAllocationResult(trx, existingForHold, normalizedReference);
@@ -198,11 +194,11 @@ export class InventoryAllocationService {
     const allocation = await this.allocations.createAllocation(trx, {
       organizationId,
       propertyId,
-      holdId,
+      holdId: hold.id,
       confirmationReference: normalizedReference,
       startDate: hold.start_date,
       endDate: hold.end_date,
-      confirmedByUserId: actor.userId
+      confirmedByUserId: actor?.userId ?? null
     });
 
     if (!allocation) {
@@ -210,7 +206,7 @@ export class InventoryAllocationService {
         trx,
         organizationId,
         propertyId,
-        holdId
+        hold.id
       );
       if (racedForHold) {
         return this.existingAllocationResult(trx, racedForHold, normalizedReference);
@@ -277,13 +273,13 @@ export class InventoryAllocationService {
         eventType: "ALLOCATION_CONFIRMED",
         details: {
           allocationId: allocation.id,
-          holdId,
+          holdId: hold.id,
           confirmationReference: normalizedReference,
           bucketType: holdItem.bucket_type,
           heldDelta: -holdNight.quantity,
           confirmedDelta: holdNight.quantity
         },
-        actorUserId: actor.userId,
+        actorUserId: actor?.userId ?? null,
         request
       });
     }
@@ -292,7 +288,7 @@ export class InventoryAllocationService {
       trx,
       hold.id,
       "RELEASED",
-      actor.userId,
+      actor?.userId ?? null,
       `CONVERTED_TO_CONFIRMED_ALLOCATION:${allocation.id}`
     );
 
@@ -300,6 +296,7 @@ export class InventoryAllocationService {
 
     await new AuditService(trx).record({
       actor,
+      actorType,
       organizationId,
       propertyId,
       action: "inventory.allocation.confirmed",
@@ -318,6 +315,101 @@ export class InventoryAllocationService {
     });
 
     return { allocation: view };
+  }
+
+  async confirmHold(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    holdId: string,
+    confirmationReference: string,
+    request: RequestMetadata
+  ): Promise<InventoryAllocationResult> {
+    const normalizedReference = this.normalizedReference(confirmationReference);
+
+    await this.property(trx, actor, organizationId, propertyId, Permissions.INVENTORY_MANAGE);
+
+    const hold = await this.holds.findHoldForUpdate(trx, organizationId, propertyId, holdId);
+    if (!hold) {
+      throw new NotFoundError("Inventory hold not found");
+    }
+
+    await this.assertNotReservationOwnedHold(trx, organizationId, propertyId, holdId);
+
+    return this.confirmLockedHold(
+      trx,
+      organizationId,
+      propertyId,
+      hold,
+      normalizedReference,
+      actor,
+      "USER",
+      request
+    );
+  }
+
+  async confirmReservationHold(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reservationId: string,
+    holdId: string,
+    confirmationReference: string,
+    request: RequestMetadata
+  ): Promise<InventoryAllocationResult> {
+    const normalizedReference = this.normalizedReference(confirmationReference);
+    const hold = await this.holds.findHoldForUpdate(trx, organizationId, propertyId, holdId);
+    if (!hold) {
+      throw new NotFoundError("Inventory hold not found");
+    }
+
+    const owner = await this.allocations.findReservationOwnerByHold(
+      trx,
+      organizationId,
+      propertyId,
+      holdId
+    );
+    if (!owner || owner.id !== reservationId) {
+      throw new ConflictError("Inventory hold is not owned by the expected reservation", {
+        reservationId,
+        inventoryHoldId: holdId,
+        actualReservationId: owner?.id ?? null
+      });
+    }
+
+    if (owner.status === "CONFIRMED") {
+      const existing = await this.allocations.findByHold(trx, organizationId, propertyId, holdId);
+      if (!existing) {
+        throw new ConflictError("Confirmed reservation has no confirmed inventory allocation", {
+          reservationId,
+          inventoryHoldId: holdId
+        });
+      }
+      return this.existingAllocationResult(trx, existing, normalizedReference);
+    }
+
+    if (owner.status !== "PAYMENT_PENDING") {
+      throw new ConflictError(
+        "Reservation-owned inventory can be confirmed only from PAYMENT_PENDING",
+        {
+          reservationId,
+          reservationStatus: owner.status,
+          inventoryHoldId: holdId
+        }
+      );
+    }
+
+    return this.confirmLockedHold(
+      trx,
+      organizationId,
+      propertyId,
+      hold,
+      normalizedReference,
+      null,
+      "PROVIDER",
+      request
+    );
   }
 
   async getAllocation(

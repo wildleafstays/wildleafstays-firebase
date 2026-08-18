@@ -151,16 +151,6 @@ export class VerifiedPaymentEvidenceService {
       input.reservationId
     );
     if (!reservation) throw new NotFoundError("Reservation not found");
-    if (reservation.status !== "PAYMENT_PENDING")
-      throw new ConflictError(
-        "Verified provider evidence can be recorded only for a PAYMENT_PENDING reservation",
-        { reservationId: reservation.id, reservationStatus: reservation.status }
-      );
-    if (intent.status !== "PENDING")
-      throw new ConflictError(
-        "New verified provider evidence can be recorded only for a pending payment intent",
-        { paymentIntentId: intent.id, paymentIntentStatus: intent.status }
-      );
 
     const created = await this.evidence.create(trx, { ...input, request });
     if (!created) {
@@ -187,7 +177,9 @@ export class VerifiedPaymentEvidenceService {
         amountMinor: created.amount_minor,
         currencyCode: created.currency_code,
         verificationMethod: created.verification_method,
-        payloadSha256: created.payload_sha256
+        payloadSha256: created.payload_sha256,
+        observedPaymentIntentStatus: intent.status,
+        observedReservationStatus: reservation.status
       },
       actorUserId: null,
       request
@@ -201,14 +193,22 @@ export class VerifiedPaymentEvidenceService {
       action: "payment.verified_evidence.recorded",
       entityType: "payment_provider_evidence",
       entityId: created.id,
-      after: evidenceView,
+      after: {
+        ...evidenceView,
+        observedPaymentIntentStatus: intent.status,
+        observedReservationStatus: reservation.status
+      },
       request
     });
     await new OutboxService(trx).enqueue({
       aggregateType: "payment_intent",
       aggregateId: intent.id,
       eventType: "payment.verified_evidence.recorded.v1",
-      payload: evidenceView
+      payload: {
+        ...evidenceView,
+        observedPaymentIntentStatus: intent.status,
+        observedReservationStatus: reservation.status
+      }
     });
     return { created: true, evidence: evidenceView };
   }

@@ -56,6 +56,26 @@ export class PaymentEvidenceRepository {
       .executeTakeFirst();
   }
 
+  async findByIdForUpdate(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reservationId: string,
+    paymentIntentId: string,
+    paymentEvidenceId: string
+  ): Promise<PaymentProviderEvidenceRecord | undefined> {
+    return trx
+      .selectFrom("payment_provider_evidence")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("reservation_id", "=", reservationId)
+      .where("payment_intent_id", "=", paymentIntentId)
+      .where("id", "=", paymentEvidenceId)
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
   async create(
     trx: Transaction<Database>,
     input: {

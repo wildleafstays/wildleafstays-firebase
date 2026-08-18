@@ -9,6 +9,7 @@ import { InventoryHoldService } from "../src/modules/inventory/application/inven
 import { QuoteHoldService } from "../src/modules/quotes/application/quote-hold-service.js";
 import { HeldReservationService } from "../src/modules/reservations/application/held-reservation-service.js";
 import { VerifiedPaymentEvidenceService } from "../src/modules/payments/application/verified-payment-evidence-service.js";
+import { VerifiedPaymentProcessor } from "../src/modules/payments/application/verified-payment-processor.js";
 import { BeginPaymentService } from "../src/modules/reservations/application/begin-payment-service.js";
 import { PromotionRuleService } from "../src/modules/commercial/application/promotion-rule-service.js";
 import { CreateOrganizationService } from "../src/modules/organizations/application/create-organization-service.js";
@@ -892,5 +893,392 @@ describe("Phase 5B1 verified payment evidence boundary", () => {
           )
         )
     ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+});
+
+describe("Phase 5B2 canonical verified payment processing", () => {
+  function phase5b2EvidenceInput(
+    fixture: Fixture,
+    payment: Awaited<ReturnType<typeof beginPayment>>,
+    overrides: Partial<{
+      providerEventId: string;
+      providerPaymentId: string;
+      payloadSha256: string;
+    }> = {}
+  ) {
+    return {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      reservationId: payment.reservation.id,
+      paymentIntentId: payment.paymentIntent.id,
+      provider: "RAZORPAY",
+      providerEventId: overrides.providerEventId ?? `evt_${randomUUID()}`,
+      providerPaymentId: overrides.providerPaymentId ?? `pay_${randomUUID()}`,
+      providerOrderId: `order_${randomUUID()}`,
+      amountMinor: payment.paymentIntent.amountMinor,
+      currencyCode: payment.paymentIntent.currencyCode,
+      verificationMethod: "WEBHOOK_SIGNATURE" as const,
+      payloadSha256: overrides.payloadSha256 ?? "b".repeat(64)
+    };
+  }
+
+  async function phase5b2ReadyPayment() {
+    const fixture = await createFixture();
+    await configureCommercialCore(fixture);
+    await setPromotionMode(fixture, "NO_PROMOTIONS");
+    const quoted = await createFinalQuote(fixture);
+    const quoteHold = await createQuoteHold(fixture, quoted.quote.id);
+    const held = await createHeldReservation(fixture, quoted.quote.id);
+    const payment = await beginPayment(fixture, held.reservation.id);
+    const evidence = await db
+      .transaction()
+      .execute((trx) =>
+        new VerifiedPaymentEvidenceService().record(
+          trx,
+          phase5b2EvidenceInput(fixture, payment),
+          metadata()
+        )
+      );
+    return { fixture, quoteHold, held, payment, evidence };
+  }
+
+  async function processPhase5b2(
+    ready: Awaited<ReturnType<typeof phase5b2ReadyPayment>>,
+    evidenceId = ready.evidence.evidence.id,
+    service = new VerifiedPaymentProcessor()
+  ) {
+    return db.transaction().execute((trx) =>
+      service.process(
+        trx,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id,
+          paymentIntentId: ready.payment.paymentIntent.id,
+          paymentEvidenceId: evidenceId
+        },
+        metadata()
+      )
+    );
+  }
+
+  it("atomically converts verified payment into payment success, confirmed reservation and confirmed inventory", async () => {
+    const ready = await phase5b2ReadyPayment();
+    const result = await processPhase5b2(ready);
+
+    expect(result).toMatchObject({
+      processed: true,
+      outcome: "RESERVATION_CONFIRMED",
+      paymentIntentId: ready.payment.paymentIntent.id,
+      reservationId: ready.held.reservation.id,
+      paymentEvidenceId: ready.evidence.evidence.id
+    });
+    expect(result.paymentSuccessId).toBeTruthy();
+    expect(result.inventoryAllocationId).toBeTruthy();
+    expect(result.reconciliationCaseId).toBeNull();
+
+    const intent = await db
+      .selectFrom("payment_intents")
+      .select("status")
+      .where("id", "=", ready.payment.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+    const reservation = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", ready.held.reservation.id)
+      .executeTakeFirstOrThrow();
+    const hold = await db
+      .selectFrom("inventory_holds")
+      .select(["status", "release_reason"])
+      .where("id", "=", ready.quoteHold.quoteHold.inventoryHoldId)
+      .executeTakeFirstOrThrow();
+    const allocation = await db
+      .selectFrom("inventory_allocations")
+      .select(["id", "status", "confirmed_by_user_id"])
+      .where("hold_id", "=", ready.quoteHold.quoteHold.inventoryHoldId)
+      .executeTakeFirstOrThrow();
+
+    expect(intent.status).toBe("SUCCEEDED");
+    expect(reservation.status).toBe("CONFIRMED");
+    expect(hold.status).toBe("RELEASED");
+    expect(hold.release_reason).toContain("CONVERTED_TO_CONFIRMED_ALLOCATION");
+    expect(allocation.status).toBe("CONFIRMED");
+    expect(allocation.confirmed_by_user_id).toBeNull();
+    expect(allocation.id).toBe(result.inventoryAllocationId);
+
+    const history = await db
+      .selectFrom("reservation_status_history")
+      .select(["from_status", "to_status", "reason", "actor_user_id"])
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .where("to_status", "=", "CONFIRMED")
+      .executeTakeFirstOrThrow();
+    expect(history).toEqual({
+      from_status: "PAYMENT_PENDING",
+      to_status: "CONFIRMED",
+      reason: "VERIFIED_PAYMENT_SUCCEEDED",
+      actor_user_id: null
+    });
+
+    const audit = await db
+      .selectFrom("audit_events")
+      .select(["action", "actor_type"])
+      .where("entity_type", "=", "payment_intent")
+      .where("entity_id", "=", ready.payment.paymentIntent.id)
+      .where("action", "=", "payment.succeeded")
+      .executeTakeFirstOrThrow();
+    expect(audit).toEqual({ action: "payment.succeeded", actor_type: "PROVIDER" });
+
+    const outbox = await db
+      .selectFrom("outbox_events")
+      .select("event_type")
+      .where("aggregate_type", "=", "reservation")
+      .where("aggregate_id", "=", ready.held.reservation.id)
+      .where("event_type", "=", "reservation.confirmed.v1")
+      .executeTakeFirstOrThrow();
+    expect(outbox.event_type).toBe("reservation.confirmed.v1");
+  });
+
+  it("is idempotent when the same verified evidence is processed again", async () => {
+    const ready = await phase5b2ReadyPayment();
+    const first = await processPhase5b2(ready);
+    const second = await processPhase5b2(ready);
+
+    expect(first.processed).toBe(true);
+    expect(second.processed).toBe(false);
+    expect(second.outcome).toBe("RESERVATION_CONFIRMED");
+    expect(second.paymentSuccessId).toBe(first.paymentSuccessId);
+    expect(second.inventoryAllocationId).toBe(first.inventoryAllocationId);
+
+    const [successes, allocations, confirmedHistory, succeededEvents] = await Promise.all([
+      db
+        .selectFrom("payment_successes")
+        .select("id")
+        .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+        .execute(),
+      db
+        .selectFrom("inventory_allocations")
+        .select("id")
+        .where("hold_id", "=", ready.quoteHold.quoteHold.inventoryHoldId)
+        .execute(),
+      db
+        .selectFrom("reservation_status_history")
+        .select("id")
+        .where("reservation_id", "=", ready.held.reservation.id)
+        .where("to_status", "=", "CONFIRMED")
+        .execute(),
+      db
+        .selectFrom("payment_events")
+        .select("id")
+        .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+        .where("event_type", "=", "PAYMENT_SUCCEEDED")
+        .execute()
+    ]);
+    expect(successes).toHaveLength(1);
+    expect(allocations).toHaveLength(1);
+    expect(confirmedHistory).toHaveLength(1);
+    expect(succeededEvents).toHaveLength(1);
+  });
+
+  it("records a second distinct verified payment after confirmation and reconciles it as a duplicate payment", async () => {
+    const ready = await phase5b2ReadyPayment();
+    const first = await processPhase5b2(ready);
+
+    const duplicateEvidence = await db.transaction().execute((trx) =>
+      new VerifiedPaymentEvidenceService().record(
+        trx,
+        phase5b2EvidenceInput(ready.fixture, ready.payment, {
+          providerEventId: `evt_${randomUUID()}`,
+          providerPaymentId: `pay_${randomUUID()}`,
+          payloadSha256: "c".repeat(64)
+        }),
+        metadata()
+      )
+    );
+    expect(duplicateEvidence.created).toBe(true);
+
+    const duplicate = await processPhase5b2(ready, duplicateEvidence.evidence.id);
+    expect(duplicate.processed).toBe(true);
+    expect(duplicate.outcome).toBe("RECONCILIATION_REQUIRED");
+    expect(duplicate.paymentSuccessId).toBe(first.paymentSuccessId);
+    expect(duplicate.reconciliationCaseId).toBeTruthy();
+
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select(["reason_code", "required_action", "status"])
+      .where("payment_evidence_id", "=", duplicateEvidence.evidence.id)
+      .executeTakeFirstOrThrow();
+    expect(reconciliation).toEqual({
+      reason_code: "DUPLICATE_VERIFIED_PAYMENT",
+      required_action: "REFUND_REQUIRED",
+      status: "OPEN"
+    });
+
+    const successes = await db
+      .selectFrom("payment_successes")
+      .select("id")
+      .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+      .execute();
+    expect(successes).toHaveLength(1);
+  });
+
+  it("is idempotent when the same duplicate payment evidence is reconciled again", async () => {
+    const ready = await phase5b2ReadyPayment();
+    await processPhase5b2(ready);
+    const duplicateEvidence = await db.transaction().execute((trx) =>
+      new VerifiedPaymentEvidenceService().record(
+        trx,
+        phase5b2EvidenceInput(ready.fixture, ready.payment, {
+          providerEventId: `evt_${randomUUID()}`,
+          providerPaymentId: `pay_${randomUUID()}`,
+          payloadSha256: "d".repeat(64)
+        }),
+        metadata()
+      )
+    );
+
+    const first = await processPhase5b2(ready, duplicateEvidence.evidence.id);
+    const second = await processPhase5b2(ready, duplicateEvidence.evidence.id);
+    expect(first.processed).toBe(true);
+    expect(second.processed).toBe(false);
+    expect(second.reconciliationCaseId).toBe(first.reconciliationCaseId);
+
+    const cases = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select("id")
+      .where("payment_evidence_id", "=", duplicateEvidence.evidence.id)
+      .execute();
+    expect(cases).toHaveLength(1);
+  });
+
+  it("treats a verified payment after hold expiry as real money and opens a refund-required reconciliation without overselling", async () => {
+    const ready = await phase5b2ReadyPayment();
+    const afterExpiry = new Date(new Date(ready.payment.paymentIntent.expiresAt).getTime() + 1_000);
+    const result = await processPhase5b2(
+      ready,
+      ready.evidence.evidence.id,
+      new VerifiedPaymentProcessor(() => afterExpiry)
+    );
+
+    expect(result.outcome).toBe("RECONCILIATION_REQUIRED");
+    expect(result.inventoryAllocationId).toBeNull();
+    expect(result.reconciliationCaseId).toBeTruthy();
+
+    const intent = await db
+      .selectFrom("payment_intents")
+      .select("status")
+      .where("id", "=", ready.payment.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+    const reservation = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", ready.held.reservation.id)
+      .executeTakeFirstOrThrow();
+    const allocation = await db
+      .selectFrom("inventory_allocations")
+      .select("id")
+      .where("hold_id", "=", ready.quoteHold.quoteHold.inventoryHoldId)
+      .executeTakeFirst();
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select(["reason_code", "required_action"])
+      .where("id", "=", result.reconciliationCaseId as string)
+      .executeTakeFirstOrThrow();
+
+    expect(intent.status).toBe("SUCCEEDED");
+    expect(reservation.status).toBe("PAYMENT_PENDING");
+    expect(allocation).toBeUndefined();
+    expect(reconciliation).toEqual({
+      reason_code: "INVENTORY_HOLD_EXPIRED",
+      required_action: "REFUND_REQUIRED"
+    });
+  });
+
+  it("opens refund reconciliation when verified money arrives after the reservation hold was released", async () => {
+    const ready = await phase5b2ReadyPayment();
+    await db
+      .transaction()
+      .execute((trx) =>
+        new InventoryHoldService().releaseHold(
+          trx,
+          ready.fixture.actor,
+          ready.fixture.organizationId,
+          ready.fixture.propertyId,
+          ready.quoteHold.quoteHold.inventoryHoldId,
+          "TEST_RELEASE_AFTER_VERIFIED_EVIDENCE",
+          metadata()
+        )
+      );
+
+    const result = await processPhase5b2(ready);
+    expect(result.outcome).toBe("RECONCILIATION_REQUIRED");
+
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select(["reason_code", "required_action"])
+      .where("id", "=", result.reconciliationCaseId as string)
+      .executeTakeFirstOrThrow();
+    expect(reconciliation).toEqual({
+      reason_code: "INVENTORY_HOLD_NOT_ACTIVE",
+      required_action: "REFUND_REQUIRED"
+    });
+  });
+
+  it("persists verified money against a non-payable reservation as manual reconciliation instead of discarding payment proof", async () => {
+    const ready = await phase5b2ReadyPayment();
+    await db
+      .updateTable("reservations")
+      .set({ status: "CANCELLED" })
+      .where("id", "=", ready.held.reservation.id)
+      .execute();
+
+    const result = await processPhase5b2(ready);
+    expect(result.outcome).toBe("RECONCILIATION_REQUIRED");
+
+    const [intent, reconciliation] = await Promise.all([
+      db
+        .selectFrom("payment_intents")
+        .select("status")
+        .where("id", "=", ready.payment.paymentIntent.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("payment_reconciliation_cases")
+        .select(["reason_code", "required_action"])
+        .where("id", "=", result.reconciliationCaseId as string)
+        .executeTakeFirstOrThrow()
+    ]);
+    expect(intent.status).toBe("SUCCEEDED");
+    expect(reconciliation).toEqual({
+      reason_code: "RESERVATION_STATE_MISMATCH",
+      required_action: "MANUAL_REVIEW"
+    });
+  });
+
+  it("keeps reservation-owned confirmed inventory protected from generic release after payment confirmation", async () => {
+    const ready = await phase5b2ReadyPayment();
+    const result = await processPhase5b2(ready);
+    expect(result.inventoryAllocationId).toBeTruthy();
+
+    await expect(
+      db
+        .transaction()
+        .execute((trx) =>
+          new InventoryAllocationService().releaseAllocation(
+            trx,
+            ready.fixture.actor,
+            ready.fixture.organizationId,
+            ready.fixture.propertyId,
+            result.inventoryAllocationId as string,
+            "GENERIC_RELEASE_MUST_NOT_BYPASS_RESERVATION",
+            metadata()
+          )
+        )
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    const allocation = await db
+      .selectFrom("inventory_allocations")
+      .select("status")
+      .where("id", "=", result.inventoryAllocationId as string)
+      .executeTakeFirstOrThrow();
+    expect(allocation.status).toBe("CONFIRMED");
   });
 });
