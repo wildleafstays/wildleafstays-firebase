@@ -33,5 +33,6 @@ export interface PaymentReconciliationCasesTable {
   created_at: Generated<Date>;
   resolved_at: Date | null;
   resolved_by_user_id: string | null;
+  resolution_code: string | null;
   resolution_note: string | null;
 }

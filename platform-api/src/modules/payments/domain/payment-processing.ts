@@ -27,6 +27,14 @@ export const PaymentReconciliationActions = {
 export type PaymentReconciliationAction =
   (typeof PaymentReconciliationActions)[keyof typeof PaymentReconciliationActions];
 
+export const PaymentReconciliationResolutionCodes = {
+  PROVIDER_REFUND_PROCESSED: "PROVIDER_REFUND_PROCESSED",
+  PAYMENT_RETAINED: "PAYMENT_RETAINED"
+} as const;
+
+export type PaymentReconciliationResolutionCode =
+  (typeof PaymentReconciliationResolutionCodes)[keyof typeof PaymentReconciliationResolutionCodes];
+
 export interface PaymentSuccessView extends JsonObject {
   id: string;
   paymentIntentId: string;
@@ -52,6 +60,8 @@ export interface PaymentReconciliationView extends JsonObject {
   details: JsonObject;
   createdAt: string;
   resolvedAt: string | null;
+  resolvedByUserId: string | null;
+  resolutionCode: PaymentReconciliationResolutionCode | null;
   resolutionNote: string | null;
 }
 

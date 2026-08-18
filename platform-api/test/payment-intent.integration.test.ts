@@ -19,6 +19,7 @@ import {
 } from "../src/modules/payments/application/razorpay-refund-submission-service.js";
 import { RazorpayWebhookService } from "../src/modules/payments/application/razorpay-webhook-service.js";
 import { PaymentFinanceReadService } from "../src/modules/payments/application/payment-finance-read-service.js";
+import { PaymentReconciliationCommandService } from "../src/modules/payments/application/payment-reconciliation-command-service.js";
 import { PaymentRefundCommandService } from "../src/modules/payments/application/payment-refund-command-service.js";
 import { VerifiedPaymentProcessor } from "../src/modules/payments/application/verified-payment-processor.js";
 import {
@@ -3233,5 +3234,339 @@ describe("Phase 5D2 authorized refund submission command", () => {
     expect(retry.submission).not.toHaveProperty("idempotencyKey");
     expect(gateway.calls).toHaveLength(1);
     expect(gateway.calls[0]?.notes?.["refundAttemptSequence"]).toBe("2");
+  });
+});
+async function phase5d3ReadyManualReview() {
+  const ready = await phase5c1ReadyEvidence();
+
+  await db
+    .updateTable("reservations")
+    .set({ status: "CANCELLED" })
+    .where("id", "=", ready.held.reservation.id)
+    .execute();
+
+  const processed = await phase5c1Process(ready);
+  expect(processed.outcome).toBe("RECONCILIATION_REQUIRED");
+  expect(processed.reconciliationCaseId).toBeTruthy();
+
+  const reconciliationCaseId = processed.reconciliationCaseId as string;
+  const reconciliation = await db
+    .selectFrom("payment_reconciliation_cases")
+    .selectAll()
+    .where("id", "=", reconciliationCaseId)
+    .executeTakeFirstOrThrow();
+
+  expect(reconciliation).toMatchObject({
+    required_action: "MANUAL_REVIEW",
+    status: "OPEN",
+    resolution_code: null,
+    resolved_by_user_id: null
+  });
+
+  return {
+    ...ready,
+    processed,
+    reconciliationCaseId,
+    reconciliation
+  };
+}
+
+function phase5d3SettlementActor(
+  ready: Awaited<ReturnType<typeof phase5d3ReadyManualReview>>
+): ActorContext {
+  return {
+    ...ready.fixture.actor,
+    platformRoles: ["FINANCE_MANAGER"]
+  };
+}
+
+async function phase5d3Resolve(
+  ready: Awaited<ReturnType<typeof phase5d3ReadyManualReview>>,
+  note = "Verified payment retained after finance reviewed the cancelled reservation."
+) {
+  const actor = phase5d3SettlementActor(ready);
+  const result = await new PaymentReconciliationCommandService(db).resolveManualReview(
+    actor,
+    {
+      organizationId: ready.fixture.organizationId,
+      propertyId: ready.fixture.propertyId,
+      reconciliationCaseId: ready.reconciliationCaseId,
+      resolutionCode: "PAYMENT_RETAINED",
+      note
+    },
+    metadata()
+  );
+
+  return { actor, result };
+}
+
+describe("Phase 5D3 authorized manual reconciliation resolution", () => {
+  it("resolves only the manual-review case with a structured retained-payment outcome", async () => {
+    const ready = await phase5d3ReadyManualReview();
+    const reservationBefore = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", ready.held.reservation.id)
+      .executeTakeFirstOrThrow();
+    const paymentBefore = await db
+      .selectFrom("payment_intents")
+      .select(["status", "amount_minor", "currency_code"])
+      .where("id", "=", ready.payment.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+
+    const note = "Finance confirmed that the verified payment is intentionally retained.";
+    const { actor, result } = await phase5d3Resolve(ready, note);
+
+    expect(result.created).toBe(true);
+    expect(result.reconciliation).toMatchObject({
+      id: ready.reconciliationCaseId,
+      requiredAction: "MANUAL_REVIEW",
+      status: "RESOLVED",
+      resolvedByUserId: actor.userId,
+      resolutionCode: "PAYMENT_RETAINED",
+      resolutionNote: note
+    });
+    expect(result.reconciliation.resolvedAt).toBeTruthy();
+
+    const reservationAfter = await db
+      .selectFrom("reservations")
+      .select("status")
+      .where("id", "=", ready.held.reservation.id)
+      .executeTakeFirstOrThrow();
+    const paymentAfter = await db
+      .selectFrom("payment_intents")
+      .select(["status", "amount_minor", "currency_code"])
+      .where("id", "=", ready.payment.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+
+    expect(reservationAfter).toEqual(reservationBefore);
+    expect(paymentAfter).toEqual(paymentBefore);
+
+    const [events, audits, outbox] = await Promise.all([
+      db
+        .selectFrom("payment_events")
+        .select(["event_type", "actor_user_id"])
+        .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+        .where("event_type", "=", "PAYMENT_RECONCILIATION_RESOLVED")
+        .execute(),
+      db
+        .selectFrom("audit_events")
+        .select(["action", "actor_type", "actor_user_id", "reason"])
+        .where("entity_type", "=", "payment_reconciliation_case")
+        .where("entity_id", "=", ready.reconciliationCaseId)
+        .where("action", "=", "payment.reconciliation.resolved")
+        .execute(),
+      db
+        .selectFrom("outbox_events")
+        .select(["aggregate_id", "event_type"])
+        .where("aggregate_id", "=", ready.payment.paymentIntent.id)
+        .where("event_type", "=", "payment.reconciliation.resolved.v1")
+        .execute()
+    ]);
+
+    expect(events).toEqual([
+      {
+        event_type: "PAYMENT_RECONCILIATION_RESOLVED",
+        actor_user_id: actor.userId
+      }
+    ]);
+    expect(audits).toEqual([
+      {
+        action: "payment.reconciliation.resolved",
+        actor_type: "USER",
+        actor_user_id: actor.userId,
+        reason: "PAYMENT_RETAINED"
+      }
+    ]);
+    expect(outbox).toEqual([
+      {
+        aggregate_id: ready.payment.paymentIntent.id,
+        event_type: "payment.reconciliation.resolved.v1"
+      }
+    ]);
+  });
+
+  it("returns the existing resolution on an exact retry without duplicating lifecycle records", async () => {
+    const ready = await phase5d3ReadyManualReview();
+    const note = "Finance confirmed that the verified payment is intentionally retained.";
+
+    const first = await phase5d3Resolve(ready, note);
+    const second = await phase5d3Resolve(ready, note);
+
+    expect(first.result.created).toBe(true);
+    expect(second.result.created).toBe(false);
+    expect(second.result.reconciliation).toEqual(first.result.reconciliation);
+
+    const [events, audits, outbox] = await Promise.all([
+      db
+        .selectFrom("payment_events")
+        .select("id")
+        .where("payment_intent_id", "=", ready.payment.paymentIntent.id)
+        .where("event_type", "=", "PAYMENT_RECONCILIATION_RESOLVED")
+        .execute(),
+      db
+        .selectFrom("audit_events")
+        .select("id")
+        .where("entity_type", "=", "payment_reconciliation_case")
+        .where("entity_id", "=", ready.reconciliationCaseId)
+        .where("action", "=", "payment.reconciliation.resolved")
+        .execute(),
+      db
+        .selectFrom("outbox_events")
+        .select("id")
+        .where("aggregate_id", "=", ready.payment.paymentIntent.id)
+        .where("event_type", "=", "payment.reconciliation.resolved.v1")
+        .execute()
+    ]);
+
+    expect(events).toHaveLength(1);
+    expect(audits).toHaveLength(1);
+    expect(outbox).toHaveLength(1);
+  });
+
+  it("requires SETTLEMENT_MANAGE before reading or resolving the case", async () => {
+    const ready = await phase5d3ReadyManualReview();
+
+    await expect(
+      new PaymentReconciliationCommandService(db).resolveManualReview(
+        ready.fixture.actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reconciliationCaseId: ready.reconciliationCaseId,
+          resolutionCode: "PAYMENT_RETAINED",
+          note: "Finance confirmed that the verified payment is intentionally retained."
+        },
+        metadata()
+      )
+    ).rejects.toMatchObject({ code: "ACCESS_DENIED", statusCode: 403 });
+
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select(["status", "resolution_code", "resolved_by_user_id"])
+      .where("id", "=", ready.reconciliationCaseId)
+      .executeTakeFirstOrThrow();
+
+    expect(reconciliation).toEqual({
+      status: "OPEN",
+      resolution_code: null,
+      resolved_by_user_id: null
+    });
+  });
+
+  it("refuses manual closure of a REFUND_REQUIRED case", async () => {
+    const ready = await phase5c2ReadyRefundRequest();
+    const actor: ActorContext = {
+      ...ready.fixture.actor,
+      platformRoles: ["FINANCE_MANAGER"]
+    };
+
+    await expect(
+      new PaymentReconciliationCommandService(db).resolveManualReview(
+        actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reconciliationCaseId: ready.refundRequest.reconciliation_case_id,
+          resolutionCode: "PAYMENT_RETAINED",
+          note: "Finance reviewed this case but provider refund processing remains mandatory."
+        },
+        metadata()
+      )
+    ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select(["required_action", "status", "resolution_code"])
+      .where("id", "=", ready.refundRequest.reconciliation_case_id)
+      .executeTakeFirstOrThrow();
+
+    expect(reconciliation).toEqual({
+      required_action: "REFUND_REQUIRED",
+      status: "OPEN",
+      resolution_code: null
+    });
+  });
+
+  it("rejects a different resolution note after the case has been resolved", async () => {
+    const ready = await phase5d3ReadyManualReview();
+    const first = await phase5d3Resolve(
+      ready,
+      "Finance confirmed that the verified payment is intentionally retained."
+    );
+
+    await expect(
+      new PaymentReconciliationCommandService(db).resolveManualReview(
+        first.actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reconciliationCaseId: ready.reconciliationCaseId,
+          resolutionCode: "PAYMENT_RETAINED",
+          note: "A different note must not rewrite the completed reconciliation decision."
+        },
+        metadata()
+      )
+    ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+  });
+
+  it("exposes structured manual resolution identity through the finance read layer", async () => {
+    const ready = await phase5d3ReadyManualReview();
+    const note = "Finance confirmed that the verified payment is intentionally retained.";
+    const { actor } = await phase5d3Resolve(ready, note);
+
+    const detail = await db.transaction().execute((trx) =>
+      new PaymentFinanceReadService().getReconciliationDetail(trx, actor, {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        reconciliationCaseId: ready.reconciliationCaseId
+      })
+    );
+
+    expect(detail.reconciliation).toMatchObject({
+      status: "RESOLVED",
+      resolvedByUserId: actor.userId,
+      resolutionCode: "PAYMENT_RETAINED",
+      resolutionNote: note
+    });
+  });
+
+  it("keeps the resolved reconciliation lifecycle immutable at the database boundary", async () => {
+    const ready = await phase5d3ReadyManualReview();
+    await phase5d3Resolve(ready);
+
+    await expect(
+      db
+        .updateTable("payment_reconciliation_cases")
+        .set({ resolution_note: "Attempted mutation after resolution must be rejected." })
+        .where("id", "=", ready.reconciliationCaseId)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+
+  it("assigns the provider refund resolution code when a verified refund closes the case", async () => {
+    const ready = await phase5c3ReadySubmission();
+    const processedRaw = phase5c3RefundRawBody(ready, {
+      eventType: "refund.processed",
+      providerRefundId: ready.submitted.submission.providerRefundId
+    });
+
+    await phase5c3Handle(
+      processedRaw,
+      `evt_refund_5d3_processed_${randomUUID().replaceAll("-", "")}`
+    );
+
+    const reconciliation = await db
+      .selectFrom("payment_reconciliation_cases")
+      .select(["status", "required_action", "resolved_by_user_id", "resolution_code"])
+      .where("id", "=", ready.refundRequest.reconciliation_case_id)
+      .executeTakeFirstOrThrow();
+
+    expect(reconciliation).toEqual({
+      status: "RESOLVED",
+      required_action: "REFUND_REQUIRED",
+      resolved_by_user_id: null,
+      resolution_code: "PROVIDER_REFUND_PROCESSED"
+    });
   });
 });

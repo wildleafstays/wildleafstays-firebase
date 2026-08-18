@@ -6,6 +6,7 @@ import type {
   PaymentProcessingOutcome,
   PaymentReconciliationAction,
   PaymentReconciliationReason,
+  PaymentReconciliationResolutionCode,
   PaymentReconciliationView,
   PaymentSuccessView
 } from "../domain/payment-processing.js";
@@ -45,6 +46,8 @@ function reconciliationView(row: PaymentReconciliationRecord): PaymentReconcilia
     details: row.details_json,
     createdAt: row.created_at.toISOString(),
     resolvedAt: row.resolved_at?.toISOString() ?? null,
+    resolvedByUserId: row.resolved_by_user_id,
+    resolutionCode: row.resolution_code as PaymentReconciliationResolutionCode | null,
     resolutionNote: row.resolution_note
   };
 }
@@ -124,6 +127,22 @@ export class PaymentProcessingRepository {
       .executeTakeFirst();
   }
 
+  async findScopedReconciliationByIdForUpdate(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reconciliationCaseId: string
+  ): Promise<PaymentReconciliationRecord | undefined> {
+    return trx
+      .selectFrom("payment_reconciliation_cases")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("id", "=", reconciliationCaseId)
+      .forUpdate()
+      .executeTakeFirst();
+  }
+
   async resolveRefundRequiredReconciliation(
     trx: Transaction<Database>,
     input: {
@@ -141,6 +160,7 @@ export class PaymentProcessingRepository {
         status: "RESOLVED",
         resolved_at: input.resolvedAt,
         resolved_by_user_id: null,
+        resolution_code: "PROVIDER_REFUND_PROCESSED",
         resolution_note: input.resolutionNote
       })
       .where("id", "=", input.reconciliationCaseId)
@@ -148,6 +168,38 @@ export class PaymentProcessingRepository {
       .where("property_id", "=", input.propertyId)
       .where("reservation_id", "=", input.reservationId)
       .where("required_action", "=", "REFUND_REQUIRED")
+      .where("status", "=", "OPEN")
+      .returningAll()
+      .executeTakeFirst();
+  }
+
+  async resolveManualReviewReconciliation(
+    trx: Transaction<Database>,
+    input: {
+      reconciliationCaseId: string;
+      organizationId: string;
+      propertyId: string;
+      reservationId: string;
+      resolvedAt: Date;
+      resolvedByUserId: string;
+      resolutionCode: "PAYMENT_RETAINED";
+      resolutionNote: string;
+    }
+  ): Promise<PaymentReconciliationRecord | undefined> {
+    return trx
+      .updateTable("payment_reconciliation_cases")
+      .set({
+        status: "RESOLVED",
+        resolved_at: input.resolvedAt,
+        resolved_by_user_id: input.resolvedByUserId,
+        resolution_code: input.resolutionCode,
+        resolution_note: input.resolutionNote
+      })
+      .where("id", "=", input.reconciliationCaseId)
+      .where("organization_id", "=", input.organizationId)
+      .where("property_id", "=", input.propertyId)
+      .where("reservation_id", "=", input.reservationId)
+      .where("required_action", "=", "MANUAL_REVIEW")
       .where("status", "=", "OPEN")
       .returningAll()
       .executeTakeFirst();

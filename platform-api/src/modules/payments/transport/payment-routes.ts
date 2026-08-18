@@ -10,6 +10,7 @@ import type { AccessRepository } from "../../access/infrastructure/access-reposi
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import { RazorpayOrderService } from "../application/razorpay-order-service.js";
 import { PaymentFinanceReadService } from "../application/payment-finance-read-service.js";
+import { PaymentReconciliationCommandService } from "../application/payment-reconciliation-command-service.js";
 import { PaymentRefundCommandService } from "../application/payment-refund-command-service.js";
 import { RazorpayWebhookService } from "../application/razorpay-webhook-service.js";
 import { registerRazorpayWebhookRoutes } from "./razorpay-webhook-routes.js";
@@ -41,6 +42,11 @@ interface PropertyParams {
 
 interface ReconciliationParams extends PropertyParams {
   reconciliationCaseId: string;
+}
+
+interface ManualReconciliationResolutionBody {
+  resolutionCode: "PAYMENT_RETAINED";
+  note: string;
 }
 
 interface ReconciliationListQuery {
@@ -100,6 +106,16 @@ const reconciliationParamsSchema = {
   }
 } as const;
 
+const manualReconciliationResolutionBodySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["resolutionCode", "note"],
+  properties: {
+    resolutionCode: { type: "string", enum: ["PAYMENT_RETAINED"] },
+    note: { type: "string", minLength: 10, maxLength: 1000 }
+  }
+} as const;
+
 const reconciliationListQuerySchema = {
   type: "object",
   additionalProperties: false,
@@ -150,6 +166,7 @@ export async function registerPaymentRoutes(
   const idempotency = new IdempotencyService(deps.db);
   const service = new BeginPaymentService();
   const financeRead = new PaymentFinanceReadService();
+  const reconciliationCommand = new PaymentReconciliationCommandService(deps.db);
   const refundCommand = deps.razorpayProvider
     ? new PaymentRefundCommandService(deps.db, deps.razorpayProvider)
     : null;
@@ -316,6 +333,43 @@ export async function registerPaymentRoutes(
       );
     }
   );
+  app.post<{
+    Params: ReconciliationParams;
+    Body: ManualReconciliationResolutionBody;
+  }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/payment-reconciliations/:reconciliationCaseId/manual-resolution",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Payments"],
+        summary: "Resolve an open manual-review payment reconciliation",
+        description:
+          "Requires settlement.manage. Only OPEN MANUAL_REVIEW cases can be closed, and only with the structured PAYMENT_RETAINED outcome plus an operator note. This command never changes reservation, inventory, verified payment economics or provider refund state. REFUND_REQUIRED cases remain provider-refund driven.",
+        security: [{ bearerAuth: [] }],
+        params: reconciliationParamsSchema,
+        body: manualReconciliationResolutionBodySchema
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      const result = await reconciliationCommand.resolveManualReview(
+        actor,
+        {
+          organizationId: request.params.organizationId,
+          propertyId: request.params.propertyId,
+          reconciliationCaseId: request.params.reconciliationCaseId,
+          resolutionCode: request.body.resolutionCode,
+          note: request.body.note
+        },
+        requestMetadata(request, "partner-api")
+      );
+
+      return reply.status(result.created ? 201 : 200).send(result);
+    }
+  );
+
   if (refundCommand) {
     app.post<{ Params: ReconciliationParams }>(
       "/v1/partner/organizations/:organizationId/properties/:propertyId/payment-reconciliations/:reconciliationCaseId/refund-submission",

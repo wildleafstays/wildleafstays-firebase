@@ -124,6 +124,8 @@ function reconciliationView(row: FinanceReconciliationRecord): FinanceReconcilia
     details: row.details_json,
     createdAt: row.created_at.toISOString(),
     resolvedAt: row.resolved_at?.toISOString() ?? null,
+    resolvedByUserId: row.resolved_by_user_id,
+    resolutionCode: row.resolution_code,
     resolutionNote: row.resolution_note
   };
 }

@@ -69,6 +69,8 @@ export interface FinanceReconciliationView {
   details: JsonObject;
   createdAt: string;
   resolvedAt: string | null;
+  resolvedByUserId: string | null;
+  resolutionCode: string | null;
   resolutionNote: string | null;
 }
 
