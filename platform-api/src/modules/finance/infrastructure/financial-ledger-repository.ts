@@ -20,10 +20,13 @@ interface CreateJournalInput {
   organizationId: string;
   propertyId: string;
   reservationId: string;
-  paymentIntentId: string;
+  paymentIntentId: string | null;
   journalType: FinancialLedgerJournalType;
   paymentEvidenceId: string | null;
   refundFinalizationId: string | null;
+  revenueScheduleLineId: string | null;
+  stayCompletionHistoryId: string | null;
+  recognitionDate: string | null;
   amountMinor: number;
   currencyCode: string;
   occurredAt: Date;
@@ -63,6 +66,17 @@ export class FinancialLedgerRepository {
       .executeTakeFirst();
   }
 
+  async findByRevenueScheduleLine(
+    trx: Transaction<Database>,
+    revenueScheduleLineId: string
+  ): Promise<FinancialLedgerJournalRecord | undefined> {
+    return trx
+      .selectFrom("financial_ledger_journals")
+      .selectAll()
+      .where("revenue_schedule_line_id", "=", revenueScheduleLineId)
+      .executeTakeFirst();
+  }
+
   async findEntries(
     trx: Transaction<Database>,
     journalId: string
@@ -90,6 +104,9 @@ export class FinancialLedgerRepository {
         journal_type: input.journalType,
         payment_evidence_id: input.paymentEvidenceId,
         refund_finalization_id: input.refundFinalizationId,
+        revenue_schedule_line_id: input.revenueScheduleLineId,
+        stay_completion_history_id: input.stayCompletionHistoryId,
+        recognition_date: input.recognitionDate,
         amount_minor: input.amountMinor,
         currency_code: input.currencyCode,
         occurred_at: input.occurredAt,
@@ -139,6 +156,9 @@ export class FinancialLedgerRepository {
       journalType: journal.journal_type as FinancialLedgerJournalType,
       paymentEvidenceId: journal.payment_evidence_id,
       refundFinalizationId: journal.refund_finalization_id,
+      revenueScheduleLineId: journal.revenue_schedule_line_id,
+      stayCompletionHistoryId: journal.stay_completion_history_id,
+      recognitionDate: journal.recognition_date,
       amountMinor: journal.amount_minor,
       currencyCode: journal.currency_code,
       occurredAt: journal.occurred_at.toISOString(),

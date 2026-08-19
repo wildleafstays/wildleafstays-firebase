@@ -2,7 +2,8 @@ import type { JsonObject } from "../../../infrastructure/database/types.js";
 
 export const FinancialLedgerJournalTypes = {
   PAYMENT_RECEIVED: "PAYMENT_RECEIVED",
-  REFUND_PROCESSED: "REFUND_PROCESSED"
+  REFUND_PROCESSED: "REFUND_PROCESSED",
+  REVENUE_RECOGNIZED: "REVENUE_RECOGNIZED"
 } as const;
 
 export type FinancialLedgerJournalType =
@@ -10,7 +11,8 @@ export type FinancialLedgerJournalType =
 
 export const FinancialLedgerAccounts = {
   PAYMENT_PROVIDER_CLEARING: "PAYMENT_PROVIDER_CLEARING",
-  GUEST_FUNDS_HELD: "GUEST_FUNDS_HELD"
+  GUEST_FUNDS_HELD: "GUEST_FUNDS_HELD",
+  STAY_REVENUE: "STAY_REVENUE"
 } as const;
 
 export type FinancialLedgerAccount =
@@ -39,10 +41,13 @@ export interface FinancialLedgerJournalView extends JsonObject {
   organizationId: string;
   propertyId: string;
   reservationId: string;
-  paymentIntentId: string;
+  paymentIntentId: string | null;
   journalType: FinancialLedgerJournalType;
   paymentEvidenceId: string | null;
   refundFinalizationId: string | null;
+  revenueScheduleLineId: string | null;
+  stayCompletionHistoryId: string | null;
+  recognitionDate: string | null;
   amountMinor: number;
   currencyCode: string;
   occurredAt: string;

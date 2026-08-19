@@ -39,14 +39,29 @@ interface RefundProcessedPostingInput {
   occurredAt: Date;
 }
 
+interface RevenueRecognizedPostingInput {
+  organizationId: string;
+  propertyId: string;
+  reservationId: string;
+  revenueScheduleLineId: string;
+  stayCompletionHistoryId: string;
+  recognitionDate: string;
+  amountMinor: number;
+  currencyCode: string;
+  occurredAt: Date;
+}
+
 interface EnsureJournalInput {
   organizationId: string;
   propertyId: string;
   reservationId: string;
-  paymentIntentId: string;
+  paymentIntentId: string | null;
   journalType: FinancialLedgerJournalType;
   paymentEvidenceId: string | null;
   refundFinalizationId: string | null;
+  revenueScheduleLineId: string | null;
+  stayCompletionHistoryId: string | null;
+  recognitionDate: string | null;
   amountMinor: number;
   currencyCode: string;
   occurredAt: Date;
@@ -60,10 +75,17 @@ interface ExpectedEntry {
   currencyCode: string;
 }
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 export class FinancialLedgerPostingService {
   constructor(private readonly ledger = new FinancialLedgerRepository()) {}
 
-  private validateEconomics(amountMinor: number, currencyCode: string, occurredAt: Date): void {
+  private validateEconomics(
+    amountMinor: number,
+    currencyCode: string,
+    occurredAt: Date,
+    recognitionDate: string | null
+  ): void {
     if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
       throw new ValidationError("Financial ledger amount must be a positive safe integer");
     }
@@ -76,6 +98,10 @@ export class FinancialLedgerPostingService {
 
     if (Number.isNaN(occurredAt.getTime())) {
       throw new ValidationError("Financial ledger occurrence time must be valid");
+    }
+
+    if (recognitionDate !== null && !DATE_PATTERN.test(recognitionDate)) {
+      throw new ValidationError("Financial ledger recognition date must use YYYY-MM-DD");
     }
   }
 
@@ -103,6 +129,25 @@ export class FinancialLedgerPostingService {
       ];
     }
 
+    if (journalType === FinancialLedgerJournalTypes.REFUND_PROCESSED) {
+      return [
+        {
+          lineNumber: 1,
+          accountCode: FinancialLedgerAccounts.GUEST_FUNDS_HELD,
+          direction: FinancialLedgerDirections.DEBIT,
+          amountMinor,
+          currencyCode
+        },
+        {
+          lineNumber: 2,
+          accountCode: FinancialLedgerAccounts.PAYMENT_PROVIDER_CLEARING,
+          direction: FinancialLedgerDirections.CREDIT,
+          amountMinor,
+          currencyCode
+        }
+      ];
+    }
+
     return [
       {
         lineNumber: 1,
@@ -113,7 +158,7 @@ export class FinancialLedgerPostingService {
       },
       {
         lineNumber: 2,
-        accountCode: FinancialLedgerAccounts.PAYMENT_PROVIDER_CLEARING,
+        accountCode: FinancialLedgerAccounts.STAY_REVENUE,
         direction: FinancialLedgerDirections.CREDIT,
         amountMinor,
         currencyCode
@@ -133,6 +178,10 @@ export class FinancialLedgerPostingService {
       return this.ledger.findByRefundFinalization(trx, input.refundFinalizationId);
     }
 
+    if (input.revenueScheduleLineId !== null) {
+      return this.ledger.findByRevenueScheduleLine(trx, input.revenueScheduleLineId);
+    }
+
     throw new ValidationError("Financial ledger posting requires one immutable source record");
   }
 
@@ -149,6 +198,9 @@ export class FinancialLedgerPostingService {
       existing.journal_type !== input.journalType ||
       existing.payment_evidence_id !== input.paymentEvidenceId ||
       existing.refund_finalization_id !== input.refundFinalizationId ||
+      existing.revenue_schedule_line_id !== input.revenueScheduleLineId ||
+      existing.stay_completion_history_id !== input.stayCompletionHistoryId ||
+      existing.recognition_date !== input.recognitionDate ||
       existing.amount_minor !== input.amountMinor ||
       existing.currency_code !== input.currencyCode ||
       existing.occurred_at.getTime() !== input.occurredAt.getTime()
@@ -188,7 +240,12 @@ export class FinancialLedgerPostingService {
     input: EnsureJournalInput,
     request: RequestMetadata
   ): Promise<FinancialLedgerPostingResult> {
-    this.validateEconomics(input.amountMinor, input.currencyCode, input.occurredAt);
+    this.validateEconomics(
+      input.amountMinor,
+      input.currencyCode,
+      input.occurredAt,
+      input.recognitionDate
+    );
 
     const existing = await this.findExisting(trx, input);
     if (existing) {
@@ -234,7 +291,10 @@ export class FinancialLedgerPostingService {
         ...input,
         journalType: FinancialLedgerJournalTypes.PAYMENT_RECEIVED,
         paymentEvidenceId: input.paymentEvidenceId,
-        refundFinalizationId: null
+        refundFinalizationId: null,
+        revenueScheduleLineId: null,
+        stayCompletionHistoryId: null,
+        recognitionDate: null
       },
       request
     );
@@ -251,7 +311,31 @@ export class FinancialLedgerPostingService {
         ...input,
         journalType: FinancialLedgerJournalTypes.REFUND_PROCESSED,
         paymentEvidenceId: null,
-        refundFinalizationId: input.refundFinalizationId
+        refundFinalizationId: input.refundFinalizationId,
+        revenueScheduleLineId: null,
+        stayCompletionHistoryId: null,
+        recognitionDate: null
+      },
+      request
+    );
+  }
+
+  postRevenueRecognized(
+    trx: Transaction<Database>,
+    input: RevenueRecognizedPostingInput,
+    request: RequestMetadata
+  ): Promise<FinancialLedgerPostingResult> {
+    return this.ensureJournal(
+      trx,
+      {
+        ...input,
+        paymentIntentId: null,
+        journalType: FinancialLedgerJournalTypes.REVENUE_RECOGNIZED,
+        paymentEvidenceId: null,
+        refundFinalizationId: null,
+        revenueScheduleLineId: input.revenueScheduleLineId,
+        stayCompletionHistoryId: input.stayCompletionHistoryId,
+        recognitionDate: input.recognitionDate
       },
       request
     );

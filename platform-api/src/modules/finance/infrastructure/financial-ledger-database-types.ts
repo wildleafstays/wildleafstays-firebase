@@ -5,10 +5,13 @@ export interface FinancialLedgerJournalsTable {
   organization_id: string;
   property_id: string;
   reservation_id: string;
-  payment_intent_id: string;
+  payment_intent_id: string | null;
   journal_type: string;
   payment_evidence_id: string | null;
   refund_finalization_id: string | null;
+  revenue_schedule_line_id: string | null;
+  stay_completion_history_id: string | null;
+  recognition_date: string | null;
   amount_minor: number;
   currency_code: string;
   occurred_at: Date;

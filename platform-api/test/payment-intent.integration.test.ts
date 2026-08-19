@@ -9,6 +9,10 @@ import { InventoryHoldService } from "../src/modules/inventory/application/inven
 import { QuoteHoldService } from "../src/modules/quotes/application/quote-hold-service.js";
 import { HeldReservationService } from "../src/modules/reservations/application/held-reservation-service.js";
 import { StayLifecycleService } from "../src/modules/reservations/application/stay-lifecycle-service.js";
+import {
+  RevenueLedgerPostingService,
+  revenueRecognitionDateForLine
+} from "../src/modules/finance/application/revenue-ledger-posting-service.js";
 import { RevenueRecognitionScheduleService } from "../src/modules/finance/application/revenue-recognition-schedule-service.js";
 import { buildRevenueRecognitionBasis } from "../src/modules/finance/domain/revenue-recognition.js";
 import { VerifiedPaymentEvidenceService } from "../src/modules/payments/application/verified-payment-evidence-service.js";
@@ -4625,5 +4629,391 @@ describe("Phase 5E2B1 immutable revenue recognition schedule foundation", () => 
           .execute();
       })
     ).rejects.toThrow(/accepted financial snapshot/i);
+  });
+});
+
+describe("Phase 5E2B2 revenue ledger posting", () => {
+  function revenueEvidenceInput(
+    fixture: Fixture,
+    payment: Awaited<ReturnType<typeof beginPayment>>
+  ) {
+    return {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      reservationId: payment.reservation.id,
+      paymentIntentId: payment.paymentIntent.id,
+      provider: "RAZORPAY",
+      providerEventId: `evt_${randomUUID()}`,
+      providerPaymentId: `pay_${randomUUID()}`,
+      providerOrderId: `order_${randomUUID()}`,
+      amountMinor: payment.paymentIntent.amountMinor,
+      currencyCode: payment.paymentIntent.currencyCode,
+      verificationMethod: "WEBHOOK_SIGNATURE" as const,
+      payloadSha256: "6".repeat(64)
+    };
+  }
+
+  function revenueFrontDeskActor(fixture: Fixture): ActorContext {
+    return {
+      userId: fixture.actor.userId,
+      email: fixture.actor.email,
+      platformRoles: [],
+      organizationMemberships: [],
+      propertyGrants: [
+        {
+          grantId: randomUUID(),
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          role: "FRONT_DESK"
+        }
+      ]
+    };
+  }
+
+  async function confirmedRevenueFixture() {
+    const fixture = await createFixture();
+    await configureCommercialCore(fixture);
+    await setPromotionMode(fixture, "NO_PROMOTIONS");
+    const quoted = await createFinalQuote(fixture);
+    await createQuoteHold(fixture, quoted.quote.id);
+    const held = await createHeldReservation(fixture, quoted.quote.id);
+    const payment = await beginPayment(fixture, held.reservation.id);
+    const evidence = await db
+      .transaction()
+      .execute((trx) =>
+        new VerifiedPaymentEvidenceService().record(
+          trx,
+          revenueEvidenceInput(fixture, payment),
+          metadata()
+        )
+      );
+    const processed = await db.transaction().execute((trx) =>
+      new VerifiedPaymentProcessor().process(
+        trx,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id,
+          paymentIntentId: payment.paymentIntent.id,
+          paymentEvidenceId: evidence.evidence.id
+        },
+        metadata()
+      )
+    );
+    expect(processed.outcome).toBe("RESERVATION_CONFIRMED");
+    return { fixture, held, payment, evidence, processed };
+  }
+
+  async function checkedOutRevenueFixture() {
+    const ready = await confirmedRevenueFixture();
+    const actor = revenueFrontDeskActor(ready.fixture);
+    const lifecycle = new StayLifecycleService();
+
+    await db.transaction().execute((trx) =>
+      lifecycle.checkIn(
+        trx,
+        actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id
+        },
+        metadata()
+      )
+    );
+
+    await db.transaction().execute((trx) =>
+      lifecycle.checkOut(
+        trx,
+        actor,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id
+        },
+        metadata()
+      )
+    );
+
+    return ready;
+  }
+
+  async function postRevenue(
+    ready: Awaited<ReturnType<typeof confirmedRevenueFixture>>,
+    service = new RevenueLedgerPostingService()
+  ) {
+    return db.transaction().execute((trx) =>
+      service.postForCheckedOutReservation(
+        trx,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id
+        },
+        metadata()
+      )
+    );
+  }
+
+  it("derives NIGHT and STAY accounting dates from immutable service periods", () => {
+    expect(
+      revenueRecognitionDateForLine({ serviceScope: "NIGHT", stayDate: "2034-02-10" }, "2034-02-12")
+    ).toBe("2034-02-10");
+    expect(
+      revenueRecognitionDateForLine({ serviceScope: "STAY", stayDate: null }, "2034-02-12")
+    ).toBe("2034-02-12");
+  });
+
+  it("refuses revenue posting before checkout and does not create a revenue schedule as a side effect", async () => {
+    const ready = await confirmedRevenueFixture();
+
+    await expect(postRevenue(ready)).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    const [schedules, revenueJournals] = await Promise.all([
+      db
+        .selectFrom("reservation_revenue_schedules")
+        .select("id")
+        .where("reservation_id", "=", ready.held.reservation.id)
+        .execute(),
+      db
+        .selectFrom("financial_ledger_journals")
+        .select("id")
+        .where("reservation_id", "=", ready.held.reservation.id)
+        .where("journal_type", "=", "REVENUE_RECOGNIZED")
+        .execute()
+    ]);
+
+    expect(schedules).toHaveLength(0);
+    expect(revenueJournals).toHaveLength(0);
+  });
+
+  it("posts checked-out stay revenue from positive schedule lines into balanced double-entry journals", async () => {
+    const ready = await checkedOutRevenueFixture();
+    const result = await postRevenue(ready);
+
+    expect(result.revenueBasisMinor).toBe(ready.held.reservation.totalMinor);
+    expect(result.journalCount).toBe(2);
+    expect(result.createdJournalCount).toBe(2);
+
+    const checkoutHistory = await db
+      .selectFrom("reservation_status_history")
+      .selectAll()
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .where("from_status", "=", "CHECKED_IN")
+      .where("to_status", "=", "CHECKED_OUT")
+      .where("reason", "=", "FRONT_DESK_CHECK_OUT")
+      .executeTakeFirstOrThrow();
+
+    const scheduleLines = await db
+      .selectFrom("reservation_revenue_schedule_lines")
+      .selectAll()
+      .where("schedule_id", "=", result.scheduleId)
+      .orderBy("line_number", "asc")
+      .execute();
+    const positiveLines = scheduleLines.filter((line) => line.revenue_minor > 0);
+    expect(positiveLines).toHaveLength(2);
+
+    const journals = await db
+      .selectFrom("financial_ledger_journals")
+      .selectAll()
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .where("journal_type", "=", "REVENUE_RECOGNIZED")
+      .orderBy("recognition_date", "asc")
+      .execute();
+    expect(journals).toHaveLength(2);
+
+    for (const journal of journals) {
+      expect(journal.payment_intent_id).toBeNull();
+      expect(journal.payment_evidence_id).toBeNull();
+      expect(journal.refund_finalization_id).toBeNull();
+      expect(journal.stay_completion_history_id).toBe(checkoutHistory.id);
+      expect(journal.occurred_at.getTime()).toBe(checkoutHistory.created_at.getTime());
+
+      const line = positiveLines.find(
+        (candidate) => candidate.id === journal.revenue_schedule_line_id
+      );
+      expect(line).toBeTruthy();
+      expect(journal.amount_minor).toBe(line!.revenue_minor);
+      expect(journal.recognition_date).toBe(line!.stay_date);
+
+      const entries = await db
+        .selectFrom("financial_ledger_entries")
+        .select(["line_number", "account_code", "direction", "amount_minor"])
+        .where("journal_id", "=", journal.id)
+        .orderBy("line_number", "asc")
+        .execute();
+
+      expect(entries).toEqual([
+        {
+          line_number: 1,
+          account_code: "GUEST_FUNDS_HELD",
+          direction: "DEBIT",
+          amount_minor: journal.amount_minor
+        },
+        {
+          line_number: 2,
+          account_code: "STAY_REVENUE",
+          direction: "CREDIT",
+          amount_minor: journal.amount_minor
+        }
+      ]);
+    }
+
+    const paymentJournal = await db
+      .selectFrom("financial_ledger_journals")
+      .selectAll()
+      .where("payment_evidence_id", "=", ready.evidence.evidence.id)
+      .executeTakeFirstOrThrow();
+    expect(paymentJournal.journal_type).toBe("PAYMENT_RECEIVED");
+    expect(paymentJournal.payment_intent_id).toBe(ready.payment.paymentIntent.id);
+    expect(paymentJournal.revenue_schedule_line_id).toBeNull();
+    expect(paymentJournal.stay_completion_history_id).toBeNull();
+    expect(paymentJournal.recognition_date).toBeNull();
+  });
+
+  it("replays exact revenue posting without creating duplicate journals", async () => {
+    const ready = await checkedOutRevenueFixture();
+    const service = new RevenueLedgerPostingService();
+    const first = await postRevenue(ready, service);
+    const second = await postRevenue(ready, service);
+
+    expect(first.createdJournalCount).toBe(2);
+    expect(second.createdJournalCount).toBe(0);
+    expect(second.journalCount).toBe(first.journalCount);
+    expect(second.journals.map((journal) => journal.id)).toEqual(
+      first.journals.map((journal) => journal.id)
+    );
+
+    const journals = await db
+      .selectFrom("financial_ledger_journals")
+      .select("id")
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .where("journal_type", "=", "REVENUE_RECOGNIZED")
+      .execute();
+    expect(journals).toHaveLength(2);
+  });
+
+  it("rejects a checked-out status that lacks the immutable canonical checkout history", async () => {
+    const ready = await confirmedRevenueFixture();
+    await db
+      .updateTable("reservations")
+      .set({ status: "CHECKED_OUT" })
+      .where("id", "=", ready.held.reservation.id)
+      .execute();
+
+    await expect(postRevenue(ready)).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    const revenueJournals = await db
+      .selectFrom("financial_ledger_journals")
+      .select("id")
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .where("journal_type", "=", "REVENUE_RECOGNIZED")
+      .execute();
+    expect(revenueJournals).toHaveLength(0);
+  });
+
+  it("protects posted revenue journals and entries from mutation", async () => {
+    const ready = await checkedOutRevenueFixture();
+    const result = await postRevenue(ready);
+    const journal = result.journals[0]!;
+
+    await expect(
+      db
+        .updateTable("financial_ledger_journals")
+        .set({ amount_minor: journal.amountMinor + 1 })
+        .where("id", "=", journal.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db
+        .deleteFrom("financial_ledger_entries")
+        .where("journal_id", "=", journal.id)
+        .where("line_number", "=", 1)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+
+  it("rejects a forged revenue journal whose recognition date disagrees with the immutable schedule line", async () => {
+    const ready = await checkedOutRevenueFixture();
+    const schedule = await db.transaction().execute((trx) =>
+      new RevenueRecognitionScheduleService().ensureForReservation(
+        trx,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id
+        },
+        metadata()
+      )
+    );
+    const line = schedule.schedule.lines.find((candidate) => candidate.revenueMinor > 0)!;
+    const checkoutHistory = await db
+      .selectFrom("reservation_status_history")
+      .selectAll()
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .where("to_status", "=", "CHECKED_OUT")
+      .executeTakeFirstOrThrow();
+
+    await expect(
+      db.transaction().execute(async (trx) => {
+        const journalId = randomUUID();
+        await trx
+          .insertInto("financial_ledger_journals")
+          .values({
+            id: journalId,
+            organization_id: ready.fixture.organizationId,
+            property_id: ready.fixture.propertyId,
+            reservation_id: ready.held.reservation.id,
+            payment_intent_id: null,
+            journal_type: "REVENUE_RECOGNIZED",
+            payment_evidence_id: null,
+            refund_finalization_id: null,
+            revenue_schedule_line_id: line.id,
+            stay_completion_history_id: checkoutHistory.id,
+            recognition_date: "2034-02-09",
+            amount_minor: line.revenueMinor,
+            currency_code: line.currencyCode,
+            occurred_at: checkoutHistory.created_at,
+            source: "integration-test",
+            request_id: randomUUID(),
+            correlation_id: randomUUID()
+          })
+          .execute();
+        await trx
+          .insertInto("financial_ledger_entries")
+          .values([
+            {
+              id: randomUUID(),
+              journal_id: journalId,
+              organization_id: ready.fixture.organizationId,
+              property_id: ready.fixture.propertyId,
+              line_number: 1,
+              account_code: "GUEST_FUNDS_HELD",
+              direction: "DEBIT",
+              amount_minor: line.revenueMinor,
+              currency_code: line.currencyCode
+            },
+            {
+              id: randomUUID(),
+              journal_id: journalId,
+              organization_id: ready.fixture.organizationId,
+              property_id: ready.fixture.propertyId,
+              line_number: 2,
+              account_code: "STAY_REVENUE",
+              direction: "CREDIT",
+              amount_minor: line.revenueMinor,
+              currency_code: line.currencyCode
+            }
+          ])
+          .execute();
+      })
+    ).rejects.toThrow(/recognition date/i);
   });
 });
