@@ -37,18 +37,12 @@ export class QuoteService {
     private readonly promotions = new PromotionQuoteResolver()
   ) {}
 
-  async createQuote(
+  private async createQuoteCore(
     trx: Transaction<Database>,
-    actor: ActorContext,
+    actor: ActorContext | null,
     input: CreateQuoteInput,
     request: RequestMetadata
   ): Promise<{ quote: QuoteView }> {
-    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
-      kind: "property",
-      organizationId: input.organizationId,
-      propertyId: input.propertyId
-    });
-
     stayNightCount(input.arrivalDate, input.departureDate);
 
     if (
@@ -61,32 +55,58 @@ export class QuoteService {
       );
     }
 
-    await this.holds.expireDueForProperty(
-      trx,
-      actor,
-      input.organizationId,
-      input.propertyId,
-      request
-    );
+    if (actor) {
+      await this.holds.expireDueForProperty(
+        trx,
+        actor,
+        input.organizationId,
+        input.propertyId,
+        request
+      );
+    } else {
+      await this.holds.expireDueForPropertySystem(
+        trx,
+        input.organizationId,
+        input.propertyId,
+        request
+      );
+    }
 
-    const calendar = await this.rates.getCalendar(
-      trx,
-      actor,
-      input.organizationId,
-      input.propertyId,
-      input.rateProductId,
-      input.arrivalDate,
-      addDays(input.departureDate, 1)
-    );
+    const calendar = actor
+      ? await this.rates.getCalendar(
+          trx,
+          actor,
+          input.organizationId,
+          input.propertyId,
+          input.rateProductId,
+          input.arrivalDate,
+          addDays(input.departureDate, 1)
+        )
+      : await this.rates.getCalendarSystem(
+          trx,
+          input.organizationId,
+          input.propertyId,
+          input.rateProductId,
+          input.arrivalDate,
+          addDays(input.departureDate, 1)
+        );
 
-    const availability = await this.inventory.getAvailability(
-      trx,
-      actor,
-      input.organizationId,
-      input.propertyId,
-      input.arrivalDate,
-      input.departureDate
-    );
+    const availability = actor
+      ? await this.inventory.getAvailability(
+          trx,
+          actor,
+          input.organizationId,
+          input.propertyId,
+          input.arrivalDate,
+          input.departureDate
+        )
+      : await this.inventory.getAvailabilitySystem(
+          trx,
+          input.organizationId,
+          input.propertyId,
+          input.arrivalDate,
+          input.departureDate
+        );
 
     const stayDates = calendar.days
       .filter((day) => day.stayDate >= input.arrivalDate && day.stayDate < input.departureDate)
@@ -152,7 +172,7 @@ export class QuoteService {
       arrivalDate: input.arrivalDate,
       departureDate: input.departureDate,
       expiresAt,
-      createdByUserId: actor.userId,
+      createdByUserId: actor?.userId ?? null,
       request,
       calculation
     });
@@ -174,12 +194,14 @@ export class QuoteService {
         currencyCode: quote.currencyCode,
         expiresAt: quote.expiresAt
       },
-      actorUserId: actor.userId,
+      actorUserId: actor?.userId ?? null,
       request
     });
 
     await new AuditService(trx).record({
       actor,
+      actorType: actor ? "USER" : "SYSTEM",
+      actorRole: actor ? null : "PUBLIC_BOOKING",
       organizationId: input.organizationId,
       propertyId: input.propertyId,
       action: "quote.created",
@@ -205,6 +227,33 @@ export class QuoteService {
     });
 
     return { quote };
+  }
+
+  async createQuote(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: CreateQuoteInput,
+    request: RequestMetadata
+  ): Promise<{ quote: QuoteView }> {
+    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
+      kind: "property",
+      organizationId: input.organizationId,
+      propertyId: input.propertyId
+    });
+
+    return this.createQuoteCore(trx, actor, input, request);
+  }
+
+  async createSystemQuote(
+    trx: Transaction<Database>,
+    input: CreateQuoteInput,
+    request: RequestMetadata
+  ): Promise<{ quote: QuoteView }> {
+    if (request.source !== "public-api") {
+      throw new ValidationError("System quote creation requires public-api request source");
+    }
+
+    return this.createQuoteCore(trx, null, input, request);
   }
 
   async getQuote(

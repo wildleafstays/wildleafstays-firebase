@@ -1,10 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
+import { ValidationError } from "../../../shared/errors/app-error.js";
+import { requestMetadata } from "../../../shared/http/request-metadata.js";
+import { IdempotencyService } from "../../../shared/idempotency/idempotency-service.js";
 import { PublicAvailabilityService } from "../application/public-availability-service.js";
 import { PublicCatalogService } from "../application/public-catalog-service.js";
+import { PublicQuoteService } from "../application/public-quote-service.js";
 import type { PublicAvailabilityRequest } from "../domain/public-availability.js";
-
+import type { PublicQuoteRequest } from "../domain/public-quote.js";
 export interface PublicCatalogRouteDependencies {
   db: Kysely<Database>;
 }
@@ -17,7 +21,9 @@ interface PublicPropertiesQuery {
 interface PublicPropertyParams {
   publicSlug: string;
 }
-
+interface PublicQuoteParams extends PublicPropertyParams {
+  quoteId: string;
+}
 const nullableString = {
   anyOf: [{ type: "string" }, { type: "null" }]
 } as const;
@@ -309,6 +315,340 @@ const publicAvailabilityResponseSchema = {
   }
 } as const;
 
+const publicIdempotencyHeaders = {
+  type: "object",
+  required: ["idempotency-key"],
+  properties: {
+    "idempotency-key": {
+      type: "string",
+      minLength: 16,
+      maxLength: 200,
+      pattern: "^[A-Za-z0-9._:-]+$"
+    }
+  }
+} as const;
+
+const publicQuoteUnitSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["adults", "childAges"],
+  properties: {
+    adults: { type: "integer", minimum: 1, maximum: 100 },
+    childAges: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "integer", minimum: 0, maximum: 17 }
+    }
+  }
+} as const;
+
+const publicQuoteGuestAgePolicySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "infantMaxAge",
+    "childMaxAge",
+    "infantsCountTowardsOccupancy",
+    "infantsCountTowardsChildLimit",
+    "infantsChargeAsChildren"
+  ],
+  properties: {
+    infantMaxAge: nullableInteger,
+    childMaxAge: { type: "integer", minimum: 0, maximum: 17 },
+    infantsCountTowardsOccupancy: { type: "boolean" },
+    infantsCountTowardsChildLimit: { type: "boolean" },
+    infantsChargeAsChildren: { type: "boolean" }
+  }
+} as const;
+
+const publicQuoteUnitViewSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "unitIndex",
+    "adults",
+    "childAges",
+    "children",
+    "infants",
+    "occupancyCount",
+    "childLimitCount",
+    "chargeableChildren",
+    "extraAdults",
+    "extraChildren"
+  ],
+  properties: {
+    unitIndex: { type: "integer", minimum: 1 },
+    adults: { type: "integer", minimum: 1 },
+    childAges: {
+      type: "array",
+      items: { type: "integer", minimum: 0, maximum: 17 }
+    },
+    children: { type: "integer", minimum: 0 },
+    infants: { type: "integer", minimum: 0 },
+    occupancyCount: { type: "integer", minimum: 1 },
+    childLimitCount: { type: "integer", minimum: 0 },
+    chargeableChildren: { type: "integer", minimum: 0 },
+    extraAdults: { type: "integer", minimum: 0 },
+    extraChildren: { type: "integer", minimum: 0 }
+  }
+} as const;
+
+const publicCancellationTierSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["triggerType", "minimumMinutesBeforeArrival", "penaltyType", "penaltyValue"],
+  properties: {
+    triggerType: {
+      type: "string",
+      enum: ["CANCELLATION", "NO_SHOW"]
+    },
+    minimumMinutesBeforeArrival: nullableInteger,
+    penaltyType: {
+      type: "string",
+      enum: ["PERCENTAGE_OF_STAY", "FIXED_AMOUNT", "NIGHTS"]
+    },
+    penaltyValue: { type: "integer", minimum: 0 }
+  }
+} as const;
+
+const publicCancellationPolicySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["policyCode", "policyName", "arrivalLocalTime", "currencyCode", "policyText", "tiers"],
+  properties: {
+    policyCode: { type: "string" },
+    policyName: { type: "string" },
+    arrivalLocalTime: { type: "string" },
+    currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+    policyText: nullableString,
+    tiers: {
+      type: "array",
+      items: publicCancellationTierSchema
+    }
+  }
+} as const;
+
+const publicPromotionLineSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "campaignCode",
+    "campaignName",
+    "promotionKind",
+    "publicCode",
+    "discountType",
+    "discountValue",
+    "maximumDiscountMinor",
+    "appliesTo",
+    "discountMinor"
+  ],
+  properties: {
+    campaignCode: { type: "string" },
+    campaignName: { type: "string" },
+    promotionKind: {
+      type: "string",
+      enum: ["AUTOMATIC", "PROMO_CODE"]
+    },
+    publicCode: nullableString,
+    discountType: {
+      type: "string",
+      enum: ["PERCENTAGE", "FIXED_AMOUNT"]
+    },
+    discountValue: { type: "integer", minimum: 0 },
+    maximumDiscountMinor: nullableInteger,
+    appliesTo: {
+      type: "string",
+      enum: ["ACCOMMODATION", "ACCOMMODATION_AND_EXTRA_GUEST"]
+    },
+    discountMinor: { type: "integer", minimum: 0 }
+  }
+} as const;
+
+const publicPromotionSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["promotionMode", "requestedPromotionCode", "discountMinor", "lines"],
+  properties: {
+    promotionMode: {
+      type: "string",
+      enum: ["NO_PROMOTIONS", "POLICIES"]
+    },
+    requestedPromotionCode: nullableString,
+    discountMinor: { type: "integer", minimum: 0 },
+    lines: {
+      type: "array",
+      items: publicPromotionLineSchema
+    }
+  }
+} as const;
+
+const publicQuoteViewSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "id",
+    "quoteReference",
+    "rateProductId",
+    "productType",
+    "productLabel",
+    "roomCategoryId",
+    "ratePlanCode",
+    "ratePlanName",
+    "mealPlanCode",
+    "arrivalDate",
+    "departureDate",
+    "quantity",
+    "currencyCode",
+    "pricingScope",
+    "exactCommercialPriceIncluded",
+    "accommodationMinor",
+    "extraGuestMinor",
+    "discountMinor",
+    "discountedAccommodationMinor",
+    "discountedExtraGuestMinor",
+    "inclusiveFeeMinor",
+    "exclusiveFeeMinor",
+    "feeMinor",
+    "inclusiveTaxMinor",
+    "exclusiveTaxMinor",
+    "taxMinor",
+    "totalMinor",
+    "commercialStatus",
+    "promotionStatus",
+    "holdEligible",
+    "expiresAt",
+    "createdAt",
+    "guestAgePolicy",
+    "units",
+    "cancellationPolicy",
+    "promotion"
+  ],
+  properties: {
+    id: { type: "string", format: "uuid" },
+    quoteReference: { type: "string" },
+    rateProductId: { type: "string", format: "uuid" },
+    productType: {
+      type: "string",
+      enum: ["ROOM_CATEGORY", "FULL_PROPERTY"]
+    },
+    productLabel: { type: "string" },
+    roomCategoryId: nullableUuid,
+    ratePlanCode: { type: "string" },
+    ratePlanName: { type: "string" },
+    mealPlanCode: { type: "string" },
+    arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    quantity: { type: "integer", minimum: 1, maximum: 20 },
+    currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+    pricingScope: {
+      type: "string",
+      const: "FINAL_COMMERCIAL_PRICE"
+    },
+    exactCommercialPriceIncluded: { type: "boolean", const: true },
+    accommodationMinor: { type: "integer", minimum: 0 },
+    extraGuestMinor: { type: "integer", minimum: 0 },
+    discountMinor: { type: "integer", minimum: 0 },
+    discountedAccommodationMinor: { type: "integer", minimum: 0 },
+    discountedExtraGuestMinor: { type: "integer", minimum: 0 },
+    inclusiveFeeMinor: { type: "integer", minimum: 0 },
+    exclusiveFeeMinor: { type: "integer", minimum: 0 },
+    feeMinor: { type: "integer", minimum: 0 },
+    inclusiveTaxMinor: { type: "integer", minimum: 0 },
+    exclusiveTaxMinor: { type: "integer", minimum: 0 },
+    taxMinor: { type: "integer", minimum: 0 },
+    totalMinor: { type: "integer", minimum: 0 },
+    commercialStatus: {
+      type: "string",
+      const: "COMMERCIAL_RULES_APPLIED"
+    },
+    promotionStatus: { type: "string", const: "EVALUATED" },
+    holdEligible: { type: "boolean", const: true },
+    expiresAt: { type: "string" },
+    createdAt: { type: "string" },
+    guestAgePolicy: publicQuoteGuestAgePolicySchema,
+    units: {
+      type: "array",
+      minItems: 1,
+      maxItems: 20,
+      items: publicQuoteUnitViewSchema
+    },
+    cancellationPolicy: publicCancellationPolicySchema,
+    promotion: publicPromotionSchema
+  }
+} as const;
+
+const publicQuoteResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["quote"],
+  properties: {
+    quote: publicQuoteViewSchema
+  }
+} as const;
+
+const publicHoldItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["bucketType", "roomCategoryId", "quantity"],
+  properties: {
+    bucketType: {
+      type: "string",
+      enum: ["ROOM_CATEGORY", "FULL_PROPERTY"]
+    },
+    roomCategoryId: nullableUuid,
+    quantity: { type: "integer", minimum: 1 }
+  }
+} as const;
+
+const publicHoldViewSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "id",
+    "status",
+    "startDate",
+    "endDate",
+    "expiresAt",
+    "clientReference",
+    "items",
+    "createdAt"
+  ],
+  properties: {
+    id: { type: "string", format: "uuid" },
+    status: { type: "string", const: "ACTIVE" },
+    startDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    endDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    expiresAt: { type: "string" },
+    clientReference: nullableString,
+    items: {
+      type: "array",
+      minItems: 1,
+      items: publicHoldItemSchema
+    },
+    createdAt: { type: "string" }
+  }
+} as const;
+
+const publicQuoteHoldResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["created", "quoteId", "quoteReference", "hold"],
+  properties: {
+    created: { type: "boolean" },
+    quoteId: { type: "string", format: "uuid" },
+    quoteReference: { type: "string" },
+    hold: publicHoldViewSchema
+  }
+} as const;
+
+function requirePublicIdempotencyKey(headers: Record<string, unknown>): string {
+  const key = headers["idempotency-key"];
+  if (typeof key !== "string" || !/^[A-Za-z0-9._:-]{16,200}$/.test(key)) {
+    throw new ValidationError("A valid public idempotency key is required");
+  }
+  return key;
+}
+
 function setPublicCache(reply: { header(name: string, value: string): unknown }): void {
   void reply.header("cache-control", "public, max-age=60, stale-while-revalidate=300");
 }
@@ -323,6 +663,8 @@ export async function registerPublicCatalogRoutes(
 ): Promise<void> {
   const service = new PublicCatalogService();
   const availabilityService = new PublicAvailabilityService();
+  const publicQuoteService = new PublicQuoteService();
+  const idempotency = new IdempotencyService(deps.db);
 
   app.get(
     "/v1/public/destinations",
@@ -480,6 +822,160 @@ export async function registerPublicCatalogRoutes(
     async (request, reply) => {
       setPublicNoStore(reply);
       return availabilityService.search(deps.db, request.params.publicSlug, request.body);
+    }
+  );
+
+  app.post<{ Params: PublicPropertyParams; Body: PublicQuoteRequest }>(
+    "/v1/public/properties/:publicSlug/quotes",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Create an exact immutable public quote",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            }
+          }
+        },
+        headers: publicIdempotencyHeaders,
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["rateProductId", "arrivalDate", "departureDate", "units"],
+          properties: {
+            rateProductId: { type: "string", format: "uuid" },
+            arrivalDate: {
+              type: "string",
+              pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            departureDate: {
+              type: "string",
+              pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            promotionCode: {
+              anyOf: [
+                {
+                  type: "string",
+                  minLength: 3,
+                  maxLength: 40,
+                  pattern: "^[A-Za-z0-9_-]+$"
+                },
+                { type: "null" }
+              ]
+            },
+            units: {
+              type: "array",
+              minItems: 1,
+              maxItems: 20,
+              items: publicQuoteUnitSchema
+            }
+          }
+        },
+        response: {
+          201: publicQuoteResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      const key = requirePublicIdempotencyKey(request.headers);
+      const body: PublicQuoteRequest = {
+        rateProductId: request.body.rateProductId,
+        arrivalDate: request.body.arrivalDate,
+        departureDate: request.body.departureDate,
+        promotionCode: request.body.promotionCode ?? null,
+        units: request.body.units.map((unit) => ({
+          adults: unit.adults,
+          childAges: [...unit.childAges]
+        }))
+      };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `public.quote.create:${request.params.publicSlug.toLowerCase()}`,
+          key,
+          requestBody: body
+        },
+        async (trx) => ({
+          statusCode: 201,
+          body: await publicQuoteService.createQuote(
+            trx,
+            request.params.publicSlug,
+            body,
+            requestMetadata(request, "public-api")
+          )
+        })
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{ Params: PublicQuoteParams }>(
+    "/v1/public/properties/:publicSlug/quotes/:quoteId/hold",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Atomically convert a public quote into an inventory hold",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug", "quoteId"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            },
+            quoteId: { type: "string", format: "uuid" }
+          }
+        },
+        headers: publicIdempotencyHeaders,
+        response: {
+          200: publicQuoteHoldResponseSchema,
+          201: publicQuoteHoldResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      const key = requirePublicIdempotencyKey(request.headers);
+      const requestBody = {
+        publicSlug: request.params.publicSlug.toLowerCase(),
+        quoteId: request.params.quoteId
+      };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `public.quote.hold:${request.params.publicSlug.toLowerCase()}:${request.params.quoteId}`,
+          key,
+          requestBody
+        },
+        async (trx) => {
+          const body = await publicQuoteService.createHold(
+            trx,
+            request.params.publicSlug,
+            request.params.quoteId,
+            requestMetadata(request, "public-api")
+          );
+          return {
+            statusCode: body.created ? 201 : 200,
+            body
+          };
+        }
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
     }
   );
 }

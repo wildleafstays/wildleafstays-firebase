@@ -191,6 +191,22 @@ export class InventoryHoldService {
     private readonly now: () => Date = () => new Date()
   ) {}
 
+  private async propertyContext(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string
+  ): Promise<SaleMode> {
+    const property = await this.inventory.findProperty(trx, organizationId, propertyId);
+    if (!property) {
+      throw new NotFoundError("Property not found");
+    }
+    if (property.status === "ARCHIVED") {
+      throw new ConflictError("Inventory cannot be held for an archived property");
+    }
+
+    return saleMode(property.sale_mode);
+  }
+
   private async property(
     trx: Transaction<Database>,
     actor: ActorContext,
@@ -207,17 +223,8 @@ export class InventoryHoldService {
       propertyId
     });
 
-    const property = await this.inventory.findProperty(trx, organizationId, propertyId);
-    if (!property) {
-      throw new NotFoundError("Property not found");
-    }
-    if (property.status === "ARCHIVED") {
-      throw new ConflictError("Inventory cannot be held for an archived property");
-    }
-
-    return saleMode(property.sale_mode);
+    return this.propertyContext(trx, organizationId, propertyId);
   }
-
   private async materialize(
     trx: Transaction<Database>,
     organizationId: string,
@@ -308,19 +315,12 @@ export class InventoryHoldService {
     return closed;
   }
 
-  async expireDueForProperty(
+  private async expireDueForPropertyCore(
     trx: Transaction<Database>,
-    actor: ActorContext,
     organizationId: string,
     propertyId: string,
-    request: RequestMetadata,
-    permission:
-      | typeof Permissions.INVENTORY_READ
-      | typeof Permissions.INVENTORY_MANAGE
-      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_READ
+    request: RequestMetadata
   ): Promise<number> {
-    await this.property(trx, actor, organizationId, propertyId, permission);
-
     let expired = 0;
     while (true) {
       const due = await this.holds.listDueHoldsForUpdate(
@@ -346,15 +346,41 @@ export class InventoryHoldService {
     }
   }
 
-  async createHold(
+  async expireDueForProperty(
     trx: Transaction<Database>,
     actor: ActorContext,
-    input: CreateInventoryHoldInput,
+    organizationId: string,
+    propertyId: string,
     request: RequestMetadata,
     permission:
+      | typeof Permissions.INVENTORY_READ
       | typeof Permissions.INVENTORY_MANAGE
-      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_MANAGE,
-    expiresAtCap: Date | null = null
+      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_READ
+  ): Promise<number> {
+    await this.property(trx, actor, organizationId, propertyId, permission);
+    return this.expireDueForPropertyCore(trx, organizationId, propertyId, request);
+  }
+
+  async expireDueForPropertySystem(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    request: RequestMetadata
+  ): Promise<number> {
+    if (request.source !== "public-api") {
+      throw new ValidationError("System inventory expiry requires public-api request source");
+    }
+
+    await this.propertyContext(trx, organizationId, propertyId);
+    return this.expireDueForPropertyCore(trx, organizationId, propertyId, request);
+  }
+  private async createHoldCore(
+    trx: Transaction<Database>,
+    actor: ActorContext | null,
+    input: CreateInventoryHoldInput,
+    request: RequestMetadata,
+    permission: typeof Permissions.INVENTORY_MANAGE | typeof Permissions.RESERVATION_MANAGE | null,
+    expiresAtCap: Date | null
   ): Promise<InventoryHoldResult> {
     const dates = dateRange(input.startDate, input.endDate);
     if (
@@ -377,23 +403,13 @@ export class InventoryHoldService {
       throw new ValidationError("expiresAtCap must be a valid date");
     }
 
-    const mode = await this.property(
-      trx,
-      actor,
-      input.organizationId,
-      input.propertyId,
-      permission
-    );
+    const mode =
+      actor !== null && permission !== null
+        ? await this.property(trx, actor, input.organizationId, input.propertyId, permission)
+        : await this.propertyContext(trx, input.organizationId, input.propertyId);
     validateItems(input.items, mode);
 
-    await this.expireDueForProperty(
-      trx,
-      actor,
-      input.organizationId,
-      input.propertyId,
-      request,
-      permission
-    );
+    await this.expireDueForPropertyCore(trx, input.organizationId, input.propertyId, request);
 
     const categories = await this.materialize(
       trx,
@@ -586,7 +602,7 @@ export class InventoryHoldService {
       endDate: input.endDate,
       expiresAt,
       clientReference: input.clientReference,
-      createdByUserId: actor.userId
+      createdByUserId: actor?.userId ?? null
     });
 
     const createdItems: InventoryHoldItemRecord[] = [];
@@ -633,7 +649,7 @@ export class InventoryHoldService {
             bucketType: item.bucketType,
             expiresAt: expiresAt.toISOString()
           },
-          actorUserId: actor.userId,
+          actorUserId: actor?.userId ?? null,
           request
         });
       }
@@ -642,6 +658,8 @@ export class InventoryHoldService {
     const view = holdView(hold, createdItems);
     await new AuditService(trx).record({
       actor,
+      actorType: actor ? "USER" : "SYSTEM",
+      actorRole: actor ? null : "PUBLIC_BOOKING",
       organizationId: input.organizationId,
       propertyId: input.propertyId,
       action: "inventory.hold.created",
@@ -661,18 +679,48 @@ export class InventoryHoldService {
     return { hold: view };
   }
 
-  async getHold(
+  async createHold(
     trx: Transaction<Database>,
     actor: ActorContext,
+    input: CreateInventoryHoldInput,
+    request: RequestMetadata,
+    permission:
+      | typeof Permissions.INVENTORY_MANAGE
+      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_MANAGE,
+    expiresAtCap: Date | null = null
+  ): Promise<InventoryHoldResult> {
+    return this.createHoldCore(trx, actor, input, request, permission, expiresAtCap);
+  }
+
+  async createHoldSystem(
+    trx: Transaction<Database>,
+    input: CreateInventoryHoldInput,
+    request: RequestMetadata,
+    expiresAtCap: Date | null = null
+  ): Promise<InventoryHoldResult> {
+    if (request.source !== "public-api") {
+      throw new ValidationError(
+        "System inventory hold creation requires public-api request source"
+      );
+    }
+
+    return this.createHoldCore(trx, null, input, request, null, expiresAtCap);
+  }
+
+  private async getHoldCore(
+    trx: Transaction<Database>,
+    actor: ActorContext | null,
     organizationId: string,
     propertyId: string,
     holdId: string,
     request: RequestMetadata,
-    permission:
-      | typeof Permissions.INVENTORY_READ
-      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_READ
+    permission: typeof Permissions.INVENTORY_READ | typeof Permissions.RESERVATION_MANAGE | null
   ): Promise<InventoryHoldResult> {
-    await this.property(trx, actor, organizationId, propertyId, permission);
+    if (actor !== null && permission !== null) {
+      await this.property(trx, actor, organizationId, propertyId, permission);
+    } else {
+      await this.propertyContext(trx, organizationId, propertyId);
+    }
 
     let hold = await this.holds.findHoldForUpdate(trx, organizationId, propertyId, holdId);
     if (!hold) {
@@ -687,6 +735,33 @@ export class InventoryHoldService {
     return { hold: holdView(hold, items) };
   }
 
+  async getHold(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    holdId: string,
+    request: RequestMetadata,
+    permission:
+      | typeof Permissions.INVENTORY_READ
+      | typeof Permissions.RESERVATION_MANAGE = Permissions.INVENTORY_READ
+  ): Promise<InventoryHoldResult> {
+    return this.getHoldCore(trx, actor, organizationId, propertyId, holdId, request, permission);
+  }
+
+  async getHoldSystem(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    holdId: string,
+    request: RequestMetadata
+  ): Promise<InventoryHoldResult> {
+    if (request.source !== "public-api") {
+      throw new ValidationError("System inventory hold read requires public-api request source");
+    }
+
+    return this.getHoldCore(trx, null, organizationId, propertyId, holdId, request, null);
+  }
   async releaseHold(
     trx: Transaction<Database>,
     actor: ActorContext,

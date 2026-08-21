@@ -1,7 +1,7 @@
 import type { Transaction } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
-import { ConflictError, NotFoundError } from "../../../shared/errors/app-error.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import type { ActorContext } from "../../access/domain/actor-context.js";
@@ -43,22 +43,17 @@ export class QuoteHoldService {
     private readonly authorization = new AuthorizationService()
   ) {}
 
-  async createFromQuote(
+  private async createFromQuoteCore(
     trx: Transaction<Database>,
-    actor: ActorContext,
+    actor: ActorContext | null,
     input: {
       organizationId: string;
       propertyId: string;
       quoteId: string;
     },
-    request: RequestMetadata
+    request: RequestMetadata,
+    requiredSource: string | null
   ): Promise<QuoteHoldResult> {
-    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
-      kind: "property",
-      organizationId: input.organizationId,
-      propertyId: input.propertyId
-    });
-
     const lockedQuote = await this.links.lockQuote(
       trx,
       input.organizationId,
@@ -66,6 +61,10 @@ export class QuoteHoldService {
       input.quoteId
     );
     if (!lockedQuote) {
+      throw new NotFoundError("Quote not found");
+    }
+
+    if (requiredSource !== null && lockedQuote.source !== requiredSource) {
       throw new NotFoundError("Quote not found");
     }
 
@@ -86,15 +85,23 @@ export class QuoteHoldService {
       input.quoteId
     );
     if (existingLink) {
-      const existingHold = await this.holds.getHold(
-        trx,
-        actor,
-        input.organizationId,
-        input.propertyId,
-        existingLink.inventory_hold_id,
-        request,
-        Permissions.RESERVATION_MANAGE
-      );
+      const existingHold = actor
+        ? await this.holds.getHold(
+            trx,
+            actor,
+            input.organizationId,
+            input.propertyId,
+            existingLink.inventory_hold_id,
+            request,
+            Permissions.RESERVATION_MANAGE
+          )
+        : await this.holds.getHoldSystem(
+            trx,
+            input.organizationId,
+            input.propertyId,
+            existingLink.inventory_hold_id,
+            request
+          );
 
       if (existingHold.hold.status !== "ACTIVE") {
         throw new ConflictError(
@@ -171,29 +178,44 @@ export class QuoteHoldService {
     }
 
     const ttlSeconds = Math.min(MAX_HOLD_TTL_SECONDS, Math.ceil(remainingMs / 1000));
-    const holdResult = await this.holds.createHold(
-      trx,
-      actor,
-      {
-        organizationId: input.organizationId,
-        propertyId: input.propertyId,
-        startDate: quote.arrivalDate,
-        endDate: quote.departureDate,
-        ttlSeconds,
-        clientReference: quote.quoteReference,
-        items
-      },
-      request,
-      Permissions.RESERVATION_MANAGE,
-      quoteExpiry
-    );
+    const holdResult = actor
+      ? await this.holds.createHold(
+          trx,
+          actor,
+          {
+            organizationId: input.organizationId,
+            propertyId: input.propertyId,
+            startDate: quote.arrivalDate,
+            endDate: quote.departureDate,
+            ttlSeconds,
+            clientReference: quote.quoteReference,
+            items
+          },
+          request,
+          Permissions.RESERVATION_MANAGE,
+          quoteExpiry
+        )
+      : await this.holds.createHoldSystem(
+          trx,
+          {
+            organizationId: input.organizationId,
+            propertyId: input.propertyId,
+            startDate: quote.arrivalDate,
+            endDate: quote.departureDate,
+            ttlSeconds,
+            clientReference: quote.quoteReference,
+            items
+          },
+          request,
+          quoteExpiry
+        );
 
     const link = await this.links.createLink(trx, {
       organizationId: input.organizationId,
       propertyId: input.propertyId,
       quoteId: quote.id,
       inventoryHoldId: holdResult.hold.id,
-      linkedByUserId: actor.userId,
+      linkedByUserId: actor?.userId ?? null,
       request
     });
 
@@ -201,6 +223,8 @@ export class QuoteHoldService {
 
     await new AuditService(trx).record({
       actor,
+      actorType: actor ? "USER" : "SYSTEM",
+      actorRole: actor ? null : "PUBLIC_BOOKING",
       organizationId: input.organizationId,
       propertyId: input.propertyId,
       action: "quote.hold.created",
@@ -235,5 +259,40 @@ export class QuoteHoldService {
     });
 
     return { created: true, quoteHold: view };
+  }
+
+  async createFromQuote(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      quoteId: string;
+    },
+    request: RequestMetadata
+  ): Promise<QuoteHoldResult> {
+    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
+      kind: "property",
+      organizationId: input.organizationId,
+      propertyId: input.propertyId
+    });
+
+    return this.createFromQuoteCore(trx, actor, input, request, null);
+  }
+
+  async createFromQuoteSystem(
+    trx: Transaction<Database>,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      quoteId: string;
+    },
+    request: RequestMetadata
+  ): Promise<QuoteHoldResult> {
+    if (request.source !== "public-api") {
+      throw new ValidationError("System quote hold creation requires public-api request source");
+    }
+
+    return this.createFromQuoteCore(trx, null, input, request, "public-api");
   }
 }

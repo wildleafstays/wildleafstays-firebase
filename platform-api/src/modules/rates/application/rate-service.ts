@@ -194,19 +194,11 @@ export class RateService {
     private readonly authorization = new AuthorizationService()
   ) {}
 
-  private async property(
+  private async propertyContext(
     trx: Transaction<Database>,
-    actor: ActorContext,
     organizationId: string,
-    propertyId: string,
-    permission: typeof Permissions.RATES_READ | typeof Permissions.RATES_MANAGE
+    propertyId: string
   ) {
-    this.authorization.assert(actor, permission, {
-      kind: "property",
-      organizationId,
-      propertyId
-    });
-
     const property = await this.rates.findPropertyContext(trx, organizationId, propertyId);
     if (!property) {
       throw new NotFoundError("Property not found");
@@ -224,6 +216,21 @@ export class RateService {
     return property;
   }
 
+  private async property(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    permission: typeof Permissions.RATES_READ | typeof Permissions.RATES_MANAGE
+  ) {
+    this.authorization.assert(actor, permission, {
+      kind: "property",
+      organizationId,
+      propertyId
+    });
+
+    return this.propertyContext(trx, organizationId, propertyId);
+  }
   async createRatePlan(
     trx: Transaction<Database>,
     actor: ActorContext,
@@ -612,16 +619,14 @@ export class RateService {
     return { updated };
   }
 
-  async getCalendar(
+  private async getCalendarCore(
     trx: Transaction<Database>,
-    actor: ActorContext,
     organizationId: string,
     propertyId: string,
     rateProductId: string,
     startDate: string,
     endDate: string
   ): Promise<RateCalendarView> {
-    await this.property(trx, actor, organizationId, propertyId, Permissions.RATES_READ);
     const dates = dateRange(startDate, endDate);
 
     const product = await this.rates.findProduct(trx, organizationId, propertyId, rateProductId);
@@ -676,5 +681,30 @@ export class RateService {
       endDate,
       days
     };
+  }
+
+  async getCalendar(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    rateProductId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<RateCalendarView> {
+    await this.property(trx, actor, organizationId, propertyId, Permissions.RATES_READ);
+    return this.getCalendarCore(trx, organizationId, propertyId, rateProductId, startDate, endDate);
+  }
+
+  async getCalendarSystem(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    rateProductId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<RateCalendarView> {
+    await this.propertyContext(trx, organizationId, propertyId);
+    return this.getCalendarCore(trx, organizationId, propertyId, rateProductId, startDate, endDate);
   }
 }

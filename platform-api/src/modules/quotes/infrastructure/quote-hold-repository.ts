@@ -12,10 +12,10 @@ export class QuoteHoldRepository {
     organizationId: string,
     propertyId: string,
     quoteId: string
-  ): Promise<{ id: string } | undefined> {
+  ): Promise<{ id: string; source: string } | undefined> {
     return trx
       .selectFrom("quotes")
-      .select("id")
+      .select(["id", "source"])
       .where("organization_id", "=", organizationId)
       .where("property_id", "=", propertyId)
       .where("id", "=", quoteId)

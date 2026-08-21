@@ -133,6 +133,22 @@ export class InventoryService {
     private readonly authorization = new AuthorizationService()
   ) {}
 
+  private async propertyContext(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string
+  ): Promise<{ record: PropertyInventoryRecord; saleMode: SaleMode }> {
+    const record = await this.repository.findProperty(db, organizationId, propertyId);
+    if (!record) {
+      throw new NotFoundError("Property not found");
+    }
+    if (record.status === "ARCHIVED") {
+      throw new ConflictError("Inventory cannot be managed for an archived property");
+    }
+
+    return { record, saleMode: asSaleMode(record.sale_mode) };
+  }
+
   private async property(
     db: DbExecutor,
     actor: ActorContext,
@@ -146,17 +162,8 @@ export class InventoryService {
       propertyId
     });
 
-    const record = await this.repository.findProperty(db, organizationId, propertyId);
-    if (!record) {
-      throw new NotFoundError("Property not found");
-    }
-    if (record.status === "ARCHIVED") {
-      throw new ConflictError("Inventory cannot be managed for an archived property");
-    }
-
-    return { record, saleMode: asSaleMode(record.sale_mode) };
+    return this.propertyContext(db, organizationId, propertyId);
   }
-
   private async materialize(
     db: DbExecutor,
     organizationId: string,
@@ -198,23 +205,15 @@ export class InventoryService {
     return categories;
   }
 
-  async getAvailability(
+  private async getAvailabilityCore(
     trx: Transaction<Database>,
-    actor: ActorContext,
     organizationId: string,
     propertyId: string,
     startDate: string,
-    endDate: string
+    endDate: string,
+    dates: string[],
+    saleMode: SaleMode
   ): Promise<InventoryAvailabilityResult> {
-    const dates = dateRange(startDate, endDate, 366);
-    const { saleMode } = await this.property(
-      trx,
-      actor,
-      organizationId,
-      propertyId,
-      Permissions.INVENTORY_READ
-    );
-
     const categories = await this.materialize(trx, organizationId, propertyId, saleMode, dates);
     const [buckets, blocks] = await Promise.all([
       this.repository.listBuckets(trx, organizationId, propertyId, startDate, endDate),
@@ -254,6 +253,54 @@ export class InventoryService {
     });
   }
 
+  async getAvailability(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<InventoryAvailabilityResult> {
+    const dates = dateRange(startDate, endDate, 366);
+    const { saleMode } = await this.property(
+      trx,
+      actor,
+      organizationId,
+      propertyId,
+      Permissions.INVENTORY_READ
+    );
+
+    return this.getAvailabilityCore(
+      trx,
+      organizationId,
+      propertyId,
+      startDate,
+      endDate,
+      dates,
+      saleMode
+    );
+  }
+
+  async getAvailabilitySystem(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<InventoryAvailabilityResult> {
+    const dates = dateRange(startDate, endDate, 366);
+    const { saleMode } = await this.propertyContext(trx, organizationId, propertyId);
+
+    return this.getAvailabilityCore(
+      trx,
+      organizationId,
+      propertyId,
+      startDate,
+      endDate,
+      dates,
+      saleMode
+    );
+  }
   async setControls(
     trx: Transaction<Database>,
     actor: ActorContext,
