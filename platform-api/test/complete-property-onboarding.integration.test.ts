@@ -428,6 +428,81 @@ describe("complete property onboarding workflow", () => {
     expect(reviewRound.decision).toBe("APPROVED");
   });
 
+  it("lists the platform review queue with authorization, filters and stable cursors", async () => {
+    const newer = await makePropertyReady();
+    const older = await makePropertyReady();
+    const reviewer = await createPlatformReviewer();
+    const service = new PropertyOnboardingService();
+
+    for (const fixture of [newer, older]) {
+      await db
+        .transaction()
+        .execute((trx) =>
+          service.submit(
+            trx,
+            fixture.actor,
+            fixture.organizationId,
+            fixture.propertyId,
+            1,
+            requestMetadata()
+          )
+        );
+    }
+
+    await Promise.all([
+      db
+        .updateTable("properties")
+        .set({ updated_at: new Date("2040-01-02T00:00:00.000Z") })
+        .where("id", "=", newer.propertyId)
+        .execute(),
+      db
+        .updateTable("properties")
+        .set({ updated_at: new Date("2040-01-01T00:00:00.000Z") })
+        .where("id", "=", older.propertyId)
+        .execute()
+    ]);
+
+    await expect(
+      service.listPlatformReviewQueue(db, newer.actor, { status: "SUBMITTED", limit: 1 })
+    ).rejects.toMatchObject({ code: "ACCESS_DENIED", statusCode: 403 });
+
+    const firstPage = await service.listPlatformReviewQueue(db, reviewer, {
+      status: "SUBMITTED",
+      limit: 1
+    });
+    const firstItems = firstPage["items"] as Array<Record<string, unknown>>;
+    const nextCursor = firstPage["nextCursor"] as string;
+
+    expect(firstItems).toHaveLength(1);
+    expect(firstItems[0]).toMatchObject({
+      propertyId: newer.propertyId,
+      organizationId: newer.organizationId,
+      status: "SUBMITTED"
+    });
+    expect(nextCursor).toEqual(expect.any(String));
+    expect(JSON.stringify(firstItems[0])).not.toContain(newer.actor.email);
+
+    const secondPage = await service.listPlatformReviewQueue(db, reviewer, {
+      status: "SUBMITTED",
+      limit: 1,
+      cursor: nextCursor
+    });
+    const secondItems = secondPage["items"] as Array<Record<string, unknown>>;
+
+    expect(secondItems).toHaveLength(1);
+    expect(secondItems[0]?.["propertyId"]).toBe(older.propertyId);
+    expect(secondItems[0]?.["propertyId"]).not.toBe(newer.propertyId);
+  });
+
+  it("rejects malformed platform review queue cursors", async () => {
+    const reviewer = await createPlatformReviewer();
+    const service = new PropertyOnboardingService();
+
+    await expect(
+      service.listPlatformReviewQueue(db, reviewer, { cursor: "not-a-valid-cursor" })
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+  });
+
   it("requires a verified ownership or lease document before approval", async () => {
     const fixture = await makePropertyReady();
     const reviewer = await createPlatformReviewer();

@@ -17,6 +17,8 @@ export type DocumentType =
   | "OTHER";
 export type DocumentVerificationDecision = "VERIFIED" | "REJECTED";
 export type ReviewDecision = "CHANGES_REQUIRED" | "APPROVED";
+export type PlatformReviewQueueStatus =
+  "SUBMITTED" | "UNDER_REVIEW" | "CHANGES_REQUIRED" | "APPROVED";
 
 export interface AmenitySelection {
   code: string;
@@ -69,4 +71,10 @@ export interface OnboardingChecklist {
   rightToOperateDocumentPresent: boolean;
   readyToSubmit: boolean;
   missing: string[];
+}
+
+export interface PlatformReviewQueueInput {
+  status?: PlatformReviewQueueStatus;
+  limit?: number;
+  cursor?: string;
 }

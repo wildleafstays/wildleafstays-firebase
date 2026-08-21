@@ -32,7 +32,79 @@ export interface OnboardingCounts {
   rightToOperateDocuments: number;
 }
 
+export interface PropertyReviewQueueCursor {
+  updatedAt: Date;
+  id: string;
+}
+
+export interface PropertyReviewQueueRecord {
+  id: string;
+  organization_id: string;
+  organization_legal_name: string;
+  organization_trading_name: string | null;
+  name: string;
+  status: string;
+  version: number;
+  property_type: string | null;
+  sale_mode: string | null;
+  city: string | null;
+  state_region: string | null;
+  country_code: string;
+  submission_sequence: number;
+  submitted_at: Date | null;
+  approved_at: Date | null;
+  updated_at: Date;
+}
+
 export class PropertyOnboardingRepository {
+  async listPlatformReviewQueue(
+    db: DbExecutor,
+    statuses: string[],
+    cursor: PropertyReviewQueueCursor | null,
+    limit: number
+  ): Promise<PropertyReviewQueueRecord[]> {
+    let query = db
+      .selectFrom("properties as property")
+      .innerJoin("organizations as organization", "organization.id", "property.organization_id")
+      .select([
+        "property.id",
+        "property.organization_id",
+        "organization.legal_name as organization_legal_name",
+        "organization.trading_name as organization_trading_name",
+        "property.name",
+        "property.status",
+        "property.version",
+        "property.property_type",
+        "property.sale_mode",
+        "property.city",
+        "property.state_region",
+        "property.country_code",
+        "property.submission_sequence",
+        "property.submitted_at",
+        "property.approved_at",
+        "property.updated_at"
+      ])
+      .where("property.status", "in", statuses);
+
+    if (cursor) {
+      query = query.where((eb) =>
+        eb.or([
+          eb("property.updated_at", "<", cursor.updatedAt),
+          eb.and([
+            eb("property.updated_at", "=", cursor.updatedAt),
+            eb("property.id", "<", cursor.id)
+          ])
+        ])
+      );
+    }
+
+    return query
+      .orderBy("property.updated_at", "desc")
+      .orderBy("property.id", "desc")
+      .limit(limit)
+      .execute();
+  }
+
   async findProperty(
     db: DbExecutor,
     organizationId: string,

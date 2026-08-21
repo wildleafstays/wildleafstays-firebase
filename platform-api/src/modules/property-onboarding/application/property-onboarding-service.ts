@@ -13,6 +13,7 @@ import type {
   AmenitySelection,
   DocumentVerificationDecision,
   OnboardingChecklist,
+  PlatformReviewQueueInput,
   ReviewDecision,
   SavePoliciesInput
 } from "../domain/property-onboarding.js";
@@ -22,10 +23,84 @@ import {
   type MediaRecord,
   type PolicyRecord,
   type PropertyRecord,
+  type PropertyReviewQueueRecord,
   type ReviewRoundRecord
 } from "../infrastructure/property-onboarding-repository.js";
 
 type DbExecutor = Kysely<Database> | Transaction<Database>;
+const REVIEW_QUEUE_STATUSES = [
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "CHANGES_REQUIRED",
+  "APPROVED"
+] as const;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_REVIEW_PAGE_SIZE = 30;
+const MAX_REVIEW_PAGE_SIZE = 100;
+
+function encodeReviewCursor(row: PropertyReviewQueueRecord): string {
+  return Buffer.from(
+    JSON.stringify({ updatedAt: row.updated_at.toISOString(), id: row.id }),
+    "utf8"
+  ).toString("base64url");
+}
+
+function decodeReviewCursor(value: string | undefined): { updatedAt: Date; id: string } | null {
+  if (!value) return null;
+  if (value.length > 500 || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new ValidationError("Invalid property review cursor");
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
+      updatedAt?: unknown;
+      id?: unknown;
+    };
+    if (
+      typeof decoded.updatedAt !== "string" ||
+      typeof decoded.id !== "string" ||
+      !UUID_PATTERN.test(decoded.id)
+    ) {
+      throw new Error("invalid cursor shape");
+    }
+    const updatedAt = new Date(decoded.updatedAt);
+    if (Number.isNaN(updatedAt.getTime()) || updatedAt.toISOString() !== decoded.updatedAt) {
+      throw new Error("invalid cursor timestamp");
+    }
+    return { updatedAt, id: decoded.id };
+  } catch {
+    throw new ValidationError("Invalid property review cursor");
+  }
+}
+
+function reviewQueueLimit(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_REVIEW_PAGE_SIZE;
+  if (!Number.isInteger(value) || value < 1 || value > MAX_REVIEW_PAGE_SIZE) {
+    throw new ValidationError(`limit must be an integer between 1 and ${MAX_REVIEW_PAGE_SIZE}`);
+  }
+  return value;
+}
+
+function reviewQueueView(row: PropertyReviewQueueRecord): JsonObject {
+  return {
+    propertyId: row.id,
+    organizationId: row.organization_id,
+    organizationLegalName: row.organization_legal_name,
+    organizationTradingName: row.organization_trading_name,
+    propertyName: row.name,
+    status: row.status,
+    version: row.version,
+    propertyType: row.property_type,
+    saleMode: row.sale_mode,
+    city: row.city,
+    stateRegion: row.state_region,
+    countryCode: row.country_code,
+    submissionSequence: row.submission_sequence,
+    submittedAt: row.submitted_at?.toISOString() ?? null,
+    approvedAt: row.approved_at?.toISOString() ?? null,
+    updatedAt: row.updated_at.toISOString()
+  };
+}
 
 function propertyState(property: PropertyRecord): JsonObject {
   return {
@@ -114,6 +189,27 @@ export class PropertyOnboardingService {
     private readonly repository = new PropertyOnboardingRepository(),
     private readonly authorization = new AuthorizationService()
   ) {}
+
+  async listPlatformReviewQueue(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    input: PlatformReviewQueueInput
+  ): Promise<JsonObject> {
+    this.authorization.assert(actor, Permissions.PROPERTY_APPROVE, { kind: "platform" });
+    const limit = reviewQueueLimit(input.limit);
+    const cursor = decodeReviewCursor(input.cursor);
+    const statuses = input.status ? [input.status] : [...REVIEW_QUEUE_STATUSES];
+    const rows = await this.repository.listPlatformReviewQueue(db, statuses, cursor, limit + 1);
+    const pageRows = rows.slice(0, limit);
+
+    return {
+      items: pageRows.map(reviewQueueView),
+      nextCursor:
+        rows.length > limit && pageRows.length > 0
+          ? encodeReviewCursor(pageRows[pageRows.length - 1]!)
+          : null
+    };
+  }
 
   private async requireScopedProperty(
     db: DbExecutor,

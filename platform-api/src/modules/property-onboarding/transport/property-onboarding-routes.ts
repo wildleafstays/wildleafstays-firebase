@@ -11,6 +11,7 @@ import type {
   MediaType,
   PartiesEventsPolicy,
   PetsPolicy,
+  PlatformReviewQueueStatus,
   PropertySmokingPolicy,
   ReviewDecision,
   StorageProvider
@@ -97,6 +98,12 @@ interface DocumentReviewBody extends JsonObject {
   reason?: string;
 }
 
+interface PlatformReviewQueueQuery {
+  status?: PlatformReviewQueueStatus;
+  limit?: number;
+  cursor?: string;
+}
+
 const propertyParamsSchema = {
   type: "object",
   additionalProperties: false,
@@ -176,6 +183,93 @@ export async function registerPropertyOnboardingRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new PropertyOnboardingService();
+
+  app.get<{ Querystring: PlatformReviewQueueQuery }>(
+    "/v1/platform/property-reviews",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Platform Property Review"],
+        summary: "List the Wildleaf property review queue",
+        description:
+          "Returns a cursor-paginated, non-guest review queue for authorized Wildleaf platform staff.",
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: {
+              type: "string",
+              enum: ["SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUIRED", "APPROVED"]
+            },
+            limit: { type: "integer", minimum: 1, maximum: 100, default: 30 },
+            cursor: { type: "string", minLength: 1, maxLength: 500, pattern: "^[A-Za-z0-9_-]+$" }
+          }
+        },
+        response: {
+          200: {
+            type: "object",
+            additionalProperties: false,
+            required: ["items", "nextCursor"],
+            properties: {
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "propertyId",
+                    "organizationId",
+                    "organizationLegalName",
+                    "organizationTradingName",
+                    "propertyName",
+                    "status",
+                    "version",
+                    "propertyType",
+                    "saleMode",
+                    "city",
+                    "stateRegion",
+                    "countryCode",
+                    "submissionSequence",
+                    "submittedAt",
+                    "approvedAt",
+                    "updatedAt"
+                  ],
+                  properties: {
+                    propertyId: { type: "string", format: "uuid" },
+                    organizationId: { type: "string", format: "uuid" },
+                    organizationLegalName: { type: "string" },
+                    organizationTradingName: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    propertyName: { type: "string" },
+                    status: {
+                      type: "string",
+                      enum: ["SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUIRED", "APPROVED"]
+                    },
+                    version: { type: "integer", minimum: 1 },
+                    propertyType: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    saleMode: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    city: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    stateRegion: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    countryCode: { type: "string", pattern: "^[A-Z]{2}$" },
+                    submissionSequence: { type: "integer", minimum: 0 },
+                    submittedAt: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    approvedAt: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    updatedAt: { type: "string" }
+                  }
+                }
+              },
+              nextCursor: { anyOf: [{ type: "string" }, { type: "null" }] }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) throw new AuthenticationError();
+      void reply.header("cache-control", "no-store");
+      return service.listPlatformReviewQueue(deps.db, request.actor, request.query);
+    }
+  );
 
   app.get<{ Params: PropertyParams }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/onboarding",
