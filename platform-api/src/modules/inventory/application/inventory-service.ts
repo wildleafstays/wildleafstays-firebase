@@ -7,17 +7,15 @@ import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import type { ActorContext } from "../../access/domain/actor-context.js";
 import { AuthorizationService } from "../../access/domain/authorization-service.js";
 import { Permissions } from "../../access/domain/permissions.js";
+import { calculateInventoryAvailability } from "./inventory-availability-calculator.js";
 import {
   InventoryBlockScopes,
   InventoryBucketTypes,
   type CreateInventoryBlockInput,
-  type DailyAvailability,
-  type FullPropertyAvailability,
   type InventoryAvailabilityResult,
   type InventoryBlockResult,
   type InventoryBlockView,
   type InventoryControlResult,
-  type RoomCategoryAvailability,
   type SaleMode,
   type SetInventoryControlsInput
 } from "../domain/inventory.js";
@@ -27,7 +25,6 @@ import {
   InventoryRepository,
   type BucketSeed,
   type InventoryBlockRecord,
-  type InventoryBucketRecord,
   type PropertyInventoryRecord,
   type RoomCategoryCapacity
 } from "../infrastructure/inventory-repository.js";
@@ -130,16 +127,6 @@ function blockView(record: InventoryBlockRecord): InventoryBlockView {
   };
 }
 
-function bucketKey(bucket: InventoryBucketRecord): string {
-  return `${bucket.bucket_type}:${bucket.room_category_id ?? "PROPERTY"}:${normalizeDatabaseDate(bucket.stay_date)}`;
-}
-
-function overlapsDate(block: InventoryBlockRecord, date: string): boolean {
-  return (
-    normalizeDatabaseDate(block.start_date) <= date && normalizeDatabaseDate(block.end_date) > date
-  );
-}
-
 export class InventoryService {
   constructor(
     private readonly repository = new InventoryRepository(),
@@ -234,125 +221,37 @@ export class InventoryService {
       this.repository.listBlocks(trx, organizationId, propertyId, startDate, endDate)
     ]);
 
-    const bucketMap = new Map(buckets.map((bucket) => [bucketKey(bucket), bucket]));
-    const categoryMap = new Map(categories.map((category) => [category.id, category]));
-
-    const days: DailyAvailability[] = dates.map((date) => {
-      const dayBlocks = blocks.filter((block) => overlapsDate(block, date));
-      const propertyClosed = dayBlocks.some(
-        (block) => block.scope_type === InventoryBlockScopes.PROPERTY
-      );
-
-      const fullBucket = bucketMap.get(`${InventoryBucketTypes.FULL_PROPERTY}:PROPERTY:${date}`);
-      const fullCommitted = Boolean(
-        fullBucket && (fullBucket.held_quantity > 0 || fullBucket.confirmed_quantity > 0)
-      );
-
-      const roomCategories: RoomCategoryAvailability[] = categories.map((category) => {
-        const bucket = bucketMap.get(
-          `${InventoryBucketTypes.ROOM_CATEGORY}:${category.id}:${date}`
-        );
-        if (!bucket) {
-          throw new ConflictError("Inventory bucket materialization failed", {
-            roomCategoryId: category.id,
-            date
-          });
-        }
-
-        const categoryBlocks = dayBlocks.filter(
-          (block) =>
-            block.scope_type === InventoryBlockScopes.ROOM_CATEGORY &&
-            block.room_category_id === category.id
-        );
-        const unitBlocks = new Set(
-          dayBlocks
-            .filter(
-              (block) =>
-                block.scope_type === InventoryBlockScopes.PHYSICAL_UNIT &&
-                block.room_category_id === category.id &&
-                block.physical_unit_id
-            )
-            .map((block) => block.physical_unit_id as string)
-        );
-
-        const blockedQuantity =
-          categoryBlocks.reduce((sum, block) => sum + block.quantity, 0) + unitBlocks.size;
-
-        const unavailable = propertyClosed || fullCommitted || bucket.stop_sell;
-        const rawSellable =
-          bucket.capacity +
-          bucket.overbooking_limit -
-          bucket.held_quantity -
-          bucket.confirmed_quantity -
-          blockedQuantity;
-
-        return {
-          roomCategoryId: category.id,
-          roomCategoryCode: category.code,
-          roomCategoryName: category.name,
-          date,
-          physicalCapacity: bucket.capacity,
-          heldQuantity: bucket.held_quantity,
-          confirmedQuantity: bucket.confirmed_quantity,
-          blockedQuantity,
-          overbookingLimit: bucket.overbooking_limit,
-          stopSell: bucket.stop_sell,
-          sellableQuantity: unavailable ? 0 : Math.max(0, rawSellable)
-        };
-      });
-
-      let fullProperty: FullPropertyAvailability | null = null;
-      if (includesFullProperty(saleMode)) {
-        if (!fullBucket) {
-          throw new ConflictError("Full-property inventory bucket materialization failed", {
-            date
-          });
-        }
-
-        const roomInventoryConflict =
-          saleMode === "BOTH" &&
-          (roomCategories.length === 0 ||
-            roomCategories.some((room) => {
-              const category = categoryMap.get(room.roomCategoryId);
-              return (
-                !category ||
-                room.physicalCapacity <= 0 ||
-                room.heldQuantity > 0 ||
-                room.confirmedQuantity > 0 ||
-                room.blockedQuantity > 0
-              );
-            }));
-
-        const unavailable = propertyClosed || fullBucket.stop_sell || roomInventoryConflict;
-        const rawSellable =
-          fullBucket.capacity - fullBucket.held_quantity - fullBucket.confirmed_quantity;
-
-        fullProperty = {
-          date,
-          capacity: fullBucket.capacity,
-          heldQuantity: fullBucket.held_quantity,
-          confirmedQuantity: fullBucket.confirmed_quantity,
-          stopSell: fullBucket.stop_sell,
-          roomInventoryConflict,
-          sellableQuantity: unavailable ? 0 : Math.max(0, rawSellable)
-        };
-      }
-
-      return {
-        date,
-        propertyClosed,
-        roomCategories,
-        fullProperty
-      };
-    });
-
-    return {
+    return calculateInventoryAvailability({
       propertyId,
       saleMode,
       startDate,
       endDate,
-      days
-    };
+      dates,
+      categories: categories.map((category) => ({
+        id: category.id,
+        code: category.code,
+        name: category.name,
+        capacity: category.capacity
+      })),
+      buckets: buckets.map((bucket) => ({
+        bucketType: bucket.bucket_type as "ROOM_CATEGORY" | "FULL_PROPERTY",
+        roomCategoryId: bucket.room_category_id,
+        stayDate: normalizeDatabaseDate(bucket.stay_date),
+        heldQuantity: bucket.held_quantity,
+        confirmedQuantity: bucket.confirmed_quantity,
+        overbookingLimit: bucket.overbooking_limit,
+        stopSell: bucket.stop_sell
+      })),
+      blocks: blocks.map((block) => ({
+        scopeType: block.scope_type as "PROPERTY" | "ROOM_CATEGORY" | "PHYSICAL_UNIT",
+        roomCategoryId: block.room_category_id,
+        physicalUnitId: block.physical_unit_id,
+        startDate: normalizeDatabaseDate(block.start_date),
+        endDate: normalizeDatabaseDate(block.end_date),
+        quantity: block.quantity
+      })),
+      missingBucketMode: "ERROR"
+    });
   }
 
   async setControls(
