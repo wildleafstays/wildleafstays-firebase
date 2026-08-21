@@ -1,4 +1,8 @@
-import { authorizedRequest, newIdempotencyKey } from "./api-client.js";
+import {
+  authorizedRequest,
+  newIdempotencyKey,
+  uploadFile,
+} from "./api-client.js";
 import {
   availableScreens,
   canReviewProperties,
@@ -8,6 +12,7 @@ import {
 } from "./portal-state.js";
 
 const auth = firebase.auth();
+const pendingUploadKeys = new Map();
 const state = {
   session: null,
   screen: null,
@@ -15,6 +20,7 @@ const state = {
   properties: [],
   property: null,
   onboarding: null,
+  layout: null,
   reviewItems: [],
   reviewCursor: null,
   reviewSelection: null,
@@ -38,6 +44,26 @@ function idempotent(path, method, operation, body = {}) {
     body,
     idempotencyKey: newIdempotencyKey(operation),
   });
+}
+
+async function managedUpload(path, file, operation) {
+  const fingerprint = [
+    operation,
+    state.property?.id,
+    path,
+    file.name,
+    file.type,
+    file.size,
+    file.lastModified,
+  ].join(":");
+  const key = pendingUploadKeys.get(fingerprint) || newIdempotencyKey(operation);
+  pendingUploadKeys.set(fingerprint, key);
+  const result = await uploadFile(path, file, {
+    idempotencyKey: key,
+    getAccessToken: async () => auth.currentUser?.getIdToken(),
+  });
+  pendingUploadKeys.delete(fingerprint);
+  return result;
 }
 
 function textElement(tag, className, text) {
@@ -326,14 +352,18 @@ byId("backToProperties").addEventListener("click", () =>
 );
 
 async function openProperty(organizationId, propertyId) {
-  const [profile, onboarding] = await Promise.all([
+  const [profile, onboarding, layout] = await Promise.all([
     api(`/v1/partner/organizations/${organizationId}/properties/${propertyId}`),
     api(
       `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
     ),
+    api(
+      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
+    ),
   ]);
   state.property = profile.property;
   state.onboarding = onboarding;
+  state.layout = layout;
   renderEditor();
   await showScreen("editor");
 }
@@ -360,6 +390,10 @@ function renderEditor() {
     byId("profileForm"),
     byId("policiesForm"),
     byId("amenitiesForm"),
+    byId("roomCategoryForm"),
+    byId("physicalUnitForm"),
+    byId("imageUploadForm"),
+    byId("documentUploadForm"),
   ]) {
     Array.from(form.elements).forEach((element) => {
       element.disabled = !editable;
@@ -394,6 +428,144 @@ function renderEditor() {
     "hidden",
     !(editable && onboarding.checklist.readyToSubmit),
   );
+  renderAccommodation(editable);
+  renderAssets(editable);
+}
+
+function renderAccommodation(editable) {
+  const categories = state.layout?.roomCategories || [];
+  const units = state.layout?.physicalUnits || [];
+  const categorySelect = byId("unitRoomCategory");
+  categorySelect.replaceChildren();
+  if (!categories.length) {
+    const option = textElement("option", "", "Add a room category first");
+    option.value = "";
+    categorySelect.append(option);
+  }
+  for (const category of categories) {
+    const option = textElement(
+      "option",
+      "",
+      `${category.code} · ${category.name}`,
+    );
+    option.value = category.id;
+    categorySelect.append(option);
+  }
+  categorySelect.disabled = !editable || !categories.length;
+
+  const list = byId("accommodationList");
+  list.replaceChildren();
+  if (!categories.length) {
+    list.append(
+      textElement(
+        "p",
+        "empty-state",
+        "No room categories or physical units added yet.",
+      ),
+    );
+    return;
+  }
+  for (const category of categories) {
+    const categoryUnits = units.filter(
+      (unit) => unit.roomCategoryId === category.id,
+    );
+    const row = document.createElement("div");
+    row.className = "compact-row";
+    const copy = document.createElement("div");
+    copy.append(textElement("strong", "", category.name));
+    copy.append(
+      textElement(
+        "span",
+        "muted",
+        `${category.accommodationType} · max ${category.maxOccupancy} guests · ${categoryUnits.length} physical unit${categoryUnits.length === 1 ? "" : "s"}`,
+      ),
+    );
+    if (categoryUnits.length) {
+      copy.append(
+        textElement(
+          "small",
+          "muted",
+          categoryUnits
+            .map((unit) => unit.displayName || unit.unitCode)
+            .join(", "),
+        ),
+      );
+    }
+    row.append(copy);
+    list.append(row);
+  }
+}
+
+function renderAssets(editable) {
+  const mediaList = byId("mediaList");
+  mediaList.replaceChildren();
+  const media = state.onboarding?.media || [];
+  if (!media.length)
+    mediaList.append(textElement("p", "muted", "No images uploaded."));
+  for (const item of media) {
+    const row = document.createElement("div");
+    row.className = "asset-row";
+    const copy = document.createElement("div");
+    copy.append(
+      textElement(
+        "strong",
+        "",
+        item.altText || `Property image ${item.id.slice(0, 8)}`,
+      ),
+    );
+    copy.append(
+      textElement(
+        "small",
+        "muted",
+        `${item.mimeType || "image"}${item.isCover ? " · cover image" : ""}`,
+      ),
+    );
+    row.append(copy);
+    if (editable) {
+      const actions = document.createElement("div");
+      actions.className = "asset-actions";
+      if (!item.isCover)
+        actions.append(
+          button(
+            "Make cover",
+            () => setCoverImage(item.id),
+            "button-secondary",
+          ),
+        );
+      actions.append(
+        button("Archive", () => archiveMedia(item.id), "danger-button"),
+      );
+      row.append(actions);
+    }
+    mediaList.append(row);
+  }
+
+  const documentList = byId("documentList");
+  documentList.replaceChildren();
+  const documents = state.onboarding?.documents || [];
+  if (!documents.length)
+    documentList.append(
+      textElement("p", "muted", "No compliance documents uploaded."),
+    );
+  for (const item of documents) {
+    const row = document.createElement("div");
+    row.className = "asset-row";
+    const copy = document.createElement("div");
+    copy.append(textElement("strong", "", item.originalFilename));
+    copy.append(
+      textElement(
+        "small",
+        "muted",
+        `${item.documentType} · ${item.verificationStatus}`,
+      ),
+    );
+    row.append(copy);
+    if (editable)
+      row.append(
+        button("Archive", () => archiveDocument(item.id), "danger-button"),
+      );
+    documentList.append(row);
+  }
 }
 
 byId("profileForm").addEventListener("submit", (event) => {
@@ -463,6 +635,142 @@ byId("amenitiesForm").addEventListener("submit", (event) => {
   });
 });
 
+byId("roomCategoryForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  run(async () => {
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    await idempotent(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories`,
+      "POST",
+      "room-category-create",
+      {
+        code: values.code.trim().toUpperCase(),
+        name: values.name.trim(),
+        accommodationType: values.accommodationType,
+        baseOccupancy: Number(values.baseOccupancy),
+        maxAdults: Number(values.maxAdults),
+        maxChildren: Number(values.maxChildren),
+        maxOccupancy: Number(values.maxOccupancy),
+        ...(values.bedConfiguration.trim()
+          ? { bedConfiguration: values.bedConfiguration.trim() }
+          : {}),
+      },
+    );
+    event.currentTarget.reset();
+    await refreshEditorData();
+    showMessage("Room category added.");
+  });
+});
+
+byId("physicalUnitForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  run(async () => {
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    await idempotent(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/units`,
+      "POST",
+      "physical-unit-create",
+      {
+        roomCategoryId: values.roomCategoryId,
+        unitCode: values.unitCode.trim().toUpperCase(),
+        ...(values.displayName.trim()
+          ? { displayName: values.displayName.trim() }
+          : {}),
+        hasView: values.hasView === "on",
+        ...(values.hasView === "on" && values.viewLabel.trim()
+          ? { viewLabel: values.viewLabel.trim() }
+          : {}),
+        smokingPolicy: "NON_SMOKING",
+      },
+    );
+    event.currentTarget.reset();
+    await refreshEditorData();
+    showMessage("Physical unit added.");
+  });
+});
+
+byId("imageUploadForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  run(async () => {
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
+    const file = form.elements.file.files[0];
+    if (!file) throw new Error("Choose an image to upload.");
+    if (file.size > 8 * 1024 * 1024)
+      throw new Error("Property images must be 8 MB or smaller.");
+    const query = new URLSearchParams();
+    if (values.altText.trim()) query.set("altText", values.altText.trim());
+    if (values.caption.trim()) query.set("caption", values.caption.trim());
+    query.set("isCover", String(values.isCover === "on"));
+    await managedUpload(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/onboarding/uploads/images?${query}`,
+      file,
+      "property-image-upload",
+    );
+    form.reset();
+    await refreshEditorOnboarding();
+    showMessage("Property image uploaded and verified.");
+  });
+});
+
+byId("documentUploadForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  run(async () => {
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
+    const file = form.elements.file.files[0];
+    if (!file) throw new Error("Choose a PDF document to upload.");
+    if (file.size > 12 * 1024 * 1024)
+      throw new Error("Compliance documents must be 12 MB or smaller.");
+    const query = new URLSearchParams({ documentType: values.documentType });
+    if (values.issuedOn) query.set("issuedOn", values.issuedOn);
+    if (values.expiresOn) query.set("expiresOn", values.expiresOn);
+    await managedUpload(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/onboarding/uploads/documents?${query}`,
+      file,
+      "property-document-upload",
+    );
+    form.reset();
+    await refreshEditorOnboarding();
+    showMessage("Compliance PDF uploaded to private storage.");
+  });
+});
+
+async function setCoverImage(mediaId) {
+  await idempotent(
+    `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/onboarding/media/${mediaId}/cover`,
+    "POST",
+    "property-cover-select",
+    {},
+  );
+  await refreshEditorOnboarding();
+  showMessage("Cover image updated.");
+}
+
+async function archiveMedia(mediaId) {
+  await api(
+    `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/onboarding/media/${mediaId}`,
+    {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey("property-media-archive"),
+    },
+  );
+  await refreshEditorOnboarding();
+  showMessage("Image archived.");
+}
+
+async function archiveDocument(documentId) {
+  await api(
+    `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/onboarding/documents/${documentId}`,
+    {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey("property-document-archive"),
+    },
+  );
+  await refreshEditorOnboarding();
+  showMessage("Document archived.");
+}
+
 byId("submitPropertyButton").addEventListener("click", () => {
   run(async () => {
     await idempotent(
@@ -480,6 +788,20 @@ async function refreshEditorOnboarding() {
   state.onboarding = await api(
     `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/onboarding`,
   );
+  renderEditor();
+}
+
+async function refreshEditorData() {
+  const [onboarding, layout] = await Promise.all([
+    api(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/onboarding`,
+    ),
+    api(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/layout`,
+    ),
+  ]);
+  state.onboarding = onboarding;
+  state.layout = layout;
   renderEditor();
 }
 
@@ -611,9 +933,16 @@ function renderReviewDetail() {
         `${documentRecord.documentType} · ${documentRecord.verificationStatus}`,
       ),
     );
+    const actions = document.createElement("div");
+    actions.className = "document-actions";
+    actions.append(
+      button(
+        "View private PDF",
+        () => openReviewDocument(documentRecord.id),
+        "button-secondary",
+      ),
+    );
     if (onboarding.property.status === "UNDER_REVIEW") {
-      const actions = document.createElement("div");
-      actions.className = "document-actions";
       actions.append(
         button("Verify", () => reviewDocument(documentRecord.id, "VERIFIED")),
         button(
@@ -622,8 +951,8 @@ function renderReviewDetail() {
           "danger-button",
         ),
       );
-      row.append(actions);
     }
+    row.append(actions);
     panel.append(row);
   }
 
@@ -653,6 +982,21 @@ function renderReviewDetail() {
   if (status === "APPROVED")
     actions.append(button("Activate listing", activateProperty));
   panel.append(actions);
+}
+
+async function openReviewDocument(documentId) {
+  const viewer = window.open("about:blank", "_blank");
+  if (viewer) viewer.opener = null;
+  try {
+    const result = await api(
+      `/v1/platform/properties/${state.reviewSelection.propertyId}/documents/${documentId}/read-url`,
+    );
+    if (viewer) viewer.location.replace(result.url);
+    else window.location.assign(result.url);
+  } catch (error) {
+    if (viewer) viewer.close();
+    throw error;
+  }
 }
 
 function reviewReason() {

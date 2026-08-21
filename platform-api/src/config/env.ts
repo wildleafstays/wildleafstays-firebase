@@ -11,6 +11,7 @@ const envSchema = z
     DATABASE_URL: z.string().min(1),
     DB_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(100).default(10),
     FIREBASE_PROJECT_ID: z.string().min(1),
+    FIREBASE_STORAGE_BUCKET: z.string().min(3).optional(),
     RAZORPAY_KEY_ID: z.string().min(1).optional(),
     RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional()

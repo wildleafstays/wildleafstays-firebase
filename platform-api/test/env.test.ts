@@ -7,12 +7,14 @@ describe("loadConfig", () => {
       NODE_ENV: "test",
       DATABASE_URL: "postgres://user:password@localhost:5432/wildleaf",
       FIREBASE_PROJECT_ID: "wildleaf-test",
+      FIREBASE_STORAGE_BUCKET: "wildleaf-test.firebasestorage.app",
       PORT: "8081"
     });
 
     expect(config.NODE_ENV).toBe("test");
     expect(config.PORT).toBe(8081);
     expect(config.DB_MAX_CONNECTIONS).toBe(10);
+    expect(config.FIREBASE_STORAGE_BUCKET).toBe("wildleaf-test.firebasestorage.app");
   });
 
   it("rejects a missing database URL", () => {

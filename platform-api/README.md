@@ -16,6 +16,11 @@ This directory is the permanent V2 transactional backend. It is intentionally is
 
 1. Install Docker Desktop and Node.js 22.
 2. Copy `.env.example` to `.env`.
+
+   Set `FIREBASE_STORAGE_BUCKET` to the exact Firebase Storage bucket when
+   testing Phase 7B uploads. If it is omitted, the API remains operational but
+   managed property uploads return `503 SERVICE_UNAVAILABLE`.
+
 3. Start PostgreSQL:
 
 ```powershell
@@ -61,6 +66,10 @@ Local endpoints:
 - `GET /openapi.json` (non-production)
 - `GET /v1/session` (requires a Firebase ID token)
 - `POST /v1/partner/organizations` (authenticated + `Idempotency-Key`)
+- `POST /v1/partner/organizations/:organizationId/properties/:propertyId/onboarding/uploads/images`
+  (authenticated multipart file + `Idempotency-Key` + `X-Content-SHA256`)
+- `POST /v1/partner/organizations/:organizationId/properties/:propertyId/onboarding/uploads/documents`
+  (authenticated private PDF upload + digest verification)
 
 ## Architectural rules
 
@@ -70,3 +79,6 @@ Local endpoints:
 - Audit records are append-only.
 - Database schema changes are migrations only.
 - Critical domain writes will use explicit SQL transactions.
+- Browsers never select storage keys. Property assets are streamed through the
+  API into immutable server-selected keys; legal documents remain private and
+  are exposed to reviewers only through short-lived read URLs.

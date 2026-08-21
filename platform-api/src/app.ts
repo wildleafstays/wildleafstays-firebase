@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import helmet from "@fastify/helmet";
+import multipart from "@fastify/multipart";
 import swagger from "@fastify/swagger";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Kysely } from "kysely";
@@ -7,6 +8,8 @@ import type { AppConfig } from "./config/env.js";
 import { checkDatabaseReadiness } from "./infrastructure/database/database.js";
 import type { Database } from "./infrastructure/database/types.js";
 import type { IdentityVerifier } from "./infrastructure/identity/identity-verifier.js";
+import type { PropertyAssetStorage } from "./infrastructure/storage/property-asset-storage.js";
+import { UnavailablePropertyAssetStorage } from "./infrastructure/storage/unavailable-property-asset-storage.js";
 import { AccessRepository } from "./modules/access/infrastructure/access-repository.js";
 import { registerCommercialRuleRoutes } from "./modules/commercial/transport/commercial-rule-routes.js";
 import { registerPromotionRuleRoutes } from "./modules/commercial/transport/promotion-rule-routes.js";
@@ -19,6 +22,7 @@ import { registerOrganizationRoutes } from "./modules/organizations/transport/or
 import { RazorpayProvider } from "./modules/payments/infrastructure/razorpay-provider.js";
 import { registerPaymentRoutes } from "./modules/payments/transport/payment-routes.js";
 import { registerPublicCatalogRoutes } from "./modules/public-booking/transport/public-catalog-routes.js";
+import { MAX_PROPERTY_DOCUMENT_BYTES } from "./modules/property-onboarding/application/property-asset-upload-service.js";
 import { registerPropertyOnboardingRoutes } from "./modules/property-onboarding/transport/property-onboarding-routes.js";
 import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
 import { registerPropertySetupRoutes } from "./modules/property-setup/transport/property-setup-routes.js";
@@ -31,6 +35,7 @@ export interface AppDependencies {
   config: AppConfig;
   db: Kysely<Database>;
   identityVerifier: IdentityVerifier;
+  propertyAssetStorage?: PropertyAssetStorage;
 }
 
 export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> {
@@ -86,6 +91,18 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
           }
         }
       }
+    }
+  });
+
+  await app.register(multipart, {
+    throwFileSizeLimit: false,
+    limits: {
+      files: 1,
+      fields: 0,
+      parts: 1,
+      // Leave one byte beyond the largest domain limit so its verifier can
+      // return the canonical size error before Busboy truncates the stream.
+      fileSize: MAX_PROPERTY_DOCUMENT_BYTES + 1
     }
   });
 
@@ -190,7 +207,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,
-    accessRepository
+    accessRepository,
+    propertyAssetStorage: deps.propertyAssetStorage ?? new UnavailablePropertyAssetStorage()
   });
 
   await registerInventoryRoutes(app, {

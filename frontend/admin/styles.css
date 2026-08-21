@@ -437,6 +437,82 @@ button:disabled {
   gap: 1rem;
   align-items: start;
 }
+.span-editor {
+  grid-column: 1 / -1;
+}
+.card-heading {
+  margin-bottom: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.card-heading p {
+  margin: 0.35rem 0 0;
+}
+.setup-grid,
+.asset-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+.setup-grid > form {
+  padding: 1rem;
+  background: #f5f7f2;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  align-content: start;
+}
+.setup-grid h4,
+.asset-columns h4 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: 1.05rem;
+}
+.check-control {
+  display: flex;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.6rem;
+}
+.check-control input {
+  width: 1.1rem;
+  min-height: 1.1rem;
+}
+.compact-list {
+  margin-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.compact-row,
+.asset-row {
+  padding: 0.8rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.compact-row span,
+.compact-row small,
+.asset-row small {
+  display: block;
+  margin-top: 0.25rem;
+}
+.asset-columns {
+  margin-top: 1.35rem;
+}
+.asset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+.asset-row button,
+.asset-actions button {
+  width: auto;
+  min-height: 2.2rem;
+  padding: 0.42rem 0.62rem;
+  font-size: 0.72rem;
+}
 .checklist-card {
   position: sticky;
   top: 1rem;
@@ -550,7 +626,9 @@ button:disabled {
     margin-top: 1.2rem;
   }
   .editor-grid,
-  .review-layout {
+  .review-layout,
+  .setup-grid,
+  .asset-columns {
     grid-template-columns: 1fr;
   }
   .checklist-card,

@@ -382,6 +382,36 @@ export class PropertyOnboardingRepository {
       .executeTakeFirstOrThrow();
   }
 
+  async findDocument(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    documentId: string
+  ): Promise<DocumentRecord | undefined> {
+    return db
+      .selectFrom("property_documents")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("id", "=", documentId)
+      .where("status", "=", "ACTIVE")
+      .executeTakeFirst();
+  }
+
+  async findDocumentByProperty(
+    db: DbExecutor,
+    propertyId: string,
+    documentId: string
+  ): Promise<DocumentRecord | undefined> {
+    return db
+      .selectFrom("property_documents")
+      .selectAll()
+      .where("property_id", "=", propertyId)
+      .where("id", "=", documentId)
+      .where("status", "=", "ACTIVE")
+      .executeTakeFirst();
+  }
+
   async archiveDocument(
     db: DbExecutor,
     organizationId: string,

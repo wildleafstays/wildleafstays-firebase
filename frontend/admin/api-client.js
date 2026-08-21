@@ -46,7 +46,11 @@ export async function authorizedRequest(path, options = {}) {
       method: options.method || "GET",
       headers,
       body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+        options.rawBody !== undefined
+          ? options.rawBody
+          : options.body === undefined
+            ? undefined
+            : JSON.stringify(options.body),
       cache: "no-store",
       credentials: "omit",
       signal: controller.signal,
@@ -89,6 +93,30 @@ export async function authorizedRequest(path, options = {}) {
   } finally {
     globalThis.clearTimeout(timeout);
   }
+}
+
+export async function sha256File(file) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    await file.arrayBuffer(),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+export async function uploadFile(path, file, options = {}) {
+  const body = new FormData();
+  body.append("file", file, file.name);
+  const contentSha256 = await sha256File(file);
+  return authorizedRequest(path, {
+    method: "POST",
+    rawBody: body,
+    getAccessToken: options.getAccessToken,
+    idempotencyKey: options.idempotencyKey,
+    headers: { "X-Content-SHA256": contentSha256 },
+    timeoutMs: options.timeoutMs || 120000,
+  });
 }
 
 export function newIdempotencyKey(operation) {

@@ -2,11 +2,16 @@ import { buildApp } from "./app.js";
 import { loadConfig } from "./config/env.js";
 import { createDatabase } from "./infrastructure/database/database.js";
 import { FirebaseIdentityVerifier } from "./infrastructure/identity/firebase-identity-verifier.js";
+import { FirebasePropertyAssetStorage } from "./infrastructure/storage/firebase-property-asset-storage.js";
+import { UnavailablePropertyAssetStorage } from "./infrastructure/storage/unavailable-property-asset-storage.js";
 
 const config = loadConfig();
 const db = createDatabase(config);
 const identityVerifier = new FirebaseIdentityVerifier(config.FIREBASE_PROJECT_ID);
-const app = await buildApp({ config, db, identityVerifier });
+const propertyAssetStorage = config.FIREBASE_STORAGE_BUCKET
+  ? new FirebasePropertyAssetStorage(config.FIREBASE_STORAGE_BUCKET)
+  : new UnavailablePropertyAssetStorage();
+const app = await buildApp({ config, db, identityVerifier, propertyAssetStorage });
 
 const shutdown = async (signal: string): Promise<void> => {
   app.log.info({ signal }, "Graceful shutdown started");

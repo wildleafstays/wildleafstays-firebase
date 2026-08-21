@@ -5,8 +5,13 @@ import test from "node:test";
 globalThis.crypto ||= webcrypto;
 globalThis.WILDLEAF_ADMIN_CONFIG = { apiBaseUrl: "https://api.example.test/" };
 
-const { ApiError, authorizedRequest, newIdempotencyKey } =
-  await import("../api-client.js");
+const {
+  ApiError,
+  authorizedRequest,
+  newIdempotencyKey,
+  sha256File,
+  uploadFile,
+} = await import("../api-client.js");
 
 test("authorizedRequest sends a fresh bearer token and idempotency key", async () => {
   let request;
@@ -88,4 +93,31 @@ test("newIdempotencyKey creates operation-scoped keys", () => {
     newIdempotencyKey("property-submit"),
     /^property-submit-[A-Za-z0-9-]{16,}$/,
   );
+});
+
+test("uploadFile sends multipart bytes with a verified SHA-256 header", async () => {
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify({ media: { id: "media-1" } }), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const file = new File(["wildleaf-image"], "forest.webp", {
+    type: "image/webp",
+  });
+
+  await uploadFile("/v1/partner/example/uploads/images", file, {
+    idempotencyKey: "property-image-upload-12345678",
+    getAccessToken: async () => "firebase-id-token",
+  });
+
+  assert.equal(
+    request.options.headers.get("X-Content-SHA256"),
+    await sha256File(file),
+  );
+  assert.equal(request.options.headers.get("Content-Type"), null);
+  assert.ok(request.options.body instanceof FormData);
+  assert.equal(request.options.body.get("file").name, "forest.webp");
 });

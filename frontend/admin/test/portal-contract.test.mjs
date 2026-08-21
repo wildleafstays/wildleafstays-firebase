@@ -57,6 +57,10 @@ test("the portal uses canonical v1 APIs and never restores the legacy admin or s
   const combined = `${source}\n${html}`;
   assert.match(source, /\/v1\/partner\/organizations/);
   assert.match(source, /\/v1\/platform\/properties/);
+  assert.match(source, /onboarding\/uploads\/images/);
+  assert.match(source, /onboarding\/uploads\/documents/);
+  assert.match(source, /\/room-categories/);
+  assert.match(source, /\/units/);
   assert.doesNotMatch(combined, /\/api\/admin\//);
   assert.doesNotMatch(combined, /firebase\.storage|storageKey\s*:/);
   assert.doesNotMatch(

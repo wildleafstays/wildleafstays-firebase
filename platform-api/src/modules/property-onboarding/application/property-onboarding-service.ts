@@ -190,6 +190,36 @@ export class PropertyOnboardingService {
     private readonly authorization = new AuthorizationService()
   ) {}
 
+  async assertOwnerContentEditable(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string
+  ): Promise<void> {
+    const property = await this.requireScopedProperty(
+      db,
+      actor,
+      organizationId,
+      propertyId,
+      Permissions.PROPERTY_MANAGE
+    );
+    this.assertOwnerEditable(property);
+  }
+
+  async getPlatformDocumentStorageKey(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    propertyId: string,
+    documentId: string
+  ): Promise<string> {
+    const property = await this.requirePlatformProperty(db, actor, propertyId);
+    const document = await this.repository.findDocumentByProperty(db, property.id, documentId);
+    if (!document) {
+      throw new NotFoundError("Property document not found");
+    }
+    return document.storage_key;
+  }
+
   async listPlatformReviewQueue(
     db: Kysely<Database>,
     actor: ActorContext,

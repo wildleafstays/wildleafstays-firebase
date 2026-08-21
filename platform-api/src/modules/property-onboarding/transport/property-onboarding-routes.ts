@@ -2,19 +2,23 @@ import type { FastifyInstance } from "fastify";
 import type { Kysely } from "kysely";
 import type { Database, JsonObject } from "../../../infrastructure/database/types.js";
 import type { IdentityVerifier } from "../../../infrastructure/identity/identity-verifier.js";
+import type { PropertyAssetStorage } from "../../../infrastructure/storage/property-asset-storage.js";
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import { PropertyOnboardingService } from "../application/property-onboarding-service.js";
+import {
+  MAX_PROPERTY_DOCUMENT_BYTES,
+  MAX_PROPERTY_IMAGE_BYTES,
+  PropertyAssetUploadService
+} from "../application/property-asset-upload-service.js";
 import type {
   ChildrenPolicy,
   DocumentType,
-  MediaType,
   PartiesEventsPolicy,
   PetsPolicy,
   PlatformReviewQueueStatus,
   PropertySmokingPolicy,
-  ReviewDecision,
-  StorageProvider
+  ReviewDecision
 } from "../domain/property-onboarding.js";
 import { AuthenticationError, ValidationError } from "../../../shared/errors/app-error.js";
 import { requireAuthentication } from "../../../shared/http/authenticate.js";
@@ -26,6 +30,7 @@ export interface PropertyOnboardingRouteDependencies {
   identityVerifier: IdentityVerifier;
   userRepository: UserRepository;
   accessRepository: AccessRepository;
+  propertyAssetStorage: PropertyAssetStorage;
 }
 
 interface PropertyParams {
@@ -64,24 +69,22 @@ interface ReplaceAmenitiesBody extends JsonObject {
   amenities: Array<{ code: string; details?: string }>;
 }
 
-interface AddMediaBody extends JsonObject {
-  mediaType: MediaType;
-  storageProvider: StorageProvider;
-  storageKey: string;
-  mimeType?: string;
+interface UploadImageQuery {
   altText?: string;
   caption?: string;
   isCover?: boolean;
   sortOrder?: number;
 }
 
-interface AddDocumentBody extends JsonObject {
+interface UploadDocumentQuery {
   documentType: DocumentType;
-  storageProvider: StorageProvider;
-  storageKey: string;
-  originalFilename: string;
   issuedOn?: string;
   expiresOn?: string;
+}
+
+interface ManagedUploadHeaders {
+  "idempotency-key": string;
+  "x-content-sha256": string;
 }
 
 interface VersionBody extends JsonObject {
@@ -168,6 +171,18 @@ const idempotencyHeaders = {
   }
 } as const;
 
+const managedUploadHeaders = {
+  type: "object",
+  required: ["idempotency-key", "x-content-sha256"],
+  properties: {
+    ...idempotencyHeaders.properties,
+    "x-content-sha256": {
+      type: "string",
+      pattern: "^[a-f0-9]{64}$"
+    }
+  }
+} as const;
+
 function requireIdempotencyKey(headers: Record<string, unknown>): string {
   const key = headers["idempotency-key"];
   if (typeof key !== "string") {
@@ -183,6 +198,7 @@ export async function registerPropertyOnboardingRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new PropertyOnboardingService();
+  const uploads = new PropertyAssetUploadService(deps.propertyAssetStorage, service);
 
   app.get<{ Querystring: PlatformReviewQueueQuery }>(
     "/v1/platform/property-reviews",
@@ -446,33 +462,27 @@ export async function registerPropertyOnboardingRoutes(
     }
   );
 
-  app.post<{ Params: PropertyParams; Body: AddMediaBody }>(
-    "/v1/partner/organizations/:organizationId/properties/:propertyId/onboarding/media",
+  app.post<{
+    Params: PropertyParams;
+    Querystring: UploadImageQuery;
+    Headers: ManagedUploadHeaders;
+  }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/onboarding/uploads/images",
     {
       preHandler: authenticate,
       schema: {
         tags: ["Property Onboarding"],
-        summary: "Register property media metadata after secure storage upload",
+        summary: "Stream a property image into Wildleaf-managed storage",
+        description:
+          "The API authorizes the owner, selects an immutable storage key, verifies SHA-256 and streams the image without buffering the complete file in memory.",
         security: [{ bearerAuth: [] }],
         params: propertyParamsSchema,
-        headers: idempotencyHeaders,
-        body: {
+        headers: managedUploadHeaders,
+        consumes: ["multipart/form-data"],
+        querystring: {
           type: "object",
           additionalProperties: false,
-          required: ["mediaType", "storageProvider", "storageKey"],
           properties: {
-            mediaType: { type: "string", enum: ["IMAGE", "VIDEO"] },
-            storageProvider: {
-              type: "string",
-              enum: ["FIREBASE", "GCS", "OTHER"]
-            },
-            storageKey: {
-              type: "string",
-              minLength: 3,
-              maxLength: 1000,
-              pattern: "^[A-Za-z0-9_./-]+$"
-            },
-            mimeType: { type: "string", maxLength: 150 },
             altText: { type: "string", maxLength: 500 },
             caption: { type: "string", maxLength: 1000 },
             isCover: { type: "boolean", default: false },
@@ -487,11 +497,44 @@ export async function registerPropertyOnboardingRoutes(
         throw new AuthenticationError();
       }
       const key = requireIdempotencyKey(request.headers);
+      await uploads.assertUploadAllowed(
+        deps.db,
+        actor,
+        request.params.organizationId,
+        request.params.propertyId
+      );
+      const part = await request.file();
+      if (!part || part.fieldname !== "file") {
+        throw new ValidationError("A single multipart file field named 'file' is required");
+      }
+      const contentSha256 = request.headers["x-content-sha256"];
+      const stored = await uploads.storeImage({
+        actor,
+        organizationId: request.params.organizationId,
+        propertyId: request.params.propertyId,
+        idempotencyKey: key,
+        contentType: part.mimetype,
+        contentSha256,
+        stream: part.file
+      });
+      if (part.file.truncated) {
+        throw new ValidationError("Uploaded image is too large", {
+          maxBytes: MAX_PROPERTY_IMAGE_BYTES
+        });
+      }
+      const fingerprint = {
+        contentSha256,
+        contentType: part.mimetype,
+        altText: request.query.altText ?? null,
+        caption: request.query.caption ?? null,
+        isCover: request.query.isCover ?? false,
+        sortOrder: request.query.sortOrder ?? 0
+      };
       const result = await idempotency.execute(
         {
-          scopeKey: `property.media.add:${request.params.propertyId}:user:${actor.userId}`,
+          scopeKey: `property.media.upload:${request.params.propertyId}:user:${actor.userId}`,
           key,
-          requestBody: request.body
+          requestBody: fingerprint
         },
         async (trx) => ({
           statusCode: 201,
@@ -501,14 +544,14 @@ export async function registerPropertyOnboardingRoutes(
             {
               organizationId: request.params.organizationId,
               propertyId: request.params.propertyId,
-              mediaType: request.body.mediaType,
-              storageProvider: request.body.storageProvider,
-              storageKey: request.body.storageKey,
-              mimeType: request.body.mimeType?.trim() || null,
-              altText: request.body.altText?.trim() || null,
-              caption: request.body.caption?.trim() || null,
-              isCover: request.body.isCover ?? false,
-              sortOrder: request.body.sortOrder ?? 0
+              mediaType: "IMAGE",
+              storageProvider: "GCS",
+              storageKey: stored.objectKey,
+              mimeType: stored.contentType,
+              altText: request.query.altText?.trim() || null,
+              caption: request.query.caption?.trim() || null,
+              isCover: request.query.isCover ?? false,
+              sortOrder: request.query.sortOrder ?? 0
             },
             requestMetadata(request, "partner-api")
           )
@@ -517,6 +560,7 @@ export async function registerPropertyOnboardingRoutes(
       if (result.replayed) {
         void reply.header("idempotency-replayed", "true");
       }
+      void reply.header("cache-control", "no-store");
       return reply.status(result.statusCode).send(result.body);
     }
   );
@@ -611,20 +655,27 @@ export async function registerPropertyOnboardingRoutes(
     }
   );
 
-  app.post<{ Params: PropertyParams; Body: AddDocumentBody }>(
-    "/v1/partner/organizations/:organizationId/properties/:propertyId/onboarding/documents",
+  app.post<{
+    Params: PropertyParams;
+    Querystring: UploadDocumentQuery;
+    Headers: ManagedUploadHeaders;
+  }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/onboarding/uploads/documents",
     {
       preHandler: authenticate,
       schema: {
         tags: ["Property Onboarding"],
-        summary: "Register property compliance document metadata after secure upload",
+        summary: "Stream a compliance PDF into private Wildleaf-managed storage",
+        description:
+          "The API selects a private immutable storage key and registers the document only after the upload digest and size are verified.",
         security: [{ bearerAuth: [] }],
         params: propertyParamsSchema,
-        headers: idempotencyHeaders,
-        body: {
+        headers: managedUploadHeaders,
+        consumes: ["multipart/form-data"],
+        querystring: {
           type: "object",
           additionalProperties: false,
-          required: ["documentType", "storageProvider", "storageKey", "originalFilename"],
+          required: ["documentType"],
           properties: {
             documentType: {
               type: "string",
@@ -641,17 +692,6 @@ export async function registerPropertyOnboardingRoutes(
                 "OTHER"
               ]
             },
-            storageProvider: {
-              type: "string",
-              enum: ["FIREBASE", "GCS", "OTHER"]
-            },
-            storageKey: {
-              type: "string",
-              minLength: 3,
-              maxLength: 1000,
-              pattern: "^[A-Za-z0-9_./-]+$"
-            },
-            originalFilename: { type: "string", minLength: 1, maxLength: 255 },
             issuedOn: { type: "string", format: "date" },
             expiresOn: { type: "string", format: "date" }
           }
@@ -664,11 +704,46 @@ export async function registerPropertyOnboardingRoutes(
         throw new AuthenticationError();
       }
       const key = requireIdempotencyKey(request.headers);
+      await uploads.assertUploadAllowed(
+        deps.db,
+        actor,
+        request.params.organizationId,
+        request.params.propertyId
+      );
+      const part = await request.file();
+      if (!part || part.fieldname !== "file") {
+        throw new ValidationError("A single multipart file field named 'file' is required");
+      }
+      const contentSha256 = request.headers["x-content-sha256"];
+      const stored = await uploads.storeDocument({
+        actor,
+        organizationId: request.params.organizationId,
+        propertyId: request.params.propertyId,
+        idempotencyKey: key,
+        contentType: part.mimetype,
+        contentSha256,
+        stream: part.file,
+        documentType: request.query.documentType,
+        originalFilename: part.filename
+      });
+      if (part.file.truncated) {
+        throw new ValidationError("Uploaded document is too large", {
+          maxBytes: MAX_PROPERTY_DOCUMENT_BYTES
+        });
+      }
+      const fingerprint = {
+        contentSha256,
+        contentType: part.mimetype,
+        originalFilename: stored.originalFilename,
+        documentType: request.query.documentType,
+        issuedOn: request.query.issuedOn ?? null,
+        expiresOn: request.query.expiresOn ?? null
+      };
       const result = await idempotency.execute(
         {
-          scopeKey: `property.document.add:${request.params.propertyId}:user:${actor.userId}`,
+          scopeKey: `property.document.upload:${request.params.propertyId}:user:${actor.userId}`,
           key,
-          requestBody: request.body
+          requestBody: fingerprint
         },
         async (trx) => ({
           statusCode: 201,
@@ -678,12 +753,12 @@ export async function registerPropertyOnboardingRoutes(
             {
               organizationId: request.params.organizationId,
               propertyId: request.params.propertyId,
-              documentType: request.body.documentType,
-              storageProvider: request.body.storageProvider,
-              storageKey: request.body.storageKey,
-              originalFilename: request.body.originalFilename.trim(),
-              issuedOn: request.body.issuedOn ?? null,
-              expiresOn: request.body.expiresOn ?? null
+              documentType: request.query.documentType,
+              storageProvider: "GCS",
+              storageKey: stored.asset.objectKey,
+              originalFilename: stored.originalFilename,
+              issuedOn: request.query.issuedOn ?? null,
+              expiresOn: request.query.expiresOn ?? null
             },
             requestMetadata(request, "partner-api")
           )
@@ -692,6 +767,7 @@ export async function registerPropertyOnboardingRoutes(
       if (result.replayed) {
         void reply.header("idempotency-replayed", "true");
       }
+      void reply.header("cache-control", "no-store");
       return reply.status(result.statusCode).send(result.body);
     }
   );
@@ -785,6 +861,43 @@ export async function registerPropertyOnboardingRoutes(
         void reply.header("idempotency-replayed", "true");
       }
       return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.get<{ Params: PlatformDocumentParams }>(
+    "/v1/platform/properties/:propertyId/documents/:documentId/read-url",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Platform Property Review"],
+        summary: "Create a short-lived private document review URL",
+        security: [{ bearerAuth: [] }],
+        params: platformDocumentParamsSchema,
+        response: {
+          200: {
+            type: "object",
+            additionalProperties: false,
+            required: ["url", "expiresAt"],
+            properties: {
+              url: { type: "string" },
+              expiresAt: { type: "string", format: "date-time" }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) {
+        throw new AuthenticationError();
+      }
+      const result = await uploads.createPlatformDocumentReadUrl(
+        deps.db,
+        request.actor,
+        request.params.propertyId,
+        request.params.documentId
+      );
+      void reply.header("cache-control", "no-store, private");
+      return result;
     }
   );
 
