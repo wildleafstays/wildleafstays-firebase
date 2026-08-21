@@ -12,7 +12,8 @@ export function editableProperty(status) {
 export function availableScreens(session) {
   const screens = [];
   if (canReviewProperties(session)) screens.push("reviews");
-  if ((session?.organizations || []).length > 0) screens.push("properties");
+  if ((session?.organizations || []).length > 0)
+    screens.push("dashboard", "properties", "reservations", "calendar");
   else if (!canReviewProperties(session)) screens.push("business");
   return screens;
 }
@@ -55,4 +56,17 @@ export function reviewQueuePath(status, cursor = null) {
   if (status) query.set("status", status);
   if (cursor) query.set("cursor", cursor);
   return `/v1/platform/property-reviews?${query}`;
+}
+
+export function reservationListPath(
+  organizationId,
+  propertyId,
+  { status = "", startDate = "", endDate = "", cursor = null, limit = 50 } = {},
+) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (status) query.set("status", status);
+  if (startDate) query.set("startDate", startDate);
+  if (endDate) query.set("endDate", endDate);
+  if (cursor) query.set("cursor", cursor);
+  return `/v1/partner/organizations/${organizationId}/properties/${propertyId}/reservations?${query}`;
 }

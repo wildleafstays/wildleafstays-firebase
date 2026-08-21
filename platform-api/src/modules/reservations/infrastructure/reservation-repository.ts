@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql, type Selectable, type Transaction } from "kysely";
+import { sql, type Kysely, type Selectable, type Transaction } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import type {
@@ -16,6 +16,38 @@ import type {
 export type ReservationRecord = Selectable<ReservationsTable>;
 export type ReservationFinancialSnapshotRecord = Selectable<ReservationFinancialSnapshotsTable>;
 export type ReservationLeadGuestSnapshotRecord = Selectable<ReservationLeadGuestSnapshotsTable>;
+type DbExecutor = Kysely<Database> | Transaction<Database>;
+
+export interface ReservationListCursor {
+  createdAt: Date;
+  id: string;
+}
+
+export interface ReservationListRecord {
+  id: string;
+  reservation_reference: string;
+  status: string;
+  arrival_date: string;
+  departure_date: string;
+  product_type: string;
+  product_label: string;
+  room_category_id: string | null;
+  quantity: number;
+  currency_code: string;
+  total_minor: number;
+  guest_name: string;
+  email: string | null;
+  phone_e164: string | null;
+  created_at: Date;
+}
+
+export interface ReservationOperationCounts {
+  arrivals: number;
+  departures: number;
+  inHouse: number;
+  upcoming: number;
+  paymentPending: number;
+}
 
 function financialView(row: ReservationFinancialSnapshotRecord): ReservationFinancialSnapshotView {
   return {
@@ -53,6 +85,115 @@ function financialView(row: ReservationFinancialSnapshotRecord): ReservationFina
 }
 
 export class ReservationRepository {
+  async listForProperty(
+    db: DbExecutor,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      status: string | null;
+      startDate: string | null;
+      endDate: string | null;
+      cursor: ReservationListCursor | null;
+      limit: number;
+    }
+  ): Promise<ReservationListRecord[]> {
+    let query = db
+      .selectFrom("reservations as reservation")
+      .innerJoin(
+        "reservation_lead_guest_snapshots as guest",
+        "guest.reservation_id",
+        "reservation.id"
+      )
+      .innerJoin(
+        "reservation_financial_snapshots as financial",
+        "financial.reservation_id",
+        "reservation.id"
+      )
+      .select([
+        "reservation.id",
+        "reservation.reservation_reference",
+        "reservation.status",
+        "reservation.arrival_date",
+        "reservation.departure_date",
+        "reservation.product_type",
+        "financial.product_label",
+        "reservation.room_category_id",
+        "reservation.quantity",
+        "reservation.currency_code",
+        "reservation.total_minor",
+        "guest.guest_name",
+        "guest.email",
+        "guest.phone_e164",
+        "reservation.created_at"
+      ])
+      .where("reservation.organization_id", "=", input.organizationId)
+      .where("reservation.property_id", "=", input.propertyId);
+
+    if (input.status) {
+      query = query.where("reservation.status", "=", input.status);
+    }
+    if (input.startDate && input.endDate) {
+      query = query
+        .where("reservation.departure_date", ">", input.startDate)
+        .where("reservation.arrival_date", "<", input.endDate);
+    }
+    if (input.cursor) {
+      query = query.where((eb) =>
+        eb.or([
+          eb("reservation.created_at", "<", input.cursor!.createdAt),
+          eb.and([
+            eb("reservation.created_at", "=", input.cursor!.createdAt),
+            eb("reservation.id", "<", input.cursor!.id)
+          ])
+        ])
+      );
+    }
+
+    return query
+      .orderBy("reservation.created_at", "desc")
+      .orderBy("reservation.id", "desc")
+      .limit(input.limit)
+      .execute();
+  }
+
+  async operationCounts(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    businessDate: string
+  ): Promise<ReservationOperationCounts> {
+    const row = await db
+      .selectFrom("reservations")
+      .select([
+        sql<number>`count(*) filter (where arrival_date = ${businessDate} and status in ('CONFIRMED', 'CHECKED_IN'))`.as(
+          "arrivals"
+        ),
+        sql<number>`count(*) filter (where departure_date = ${businessDate} and status in ('CONFIRMED', 'CHECKED_IN'))`.as(
+          "departures"
+        ),
+        sql<number>`count(*) filter (where arrival_date <= ${businessDate} and departure_date > ${businessDate} and status = 'CHECKED_IN')`.as(
+          "in_house"
+        ),
+        sql<number>`count(*) filter (where arrival_date > ${businessDate} and status = 'CONFIRMED')`.as(
+          "upcoming"
+        ),
+        sql<number>`count(*) filter (where status in ('HELD', 'PAYMENT_PENDING'))`.as(
+          "payment_pending"
+        )
+      ])
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .executeTakeFirstOrThrow();
+
+    return {
+      arrivals: Number(row.arrivals),
+      departures: Number(row.departures),
+      inHouse: Number(row.in_house),
+      upcoming: Number(row.upcoming),
+      paymentPending: Number(row.payment_pending)
+    };
+  }
+
   async findByQuote(
     trx: Transaction<Database>,
     organizationId: string,

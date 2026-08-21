@@ -100,11 +100,20 @@
         >
         <p id="roleLabel" class="role-label"></p>
         <nav aria-label="Portal navigation">
+          <button class="nav hidden" type="button" data-screen="dashboard">
+            Dashboard
+          </button>
           <button class="nav hidden" type="button" data-screen="business">
             Business setup
           </button>
           <button class="nav hidden" type="button" data-screen="properties">
             My properties
+          </button>
+          <button class="nav hidden" type="button" data-screen="reservations">
+            Reservations
+          </button>
+          <button class="nav hidden" type="button" data-screen="calendar">
+            Rates & inventory
           </button>
           <button class="nav hidden" type="button" data-screen="reviews">
             Review queue
@@ -130,6 +139,282 @@
           </button>
         </header>
         <p id="portalMessage" class="notice hidden" role="status"></p>
+
+        <section id="dashboardScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Live operations</p>
+              <h2>Today at your property</h2>
+            </div>
+            <div class="inline-filters">
+              <label>Hotel<select id="dashboardPropertySelect"></select></label>
+              <label
+                >Business date<input id="dashboardDate" type="date"
+              /></label>
+            </div>
+          </div>
+          <div id="dashboardMetrics" class="metric-grid"></div>
+          <section class="card operations-card">
+            <div class="card-heading">
+              <div>
+                <h3>Reservations overlapping the next 30 days</h3>
+                <p class="muted">
+                  A secure operational view of the next guest movements.
+                </p>
+              </div>
+              <button
+                id="openReservationsButton"
+                class="button-secondary"
+                type="button"
+              >
+                Manage reservations
+              </button>
+            </div>
+            <div id="dashboardReservationList"></div>
+          </section>
+        </section>
+
+        <section id="reservationsScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Guest operations</p>
+              <h2>Reservations</h2>
+            </div>
+            <p>
+              Review guest stays and apply only valid check-in or check-out
+              transitions.
+            </p>
+          </div>
+          <form id="reservationFilters" class="card filter-grid">
+            <label
+              >Hotel<select
+                name="propertyId"
+                id="reservationPropertySelect"
+              ></select
+            ></label>
+            <label
+              >Status<select name="status">
+                <option value="">All statuses</option>
+                <option>HELD</option>
+                <option>PAYMENT_PENDING</option>
+                <option>CONFIRMED</option>
+                <option>CHECKED_IN</option>
+                <option>CHECKED_OUT</option>
+                <option>CANCELLED</option>
+                <option>EXPIRED</option>
+                <option>NO_SHOW</option>
+              </select></label
+            >
+            <label>Stays from<input name="startDate" type="date" /></label>
+            <label>Until<input name="endDate" type="date" /></label>
+            <button type="submit">Apply filters</button>
+          </form>
+          <div id="reservationList" class="card-list"></div>
+          <button
+            id="loadMoreReservations"
+            class="button-secondary hidden"
+            type="button"
+          >
+            Load more reservations
+          </button>
+        </section>
+
+        <section id="calendarScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Commercial operations</p>
+              <h2>Rates and inventory calendar</h2>
+            </div>
+            <p>
+              Inventory remains authoritative in the backend. Every dated rate
+              update uses optimistic version checks.
+            </p>
+          </div>
+          <form id="calendarFilters" class="card filter-grid">
+            <label
+              >Hotel<select
+                name="propertyId"
+                id="calendarPropertySelect"
+              ></select
+            ></label>
+            <label>From<input name="startDate" type="date" required /></label>
+            <label>Until<input name="endDate" type="date" required /></label>
+            <label
+              >Rate product<select
+                name="rateProductId"
+                id="calendarRateProduct"
+              ></select
+            ></label>
+            <button type="submit">Refresh calendar</button>
+          </form>
+
+          <div class="operations-grid">
+            <form id="ratePlanForm" class="card form-grid two-column">
+              <div class="span-two">
+                <h3>Create rate plan</h3>
+                <p class="muted">For example, flexible room-only or MAP.</p>
+              </div>
+              <label>Code<input name="code" required maxlength="30" /></label>
+              <label>Name<input name="name" required maxlength="120" /></label>
+              <label
+                >Meal plan<select name="mealPlanCode">
+                  <option>EP</option>
+                  <option>CP</option>
+                  <option>MAP</option>
+                  <option>AP</option>
+                  <option>CUSTOM</option>
+                </select></label
+              >
+              <button class="span-two" type="submit">Create rate plan</button>
+            </form>
+
+            <form id="rateProductForm" class="card form-grid two-column">
+              <div class="span-two">
+                <h3>Configure sellable product</h3>
+                <p class="muted">Amounts are entered in Indian rupees.</p>
+              </div>
+              <label
+                >Rate plan<select
+                  name="ratePlanId"
+                  id="productRatePlan"
+                  required
+                ></select
+              ></label>
+              <label
+                >Sell as<select name="productType" id="productType" required>
+                  <option value="ROOM_CATEGORY">Room category</option>
+                  <option value="FULL_PROPERTY">Full property</option>
+                </select></label
+              >
+              <label id="productRoomCategoryLabel"
+                >Room category<select
+                  name="roomCategoryId"
+                  id="productRoomCategory"
+                  required
+                ></select
+              ></label>
+              <label
+                >Base rate ₹<input
+                  name="baseRate"
+                  type="number"
+                  min="0"
+                  required
+              /></label>
+              <label
+                >Floor rate ₹<input
+                  name="floorRate"
+                  type="number"
+                  min="0"
+                  required
+              /></label>
+              <label
+                >Ceiling rate ₹<input
+                  name="ceilingRate"
+                  type="number"
+                  min="0"
+                  required
+              /></label>
+              <label
+                >Included adults<input
+                  name="includedAdults"
+                  type="number"
+                  min="1"
+                  value="2"
+                  required
+              /></label>
+              <label
+                >Maximum adults<input
+                  name="maxAdults"
+                  type="number"
+                  min="1"
+                  value="2"
+                  required
+              /></label>
+              <label
+                >Maximum children<input
+                  name="maxChildren"
+                  type="number"
+                  min="0"
+                  value="0"
+                  required
+              /></label>
+              <label
+                >Maximum occupancy<input
+                  name="maxOccupancy"
+                  type="number"
+                  min="1"
+                  value="2"
+                  required
+              /></label>
+              <label
+                >Extra adult ₹<input
+                  name="extraAdult"
+                  type="number"
+                  min="0"
+                  value="0"
+                  required
+              /></label>
+              <label
+                >Extra child ₹<input
+                  name="extraChild"
+                  type="number"
+                  min="0"
+                  value="0"
+                  required
+              /></label>
+              <button class="span-two" type="submit">Configure product</button>
+            </form>
+          </div>
+
+          <form id="inventoryControlForm" class="card filter-grid">
+            <div>
+              <h3>Inventory control</h3>
+              <p class="muted">Set stop-sell and overbooking for this range.</p>
+            </div>
+            <label
+              >Inventory for<select
+                name="bucketType"
+                id="controlBucketType"
+                required
+              >
+                <option value="ROOM_CATEGORY">Room category</option>
+                <option value="FULL_PROPERTY">Full property</option>
+              </select></label
+            >
+            <label id="controlRoomCategoryLabel"
+              >Room category<select
+                name="roomCategoryId"
+                id="controlRoomCategory"
+                required
+              ></select
+            ></label>
+            <label class="check-control"
+              ><input name="stopSell" type="checkbox" /> Stop sell</label
+            >
+            <label
+              >Overbooking limit<input
+                name="overbookingLimit"
+                type="number"
+                min="0"
+                value="0"
+                required
+            /></label>
+            <button type="submit">Apply inventory control</button>
+          </form>
+
+          <section class="card calendar-card">
+            <div class="card-heading">
+              <div>
+                <h3>Nightly calendar</h3>
+                <p id="calendarContext" class="muted"></p>
+              </div>
+              <button id="saveRateCalendar" type="button">
+                Save nightly rates
+              </button>
+            </div>
+            <div id="calendarGrid" class="calendar-scroll"></div>
+          </section>
+        </section>
 
         <section id="businessScreen" class="screen hidden">
           <div class="section-intro">

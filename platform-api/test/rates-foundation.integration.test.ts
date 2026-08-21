@@ -231,6 +231,18 @@ describe("Phase 3D rate plan and nightly rate foundation", () => {
     expect(result.rateProduct.roomCategoryId).toBe(fixture.roomCategoryId);
     expect(result.rateProduct.baseRateMinor).toBe(500_000);
     expect(result.rateProduct.version).toBe(1);
+
+    const listed = await db
+      .transaction()
+      .execute((trx) =>
+        new RateService().listRateProducts(
+          trx,
+          fixture.actor,
+          fixture.organizationId,
+          fixture.propertyId
+        )
+      );
+    expect(listed.rateProducts).toEqual([result.rateProduct]);
   });
 
   it("supports full-property-only rates without room categories", async () => {

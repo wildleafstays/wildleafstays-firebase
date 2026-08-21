@@ -203,6 +203,34 @@ export async function registerRateRoutes(
     }
   );
 
+  app.get<{ Params: PropertyParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/rates/products",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Rates"],
+        summary: "List configured property rate products",
+        security: [{ bearerAuth: [] }],
+        params: propertyParamsSchema
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) throw new AuthenticationError();
+      const result = await deps.db
+        .transaction()
+        .execute((trx) =>
+          service.listRateProducts(
+            trx,
+            request.actor!,
+            request.params.organizationId,
+            request.params.propertyId
+          )
+        );
+      void reply.header("cache-control", "no-store, private");
+      return result;
+    }
+  );
+
   app.put<{ Params: PropertyParams; Body: ConfigureProductBody }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/rates/products",
     {

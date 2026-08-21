@@ -9,7 +9,9 @@ import { IdempotencyService } from "../../../shared/idempotency/idempotency-serv
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import { HeldReservationService } from "../application/held-reservation-service.js";
+import { ReservationOperationsService } from "../application/reservation-operations-service.js";
 import { StayLifecycleService } from "../application/stay-lifecycle-service.js";
+import type { ReservationStatus } from "../domain/reservation.js";
 
 export interface ReservationRouteDependencies {
   db: Kysely<Database>;
@@ -36,6 +38,18 @@ interface CreateHeldReservationBody extends JsonObject {
     email?: string | null;
     phone?: string | null;
   };
+}
+
+interface ListReservationsQuery {
+  status?: ReservationStatus;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+interface OperationsSummaryQuery {
+  date: string;
 }
 
 const quoteParamsSchema = {
@@ -88,6 +102,7 @@ export async function registerReservationRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new HeldReservationService();
+  const operations = new ReservationOperationsService();
   const stayLifecycle = new StayLifecycleService();
 
   app.post<{ Params: QuoteParams; Body: CreateHeldReservationBody }>(
@@ -162,6 +177,102 @@ export async function registerReservationRoutes(
 
       if (result.replayed) void reply.header("idempotency-replayed", "true");
       return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.get<{ Params: Omit<ReservationParams, "reservationId">; Querystring: ListReservationsQuery }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reservations"],
+        summary: "List property reservations for authorized owner operations",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["organizationId", "propertyId"],
+          properties: {
+            organizationId: { type: "string", format: "uuid" },
+            propertyId: { type: "string", format: "uuid" }
+          }
+        },
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: {
+              type: "string",
+              enum: [
+                "HELD",
+                "PAYMENT_PENDING",
+                "CONFIRMED",
+                "CHECKED_IN",
+                "CHECKED_OUT",
+                "CANCELLED",
+                "EXPIRED",
+                "NO_SHOW"
+              ]
+            },
+            startDate: { type: "string", format: "date" },
+            endDate: { type: "string", format: "date" },
+            limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+            cursor: { type: "string", minLength: 1, maxLength: 500, pattern: "^[A-Za-z0-9_-]+$" }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) throw new AuthenticationError();
+      const result = await operations.list(deps.db, request.actor, {
+        organizationId: request.params.organizationId,
+        propertyId: request.params.propertyId,
+        ...request.query
+      });
+      void reply.header("cache-control", "no-store, private");
+      return result;
+    }
+  );
+
+  app.get<{
+    Params: Omit<ReservationParams, "reservationId">;
+    Querystring: OperationsSummaryQuery;
+  }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations/operations-summary",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reservations"],
+        summary: "Get the property's daily reservation operations summary",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["organizationId", "propertyId"],
+          properties: {
+            organizationId: { type: "string", format: "uuid" },
+            propertyId: { type: "string", format: "uuid" }
+          }
+        },
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          required: ["date"],
+          properties: { date: { type: "string", format: "date" } }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) throw new AuthenticationError();
+      const result = await operations.operationsSummary(
+        deps.db,
+        request.actor,
+        request.params.organizationId,
+        request.params.propertyId,
+        request.query.date
+      );
+      void reply.header("cache-control", "no-store, private");
+      return result;
     }
   );
 

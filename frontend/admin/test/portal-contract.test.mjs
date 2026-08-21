@@ -6,6 +6,7 @@ import {
   canReviewProperties,
   editableProperty,
   profilePayload,
+  reservationListPath,
   reviewQueuePath,
 } from "../portal-state.js";
 
@@ -14,9 +15,19 @@ const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 
 test("role-aware navigation separates hotel owners from Wildleaf reviewers", () => {
   const owner = { platformRoles: [], organizations: [] };
+  const establishedOwner = {
+    platformRoles: [],
+    organizations: [{ organizationId: "org-1", role: "OWNER" }],
+  };
   const reviewer = { platformRoles: ["SUPER_ADMIN"], organizations: [] };
 
   assert.deepEqual(availableScreens(owner), ["business"]);
+  assert.deepEqual(availableScreens(establishedOwner), [
+    "dashboard",
+    "properties",
+    "reservations",
+    "calendar",
+  ]);
   assert.deepEqual(availableScreens(reviewer), ["reviews"]);
   assert.equal(canReviewProperties(owner), false);
   assert.equal(canReviewProperties(reviewer), true);
@@ -53,6 +64,19 @@ test("review queue filters and cursors are encoded as query parameters", () => {
   );
 });
 
+test("reservation filters and cursors use the tenant-scoped owner path", () => {
+  assert.equal(
+    reservationListPath("org-1", "property-1", {
+      status: "CONFIRMED",
+      startDate: "2026-08-22",
+      endDate: "2026-09-01",
+      cursor: "cursor_value",
+      limit: 25,
+    }),
+    "/v1/partner/organizations/org-1/properties/property-1/reservations?limit=25&status=CONFIRMED&startDate=2026-08-22&endDate=2026-09-01&cursor=cursor_value",
+  );
+});
+
 test("the portal uses canonical v1 APIs and never restores the legacy admin or storage path", () => {
   const combined = `${source}\n${html}`;
   assert.match(source, /\/v1\/partner\/organizations/);
@@ -61,6 +85,12 @@ test("the portal uses canonical v1 APIs and never restores the legacy admin or s
   assert.match(source, /onboarding\/uploads\/documents/);
   assert.match(source, /\/room-categories/);
   assert.match(source, /\/units/);
+  assert.match(source, /reservations\/operations-summary/);
+  assert.match(source, /rates\/products/);
+  assert.match(source, /inventory\/controls/);
+  assert.match(html, /id="dashboardScreen"/);
+  assert.match(html, /id="reservationsScreen"/);
+  assert.match(html, /id="calendarScreen"/);
   assert.doesNotMatch(combined, /\/api\/admin\//);
   assert.doesNotMatch(combined, /firebase\.storage|storageKey\s*:/);
   assert.doesNotMatch(

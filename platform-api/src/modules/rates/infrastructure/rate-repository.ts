@@ -144,6 +144,22 @@ export class RateRepository {
       .executeTakeFirst();
   }
 
+  async listProducts(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string
+  ): Promise<RateProductRecord[]> {
+    return trx
+      .selectFrom("rate_plan_products")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .orderBy("rate_plan_id")
+      .orderBy("product_type")
+      .orderBy("room_category_id")
+      .execute();
+  }
+
   async createProduct(
     trx: Transaction<Database>,
     input: Omit<RateProductRecord, "id" | "status" | "version" | "created_at" | "updated_at">

@@ -312,6 +312,17 @@ export class RateService {
     return { ratePlans: plans.map(ratePlanView) };
   }
 
+  async listRateProducts(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string
+  ): Promise<{ rateProducts: RateProductView[] }> {
+    await this.property(trx, actor, organizationId, propertyId, Permissions.RATES_READ);
+    const products = await this.rates.listProducts(trx, organizationId, propertyId);
+    return { rateProducts: products.map(rateProductView) };
+  }
+
   async configureRateProduct(
     trx: Transaction<Database>,
     actor: ActorContext,

@@ -601,6 +601,120 @@ button:disabled {
   padding: 1.5rem;
   text-align: center;
 }
+.inline-filters,
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  align-items: end;
+  gap: 0.85rem;
+}
+.inline-filters {
+  width: min(560px, 100%);
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+}
+.metric-grid {
+  margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 0.8rem;
+}
+.metric-card {
+  padding: 1.15rem;
+  display: grid;
+  gap: 0.35rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  box-shadow: var(--shadow);
+}
+.metric-card strong {
+  color: var(--forest);
+  font-family: Georgia, serif;
+  font-size: 2rem;
+  font-weight: 500;
+}
+.metric-card span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+.operations-card,
+.calendar-card,
+#inventoryControlForm {
+  margin-top: 1rem;
+}
+.reservation-row {
+  padding: 1rem 0;
+  display: grid;
+  grid-template-columns: minmax(210px, 1.2fr) minmax(210px, 1fr) minmax(
+      170px,
+      0.8fr
+    ) auto;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.reservation-row:last-child {
+  border-bottom: 0;
+}
+.reservation-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+.reservation-row .muted {
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}
+.reservation-action {
+  width: auto;
+  white-space: nowrap;
+}
+.operations-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.calendar-scroll {
+  overflow-x: auto;
+}
+.operations-table {
+  width: 100%;
+  min-width: 840px;
+  border-collapse: collapse;
+}
+.operations-table th,
+.operations-table td {
+  padding: 0.72rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.operations-table th {
+  color: var(--muted);
+  background: #f0f3ee;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.operations-table input[type="number"] {
+  width: 104px;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.55rem;
+}
+.operations-table input[type="checkbox"] {
+  width: 1.15rem;
+  min-height: 1.15rem;
+}
+.calendar-date,
+.quantity-cell {
+  font-variant-numeric: tabular-nums;
+}
+.quantity-cell {
+  text-align: center !important;
+}
 
 @media (max-width: 960px) {
   .auth-view {
@@ -620,7 +734,7 @@ button:disabled {
     height: auto;
   }
   .sidebar nav {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
   }
   .sidebar-foot {
     margin-top: 1.2rem;
@@ -628,8 +742,18 @@ button:disabled {
   .editor-grid,
   .review-layout,
   .setup-grid,
-  .asset-columns {
+  .asset-columns,
+  .operations-grid {
     grid-template-columns: 1fr;
+  }
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(130px, 1fr));
+  }
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+  .reservation-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .checklist-card,
   .review-detail {
@@ -668,5 +792,17 @@ button:disabled {
   }
   .sidebar nav {
     grid-template-columns: 1fr;
+  }
+  .inline-filters,
+  .filter-grid,
+  .metric-grid,
+  .reservation-row {
+    grid-template-columns: 1fr;
+  }
+  .reservation-action {
+    width: 100%;
+  }
+  .card-heading {
+    display: grid;
   }
 }

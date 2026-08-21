@@ -85,3 +85,29 @@ export interface HeldReservationResult extends JsonObject {
   created: boolean;
   reservation: ReservationView;
 }
+
+export interface ReservationSummaryView extends JsonObject {
+  id: string;
+  reservationReference: string;
+  status: ReservationStatus;
+  arrivalDate: string;
+  departureDate: string;
+  productType: "ROOM_CATEGORY" | "FULL_PROPERTY";
+  productLabel: string;
+  roomCategoryId: string | null;
+  quantity: number;
+  currencyCode: string;
+  totalMinor: number;
+  leadGuest: LeadGuestSnapshotView;
+  createdAt: string;
+}
+
+export interface ReservationOperationsSummary extends JsonObject {
+  propertyId: string;
+  businessDate: string;
+  arrivals: number;
+  departures: number;
+  inHouse: number;
+  upcoming: number;
+  paymentPending: number;
+}

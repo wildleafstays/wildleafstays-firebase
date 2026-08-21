@@ -7,6 +7,7 @@ import { CommercialRuleService } from "../src/modules/commercial/application/com
 import { InventoryHoldService } from "../src/modules/inventory/application/inventory-hold-service.js";
 import { QuoteHoldService } from "../src/modules/quotes/application/quote-hold-service.js";
 import { HeldReservationService } from "../src/modules/reservations/application/held-reservation-service.js";
+import { ReservationOperationsService } from "../src/modules/reservations/application/reservation-operations-service.js";
 import { PromotionRuleService } from "../src/modules/commercial/application/promotion-rule-service.js";
 import { CreateOrganizationService } from "../src/modules/organizations/application/create-organization-service.js";
 import { CreatePropertyDraftService } from "../src/modules/properties/application/create-property-draft-service.js";
@@ -700,5 +701,66 @@ describe("Phase 4D canonical HELD reservation", () => {
       .where("hold_id", "=", quoteHold.quoteHold.inventoryHoldId)
       .executeTakeFirst();
     expect(allocation).toBeUndefined();
+  });
+
+  it("lists tenant-scoped reservations with stable pagination and daily operation counts", async () => {
+    const fixture = await createFixture();
+    await configureCommercialCore(fixture);
+    await setPromotionMode(fixture, "NO_PROMOTIONS");
+
+    for (const guest of ["First Guest", "Second Guest"]) {
+      const quoted = await createFinalQuote(fixture);
+      await createQuoteHold(fixture, quoted.quote.id);
+      await createHeldReservation(fixture, quoted.quote.id, { name: guest });
+    }
+
+    const operations = new ReservationOperationsService();
+    const first = await operations.list(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      startDate: "2034-02-01",
+      endDate: "2034-03-01",
+      limit: 1
+    });
+    expect(first.reservations).toHaveLength(1);
+    expect(first.reservations[0]).toMatchObject({
+      status: "HELD",
+      arrivalDate: "2034-02-10",
+      departureDate: "2034-02-12",
+      productLabel: "Deluxe Room"
+    });
+    expect(first.nextCursor).toEqual(expect.any(String));
+
+    const second = await operations.list(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      limit: 1,
+      cursor: first.nextCursor!
+    });
+    expect(second.reservations).toHaveLength(1);
+    expect(second.reservations[0]?.id).not.toBe(first.reservations[0]?.id);
+
+    const summary = await operations.operationsSummary(
+      db,
+      fixture.actor,
+      fixture.organizationId,
+      fixture.propertyId,
+      "2034-02-10"
+    );
+    expect(summary).toMatchObject({
+      arrivals: 0,
+      departures: 0,
+      inHouse: 0,
+      upcoming: 0,
+      paymentPending: 2
+    });
+
+    await expect(
+      operations.list(
+        db,
+        { ...fixture.actor, organizationMemberships: [] },
+        { organizationId: fixture.organizationId, propertyId: fixture.propertyId }
+      )
+    ).rejects.toMatchObject({ code: "ACCESS_DENIED", statusCode: 403 });
   });
 });
