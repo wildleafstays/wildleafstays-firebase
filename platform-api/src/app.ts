@@ -18,6 +18,7 @@ import { registerInventoryRoutes } from "./modules/inventory/transport/inventory
 import { registerOrganizationRoutes } from "./modules/organizations/transport/organization-routes.js";
 import { RazorpayProvider } from "./modules/payments/infrastructure/razorpay-provider.js";
 import { registerPaymentRoutes } from "./modules/payments/transport/payment-routes.js";
+import { registerPublicCatalogRoutes } from "./modules/public-booking/transport/public-catalog-routes.js";
 import { registerPropertyOnboardingRoutes } from "./modules/property-onboarding/transport/property-onboarding-routes.js";
 import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
 import { registerPropertySetupRoutes } from "./modules/property-setup/transport/property-setup-routes.js";
@@ -138,6 +139,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       return { status: "ok", database: "ready" };
     }
   );
+
+  await registerPublicCatalogRoutes(app, { db: deps.db });
 
   const userRepository = new UserRepository(deps.db);
   const accessRepository = new AccessRepository(deps.db);
