@@ -1,30 +1,157 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Property | Wildleaf Stays</title>
-    <link rel="stylesheet" href="/customer/styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Check live availability and book a Wildleaf stay securely."
+    />
+    <title>Book your Wildleaf stay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/customer/styles.css" />
   </head>
-  <body>
-    <header class="topbar">
-      <a class="brand" href="/customer/">
-        <span class="brand-mark">W</span>
-        <span>Wildleaf Stays</span>
+  <body class="property-body">
+    <header class="site-header property-header">
+      <a class="brand" href="/customer/" aria-label="Wildleaf Stays home">
+        <span class="brand-mark" aria-hidden="true">W</span>
+        <span><strong>Wildleaf</strong><small>STAYS</small></span>
       </a>
-      <nav class="site-nav">
-        <a href="/customer/">Search</a>
-        <a href="/customer/#hotels">Hotels</a>
-        <a href="/customer/#villas">Villas</a>
-        <a href="/customer/#contact">Contact</a>
-      </nav>
+      <a class="back-link" href="/customer/">← Explore all stays</a>
     </header>
 
-    <main id="propertyPage" class="property-page">
-      <section class="loading-state">Loading property...</section>
+    <main>
+      <section id="propertyHero" class="property-hero">
+        <div class="property-hero-pattern"></div>
+        <div class="property-hero-content">
+          <p id="propertyLocation" class="eyebrow">Loading property…</p>
+          <h1 id="propertyName">Your Wildleaf stay</h1>
+          <p id="propertySummary">Checking the latest property information.</p>
+        </div>
+      </section>
+
+      <div id="pageError" class="page-message hidden" role="alert"></div>
+
+      <section id="propertyContent" class="property-layout hidden">
+        <div class="property-main">
+          <section class="property-overview panel-section">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">About this stay</p>
+                <h2>Everything you need, thoughtfully considered</h2>
+              </div>
+            </div>
+            <p id="propertyDescription" class="long-copy"></p>
+            <div id="propertyFacts" class="fact-grid"></div>
+            <div id="amenities" class="amenity-list"></div>
+          </section>
+
+          <section
+            id="availabilitySection"
+            class="panel-section booking-section"
+          >
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">Plan your stay</p>
+                <h2>Check live availability</h2>
+              </div>
+              <span class="secure-note">Live inventory</span>
+            </div>
+
+            <form id="availabilityForm" class="availability-form">
+              <div class="date-grid">
+                <label
+                  ><span>Check-in</span
+                  ><input name="arrivalDate" type="date" required
+                /></label>
+                <label
+                  ><span>Check-out</span
+                  ><input name="departureDate" type="date" required
+                /></label>
+                <label
+                  ><span>Rooms / units</span
+                  ><input
+                    name="unitCount"
+                    type="number"
+                    min="1"
+                    max="20"
+                    required
+                /></label>
+              </div>
+              <div id="occupancyUnits" class="occupancy-units"></div>
+              <label class="promo-field"
+                ><span>Promotion code <small>(optional)</small></span
+                ><input
+                  name="promotionCode"
+                  maxlength="40"
+                  placeholder="Enter code"
+              /></label>
+              <button
+                id="availabilityButton"
+                class="button button-primary"
+                type="submit"
+              >
+                Check availability
+              </button>
+            </form>
+
+            <div
+              id="availabilityMessage"
+              class="inline-message hidden"
+              role="status"
+            ></div>
+            <div id="availabilityResults" class="availability-results"></div>
+          </section>
+
+          <section
+            id="quoteSection"
+            class="panel-section hidden"
+            aria-live="polite"
+          ></section>
+          <section id="guestSection" class="panel-section hidden"></section>
+          <section
+            id="statusSection"
+            class="panel-section status-section hidden"
+            aria-live="polite"
+          ></section>
+
+          <section class="panel-section policies-section">
+            <div>
+              <p class="eyebrow">Before you arrive</p>
+              <h2>Property policies</h2>
+            </div>
+            <div id="policies" class="policy-grid"></div>
+          </section>
+        </div>
+
+        <aside class="booking-assurance">
+          <p class="eyebrow">Book with confidence</p>
+          <h3>One trusted booking journey</h3>
+          <ul>
+            <li><span>✓</span> Prices calculated by Wildleaf</li>
+            <li><span>✓</span> Inventory held before payment</li>
+            <li><span>✓</span> Secure Razorpay checkout</li>
+            <li><span>✓</span> Backend-verified confirmation</li>
+          </ul>
+          <p class="fine-print">
+            The payment popup never confirms your reservation by itself.
+            Wildleaf waits for verified payment evidence.
+          </p>
+        </aside>
+      </section>
     </main>
 
+    <footer class="site-footer compact-footer">
+      <p>Wildleaf Stays · Thoughtful stays, naturally.</p>
+    </footer>
+
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-    <script src="/customer/property.js"></script>
+    <script src="/customer/config.js"></script>
+    <script type="module" src="/customer/property.js"></script>
   </body>
 </html>

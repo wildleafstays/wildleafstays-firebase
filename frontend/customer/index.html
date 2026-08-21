@@ -1,77 +1,177 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Wildleaf Stays</title>
-    <link rel="stylesheet" href="/customer/styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Discover distinctive Wildleaf hotels, villas, and retreats with live availability and secure booking."
+    />
+    <title>Wildleaf Stays | Thoughtful stays, naturally</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/customer/styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <a class="brand" href="/customer/">
-        <img id="siteLogo" class="site-logo hidden" alt="Wildleaf Stays logo">
-        <span id="brandMark" class="brand-mark">W</span>
-        <span>Wildleaf Stays</span>
+    <header class="site-header">
+      <a class="brand" href="/customer/" aria-label="Wildleaf Stays home">
+        <span class="brand-mark" aria-hidden="true">W</span>
+        <span><strong>Wildleaf</strong><small>STAYS</small></span>
       </a>
-      <nav class="site-nav">
-        <a href="#hotels">Hotels</a>
-        <a href="#villas">Villas</a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="#stays">Explore stays</a>
+        <a href="#why-wildleaf">Why Wildleaf</a>
         <a href="#contact">Contact</a>
-        <a href="/admin/">Admin</a>
       </nav>
     </header>
 
     <main>
-      <section class="hero">
-        <div class="hero-copy">
-          <h1 id="heroTitle">Find stays for families, groups, and quiet escapes</h1>
-          <p id="heroSubtitle">Search rooms and full villas from the same live inventory.</p>
+      <section class="home-hero">
+        <div class="hero-orb hero-orb-one"></div>
+        <div class="hero-orb hero-orb-two"></div>
+        <div class="hero-content">
+          <p class="eyebrow">Hotels · Villas · Quiet escapes</p>
+          <h1>Stay somewhere that<br /><em>stays with you.</em></h1>
+          <p class="hero-copy">
+            Handpicked places with honest prices, live availability, and a
+            booking experience you can trust.
+          </p>
         </div>
-        <form id="searchForm" class="search-panel">
-          <label>
-            Destination
-            <input id="destination" name="destination" placeholder="e.g. Delhi, Nainital" required>
+
+        <form
+          id="searchForm"
+          class="search-card"
+          aria-label="Find a Wildleaf stay"
+        >
+          <label class="search-field search-destination">
+            <span>Where</span>
+            <input
+              id="destination"
+              name="destination"
+              list="destinationList"
+              placeholder="Choose a destination"
+              autocomplete="off"
+            />
+            <datalist id="destinationList"></datalist>
           </label>
-          <label>
-            Check-in
-            <input id="checkIn" name="checkIn" type="date" required>
+          <label class="search-field">
+            <span>Check-in</span>
+            <input id="arrivalDate" name="arrivalDate" type="date" required />
           </label>
-          <label>
-            Check-out
-            <input id="checkOut" name="checkOut" type="date" required>
+          <label class="search-field">
+            <span>Check-out</span>
+            <input
+              id="departureDate"
+              name="departureDate"
+              type="date"
+              required
+            />
           </label>
-          <label>
-            Adults
-            <input id="adults" name="adults" type="number" min="1" value="2" required>
+          <label class="search-field compact-field">
+            <span>Rooms</span>
+            <input
+              id="rooms"
+              name="rooms"
+              type="number"
+              min="1"
+              max="20"
+              value="1"
+              required
+            />
           </label>
-          <label>
-            Kids
-            <input id="kids" name="kids" type="number" min="0" value="0">
+          <label class="search-field compact-field">
+            <span>Adults / room</span>
+            <input
+              id="adults"
+              name="adults"
+              type="number"
+              min="1"
+              max="10"
+              value="2"
+              required
+            />
           </label>
-          <button type="submit">Search</button>
+          <label class="search-field compact-field">
+            <span>Children / room</span>
+            <input
+              id="children"
+              name="children"
+              type="number"
+              min="0"
+              max="6"
+              value="0"
+              required
+            />
+          </label>
+          <button class="button button-primary search-button" type="submit">
+            Find my stay
+          </button>
         </form>
       </section>
 
-      <section id="hotels" class="content">
-        <div class="section-title">
-          <h2>Available Stays</h2>
-          <span id="statusText">Enter your destination and dates.</span>
+      <section id="stays" class="section stays-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">The Wildleaf collection</p>
+            <h2 id="resultsTitle">Places worth travelling for</h2>
+          </div>
+          <p id="resultsStatus" class="section-note" role="status">
+            Loading live properties…
+          </p>
         </div>
-        <div id="results" class="results"></div>
+        <div id="results" class="property-grid" aria-live="polite"></div>
       </section>
 
-      <section id="villas" class="content info-band">
-        <h2>Villas For Families And Groups</h2>
-        <p>When a property is sold as a full villa, the rate is calculated from the same room inventory. If one room is already booked, the villa is automatically blocked for those dates.</p>
-      </section>
-
-      <section id="contact" class="content contact-band">
-        <h2>Contact</h2>
-        <p>For booking help, call or message Wildleaf Stays. Add your phone and WhatsApp details from the Home Page editor.</p>
+      <section id="why-wildleaf" class="section promise-section">
+        <div class="promise-intro">
+          <p class="eyebrow">The Wildleaf promise</p>
+          <h2>Less searching.<br />More belonging.</h2>
+        </div>
+        <div class="promise-grid">
+          <article>
+            <span>01</span>
+            <h3>Live availability</h3>
+            <p>
+              Every search checks the property’s canonical inventory—never a
+              stale copy.
+            </p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Transparent pricing</h3>
+            <p>
+              Taxes, fees, promotions, and final totals come directly from the
+              booking engine.
+            </p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Verified confirmation</h3>
+            <p>
+              Your booking is confirmed only after secure payment evidence
+              reaches Wildleaf.
+            </p>
+          </article>
+        </div>
       </section>
     </main>
 
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-    <script src="/customer/app.js"></script>
+    <footer id="contact" class="site-footer">
+      <div class="brand footer-brand">
+        <span class="brand-mark" aria-hidden="true">W</span
+        ><span><strong>Wildleaf</strong><small>STAYS</small></span>
+      </div>
+      <p>Thoughtful stays, naturally.</p>
+      <p class="footer-note">
+        Need booking help? Contact the Wildleaf support team.
+      </p>
+    </footer>
+
+    <script src="/customer/config.js"></script>
+    <script type="module" src="/customer/app.js"></script>
   </body>
 </html>

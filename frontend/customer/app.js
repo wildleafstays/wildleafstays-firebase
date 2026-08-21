@@ -1,114 +1,221 @@
-const form = document.querySelector("#searchForm");
-const resultsEl = document.querySelector("#results");
-const statusEl = document.querySelector("#statusText");
+import { ApiError, apiRequest } from "./api-client.js";
 
-let latestResults = [];
+const form = document.querySelector("#searchForm");
+const results = document.querySelector("#results");
+const resultsTitle = document.querySelector("#resultsTitle");
+const resultsStatus = document.querySelector("#resultsStatus");
+const destinationList = document.querySelector("#destinationList");
 
 setDefaultDates();
-loadHomepage();
+void initialize();
 
-form.addEventListener("submit", async event => {
+form.addEventListener("submit", (event) => {
   event.preventDefault();
-  const params = new URLSearchParams(new FormData(form));
-  statusEl.textContent = "Checking live availability...";
-  resultsEl.innerHTML = "";
-
-  try {
-    const response = await fetch(`/api/availability/search?${params.toString()}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Search failed");
-
-    latestResults = data.results || [];
-    statusEl.textContent = latestResults.length
-      ? `${latestResults.length} available propert${latestResults.length === 1 ? "y" : "ies"}`
-      : "No available stays found for these dates.";
-
-    resultsEl.innerHTML = latestResults.map(renderResult).join("");
-  } catch (err) {
-    statusEl.textContent = err.message;
-  }
+  void loadProperties(form.destination.value.trim());
 });
 
-function renderResult(result) {
-  const property = result.property;
-  const photo = property.photos?.[0] || "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=900&q=80";
-  const facilities = [...(property.facilities || []), ...(property.amenities || [])].slice(0, 8);
-  const minRoomPrice = Math.min(...(result.roomOptions || []).map(room => Number(room.basePrice || 0)));
-  const optionCount = (result.roomOptions || []).length + (result.villaOption?.available ? 1 : 0);
-
-  return `
-    <article class="property-card search-card">
-      <img class="property-photo" src="${photo}" alt="${escapeHtml(property.name)}">
-      <div class="search-card-body">
-        <h3>${escapeHtml(property.name)}</h3>
-        <div class="muted">${escapeHtml(property.destination || "")}</div>
-        <p>${escapeHtml(property.description || "Comfortable stay with live booking availability.")}</p>
-        <div class="chips">${facilities.map(item => `<span>${escapeHtml(item)}</span>`).join("")}</div>
-      </div>
-      <div class="search-card-side">
-        <div class="muted">${optionCount} available option${optionCount === 1 ? "" : "s"}</div>
-        <strong>${Number.isFinite(minRoomPrice) ? `From Rs ${formatMoney(minRoomPrice)} / night` : "View availability"}</strong>
-        ${result.villaOption?.available ? `<span class="villa-badge">Full villa available</span>` : ""}
-        <a class="primary-link" href="${propertyUrl(property.id)}">View rooms</a>
-      </div>
-    </article>
-  `;
+async function initialize() {
+  renderLoadingCards();
+  await Promise.allSettled([loadDestinations(), loadProperties("")]);
 }
 
-async function loadHomepage() {
+async function loadDestinations() {
   try {
-    const response = await fetch("/api/availability/homepage");
-    const data = await response.json();
-    if (!response.ok) return;
-
-    const hero = (data.sections || []).find(section => section.id === "hero") || (data.sections || [])[0];
-    if (!hero) return;
-
-    if (hero.title) document.querySelector("#heroTitle").textContent = hero.title;
-    if (hero.subtitle) document.querySelector("#heroSubtitle").textContent = hero.subtitle;
-    if (hero.imageUrl) {
-      document.querySelector(".hero").style.backgroundImage =
-        `linear-gradient(rgba(20, 32, 51, 0.28), rgba(20, 32, 51, 0.46)), url("${hero.imageUrl}")`;
-    }
-    if (hero.logoUrl) {
-      const logo = document.querySelector("#siteLogo");
-      logo.src = hero.logoUrl;
-      logo.classList.remove("hidden");
-      document.querySelector("#brandMark").classList.add("hidden");
-    }
+    const data = await apiRequest("/v1/public/destinations", {
+      cache: "default",
+    });
+    destinationList.replaceChildren(
+      ...(data.destinations || []).map((destination) => {
+        const option = document.createElement("option");
+        option.value = destination.city;
+        option.label = [destination.city, destination.stateRegion]
+          .filter(Boolean)
+          .join(", ");
+        return option;
+      }),
+    );
   } catch {
-    // The website should still open if homepage settings are not configured yet.
+    // Property discovery remains usable when destination suggestions are unavailable.
   }
 }
 
-function propertyUrl(propertyId) {
-  const params = new URLSearchParams(new FormData(form));
-  params.set("id", propertyId);
-  return `/customer/property.html?${params.toString()}`;
+async function loadProperties(destination) {
+  resultsTitle.textContent = destination
+    ? `Stays around ${destination}`
+    : "Places worth travelling for";
+  resultsStatus.textContent = "Finding live Wildleaf properties…";
+  renderLoadingCards();
+
+  const query = new URLSearchParams({ limit: "100" });
+  if (destination) query.set("destination", destination);
+
+  try {
+    const data = await apiRequest(`/v1/public/properties?${query}`, {
+      cache: "default",
+    });
+    renderProperties(data.properties || []);
+  } catch (error) {
+    renderError(error);
+  }
+}
+
+function renderProperties(properties) {
+  results.replaceChildren();
+  if (!properties.length) {
+    resultsStatus.textContent =
+      "No Wildleaf properties match this destination yet.";
+    const empty = element("div", "empty-state");
+    empty.append(
+      element("h3", "", "No stays found"),
+      element(
+        "p",
+        "",
+        "Try a nearby city or clear the destination to explore every live property.",
+      ),
+    );
+    results.append(empty);
+    return;
+  }
+
+  resultsStatus.textContent = `${properties.length} ${properties.length === 1 ? "property" : "properties"}`;
+  properties.forEach((property, index) =>
+    results.append(propertyCard(property, index)),
+  );
+}
+
+function propertyCard(property, index) {
+  const article = element("article", "property-card");
+  const visual = element("div", `property-visual visual-${(index % 4) + 1}`);
+  visual.append(
+    element("span", "property-index", String(index + 1).padStart(2, "0")),
+    element("span", "property-initial", property.name?.slice(0, 1) || "W"),
+  );
+
+  const body = element("div", "property-card-body");
+  const location = [property.locality, property.city, property.stateRegion]
+    .filter(Boolean)
+    .join(", ");
+  body.append(
+    element("p", "property-location", location || property.countryCode),
+    element("h3", "", property.name),
+    element(
+      "p",
+      "property-description",
+      property.shortDescription ||
+        "A distinctive Wildleaf stay with live availability and secure booking.",
+    ),
+  );
+
+  const tags = element("div", "property-tags");
+  if (property.propertyType)
+    tags.append(element("span", "tag", titleCase(property.propertyType)));
+  if (property.saleMode)
+    tags.append(element("span", "tag", saleModeLabel(property.saleMode)));
+  body.append(tags);
+
+  const link = element("a", "text-link", "Explore this stay");
+  link.href = propertyUrl(property.publicSlug);
+  link.setAttribute("aria-label", `Explore ${property.name}`);
+  body.append(link);
+
+  article.append(visual, body);
+  return article;
+}
+
+function propertyUrl(publicSlug) {
+  const params = new URLSearchParams({
+    slug: publicSlug,
+    arrivalDate: form.arrivalDate.value,
+    departureDate: form.departureDate.value,
+    rooms: form.rooms.value,
+    adults: form.adults.value,
+    children: form.children.value,
+  });
+  return `/customer/property.html?${params}`;
+}
+
+function renderLoadingCards() {
+  results.replaceChildren(
+    ...Array.from({ length: 3 }, () => {
+      const card = element("div", "property-card loading-card");
+      card.innerHTML =
+        "<div></div><div><span></span><span></span><span></span></div>";
+      return card;
+    }),
+  );
+}
+
+function renderError(error) {
+  const message =
+    error instanceof ApiError
+      ? error.message
+      : "Properties could not be loaded.";
+  resultsStatus.textContent = "Live properties are temporarily unavailable.";
+  const panel = element("div", "empty-state");
+  panel.append(
+    element("h3", "", "We couldn’t load the collection"),
+    element("p", "", message),
+  );
+  const retry = element("button", "button button-secondary", "Try again");
+  retry.type = "button";
+  retry.addEventListener(
+    "click",
+    () => void loadProperties(form.destination.value.trim()),
+  );
+  panel.append(retry);
+  results.replaceChildren(panel);
 }
 
 function setDefaultDates() {
   const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  form.checkIn.value = dateValue(today);
-  form.checkOut.value = dateValue(tomorrow);
+  const arrival = new Date(today);
+  const departure = new Date(today);
+  arrival.setDate(today.getDate() + 1);
+  departure.setDate(today.getDate() + 3);
+  form.arrivalDate.min = dateValue(today);
+  form.departureDate.min = dateValue(arrival);
+  form.arrivalDate.value = dateValue(arrival);
+  form.departureDate.value = dateValue(departure);
+
+  form.arrivalDate.addEventListener("change", () => {
+    const minimumDeparture = addDays(form.arrivalDate.value, 1);
+    form.departureDate.min = minimumDeparture;
+    if (form.departureDate.value <= form.arrivalDate.value) {
+      form.departureDate.value = minimumDeparture;
+    }
+  });
 }
 
 function dateValue(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function formatMoney(value) {
-  return Number(value || 0).toLocaleString("en-IN");
+function addDays(value, days) {
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateValue(date);
 }
 
-function escapeHtml(value) {
-  return String(value || "").replace(/[&<>"']/g, char => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#039;"
-  }[char]));
+function element(tag, className = "", text = "") {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text) node.textContent = text;
+  return node;
+}
+
+function titleCase(value) {
+  return String(value)
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function saleModeLabel(value) {
+  return (
+    {
+      ROOMS_ONLY: "Rooms",
+      FULL_PROPERTY_ONLY: "Entire property",
+      BOTH: "Rooms or entire property",
+    }[value] || titleCase(value)
+  );
 }

@@ -7,10 +7,12 @@ import { IdempotencyService } from "../../../shared/idempotency/idempotency-serv
 import type { RazorpayOrderGateway } from "../../payments/application/razorpay-order-service.js";
 import { PublicAvailabilityService } from "../application/public-availability-service.js";
 import { PublicCatalogService } from "../application/public-catalog-service.js";
+import { PublicCheckoutStatusService } from "../application/public-checkout-status-service.js";
 import { PublicCheckoutService } from "../application/public-checkout-service.js";
 import { PublicQuoteService } from "../application/public-quote-service.js";
 import type { PublicAvailabilityRequest } from "../domain/public-availability.js";
 import type { PublicCheckoutRequest } from "../domain/public-checkout.js";
+import type { PublicCheckoutStatusRequest } from "../domain/public-checkout-status.js";
 import type { PublicQuoteRequest } from "../domain/public-quote.js";
 export interface PublicCatalogRouteDependencies {
   db: Kysely<Database>;
@@ -775,6 +777,76 @@ const publicCheckoutResponseSchema = {
   }
 } as const;
 
+const publicCheckoutStatusRequestSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["reservationId", "paymentIntentId"],
+  properties: {
+    reservationId: { type: "string", format: "uuid" },
+    paymentIntentId: { type: "string", format: "uuid" }
+  }
+} as const;
+
+const publicCheckoutStatusResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["outcome", "reservation", "paymentIntent"],
+  properties: {
+    outcome: {
+      type: "string",
+      enum: ["PAYMENT_PENDING", "CONFIRMED", "PAYMENT_FAILED", "CLOSED", "REQUIRES_ASSISTANCE"]
+    },
+    reservation: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "id",
+        "reservationReference",
+        "status",
+        "arrivalDate",
+        "departureDate",
+        "holdExpiresAt",
+        "holdExpired"
+      ],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        reservationReference: { type: "string" },
+        status: {
+          type: "string",
+          enum: [
+            "HELD",
+            "PAYMENT_PENDING",
+            "CONFIRMED",
+            "CHECKED_IN",
+            "CHECKED_OUT",
+            "CANCELLED",
+            "EXPIRED",
+            "NO_SHOW"
+          ]
+        },
+        arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        holdExpiresAt: { type: "string" },
+        holdExpired: { type: "boolean" }
+      }
+    },
+    paymentIntent: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "status", "expiresAt", "expired"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        status: {
+          type: "string",
+          enum: ["PENDING", "SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED"]
+        },
+        expiresAt: { type: "string" },
+        expired: { type: "boolean" }
+      }
+    }
+  }
+} as const;
+
 function requirePublicIdempotencyKey(headers: Record<string, unknown>): string {
   const key = headers["idempotency-key"];
   if (typeof key !== "string" || !/^[A-Za-z0-9._:-]{16,200}$/.test(key)) {
@@ -798,6 +870,7 @@ export async function registerPublicCatalogRoutes(
   const service = new PublicCatalogService();
   const availabilityService = new PublicAvailabilityService();
   const publicQuoteService = new PublicQuoteService();
+  const publicCheckoutStatusService = new PublicCheckoutStatusService();
   const publicCheckoutService = new PublicCheckoutService(
     deps.db,
     deps.razorpayOrderGateway ?? null
@@ -1192,6 +1265,43 @@ export async function registerPublicCatalogRoutes(
         ...result.body,
         checkout
       });
+    }
+  );
+
+  app.post<{ Params: PublicPropertyParams; Body: PublicCheckoutStatusRequest }>(
+    "/v1/public/properties/:publicSlug/checkout-status",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Read canonical public checkout status",
+        description:
+          "Returns a minimal non-PII status view for a public-api reservation and its payment intent. It never confirms payment or reservation state.",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            }
+          }
+        },
+        body: publicCheckoutStatusRequestSchema,
+        response: {
+          200: publicCheckoutStatusResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      return publicCheckoutStatusService.getStatus(
+        deps.db,
+        request.params.publicSlug,
+        request.body
+      );
     }
   );
 }

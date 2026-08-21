@@ -1146,4 +1146,115 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       await noProviderApp.close();
     }
   });
+
+  it("returns a minimal guarded public checkout status without exposing tenant or guest data", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2034-03-01", "2034-03-03");
+    const checkout = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        "idempotency-key": `public-checkout-status-${randomUUID()}`
+      },
+      payload: {
+        leadGuest: {
+          name: "Status Guest",
+          email: "status.guest@example.com",
+          phone: null
+        }
+      }
+    });
+    expect(checkout.statusCode).toBe(201);
+
+    const prepared = checkout.json() as {
+      reservation: { id: string; reservationReference: string };
+      paymentIntent: { id: string };
+    };
+    const status = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/checkout-status`,
+      payload: {
+        reservationId: prepared.reservation.id,
+        paymentIntentId: prepared.paymentIntent.id
+      }
+    });
+
+    expect(status.statusCode).toBe(200);
+    expect(status.headers["cache-control"]).toBe("no-store");
+    expect(status.json()).toMatchObject({
+      outcome: "PAYMENT_PENDING",
+      reservation: {
+        id: prepared.reservation.id,
+        reservationReference: prepared.reservation.reservationReference,
+        status: "PAYMENT_PENDING"
+      },
+      paymentIntent: {
+        id: prepared.paymentIntent.id,
+        status: "PENDING"
+      }
+    });
+
+    const serialized = status.body;
+    expect(serialized).not.toContain(fixture.organizationId);
+    expect(serialized).not.toContain(fixture.propertyId);
+    expect(serialized).not.toContain("status.guest@example.com");
+
+    const mismatched = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/checkout-status`,
+      payload: {
+        reservationId: prepared.reservation.id,
+        paymentIntentId: randomUUID()
+      }
+    });
+    expect(mismatched.statusCode).toBe(404);
+
+    await db
+      .updateTable("properties")
+      .set({ status: "DRAFT" })
+      .where("id", "=", fixture.propertyId)
+      .execute();
+    try {
+      const hidden = await app.inject({
+        method: "POST",
+        url: `/v1/public/properties/${fixture.publicSlug}/checkout-status`,
+        payload: {
+          reservationId: prepared.reservation.id,
+          paymentIntentId: prepared.paymentIntent.id
+        }
+      });
+      expect(hidden.statusCode).toBe(404);
+    } finally {
+      await db
+        .updateTable("properties")
+        .set({ status: "LIVE" })
+        .where("id", "=", fixture.propertyId)
+        .execute();
+    }
+
+    await db
+      .updateTable("payment_intents")
+      .set({ status: "SUCCEEDED" })
+      .where("id", "=", prepared.paymentIntent.id)
+      .execute();
+    await db
+      .updateTable("reservations")
+      .set({ status: "CONFIRMED" })
+      .where("id", "=", prepared.reservation.id)
+      .execute();
+
+    const confirmed = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/checkout-status`,
+      payload: {
+        reservationId: prepared.reservation.id,
+        paymentIntentId: prepared.paymentIntent.id
+      }
+    });
+    expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.json()).toMatchObject({
+      outcome: "CONFIRMED",
+      reservation: { status: "CONFIRMED" },
+      paymentIntent: { status: "SUCCEEDED" }
+    });
+  });
 });
