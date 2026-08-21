@@ -180,6 +180,75 @@ export async function registerReservationRoutes(
     }
   );
 
+  app.get<{ Querystring: ListReservationsQuery }>(
+    "/v1/platform/reservations",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reservations"],
+        summary: "List reservations across properties for Wildleaf booking support",
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: {
+              type: "string",
+              enum: [
+                "HELD",
+                "PAYMENT_PENDING",
+                "CONFIRMED",
+                "CHECKED_IN",
+                "CHECKED_OUT",
+                "CANCELLED",
+                "EXPIRED",
+                "NO_SHOW"
+              ]
+            },
+            startDate: { type: "string", format: "date" },
+            endDate: { type: "string", format: "date" },
+            limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+            cursor: { type: "string", minLength: 1, maxLength: 500, pattern: "^[A-Za-z0-9_-]+$" }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) throw new AuthenticationError();
+      const result = await operations.listPlatform(deps.db, request.actor, request.query);
+      void reply.header("cache-control", "no-store, private");
+      return result;
+    }
+  );
+
+  app.get<{ Querystring: OperationsSummaryQuery }>(
+    "/v1/platform/reservations/operations-summary",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reservations"],
+        summary: "Get Wildleaf's cross-property daily operations summary",
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          required: ["date"],
+          properties: { date: { type: "string", format: "date" } }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) throw new AuthenticationError();
+      const result = await operations.platformOperationsSummary(
+        deps.db,
+        request.actor,
+        request.query.date
+      );
+      void reply.header("cache-control", "no-store, private");
+      return result;
+    }
+  );
+
   app.get<{ Params: Omit<ReservationParams, "reservationId">; Querystring: ListReservationsQuery }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/reservations",
     {

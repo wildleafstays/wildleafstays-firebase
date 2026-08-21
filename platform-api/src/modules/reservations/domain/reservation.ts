@@ -88,6 +88,8 @@ export interface HeldReservationResult extends JsonObject {
 
 export interface ReservationSummaryView extends JsonObject {
   id: string;
+  organizationId: string;
+  propertyId: string;
   reservationReference: string;
   status: ReservationStatus;
   arrivalDate: string;
@@ -102,8 +104,22 @@ export interface ReservationSummaryView extends JsonObject {
   createdAt: string;
 }
 
+export interface PlatformReservationSummaryView extends ReservationSummaryView {
+  organizationName: string;
+  propertyName: string;
+}
+
 export interface ReservationOperationsSummary extends JsonObject {
   propertyId: string;
+  businessDate: string;
+  arrivals: number;
+  departures: number;
+  inHouse: number;
+  upcoming: number;
+  paymentPending: number;
+}
+
+export interface PlatformReservationOperationsSummary extends JsonObject {
   businessDate: string;
   arrivals: number;
   departures: number;

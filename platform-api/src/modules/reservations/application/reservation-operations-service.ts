@@ -6,6 +6,8 @@ import { AuthorizationService } from "../../access/domain/authorization-service.
 import { Permissions } from "../../access/domain/permissions.js";
 import {
   ReservationStatuses,
+  type PlatformReservationOperationsSummary,
+  type PlatformReservationSummaryView,
   type ReservationOperationsSummary,
   type ReservationStatus,
   type ReservationSummaryView
@@ -13,7 +15,8 @@ import {
 import {
   ReservationRepository,
   type ReservationListCursor,
-  type ReservationListRecord
+  type ReservationListRecord,
+  type PlatformReservationListRecord
 } from "../infrastructure/reservation-repository.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -29,6 +32,11 @@ export interface ListReservationsInput {
   limit?: number;
   cursor?: string;
 }
+
+export type ListPlatformReservationsInput = Omit<
+  ListReservationsInput,
+  "organizationId" | "propertyId"
+>;
 
 function date(value: string, field: string): string {
   if (!DATE_PATTERN.test(value)) throw new ValidationError(`${field} must use YYYY-MM-DD format`);
@@ -76,6 +84,8 @@ function encodeCursor(row: ReservationListRecord): string {
 function summary(row: ReservationListRecord): ReservationSummaryView {
   return {
     id: row.id,
+    organizationId: row.organization_id,
+    propertyId: row.property_id,
     reservationReference: row.reservation_reference,
     status: row.status as ReservationStatus,
     arrivalDate: row.arrival_date,
@@ -88,6 +98,45 @@ function summary(row: ReservationListRecord): ReservationSummaryView {
     totalMinor: row.total_minor,
     leadGuest: { name: row.guest_name, email: row.email, phone: row.phone_e164 },
     createdAt: row.created_at.toISOString()
+  };
+}
+
+function platformSummary(row: PlatformReservationListRecord): PlatformReservationSummaryView {
+  return {
+    ...summary(row),
+    organizationName: row.organization_name,
+    propertyName: row.property_name
+  };
+}
+
+function filters(input: ListPlatformReservationsInput): {
+  status: ReservationStatus | null;
+  startDate: string | null;
+  endDate: string | null;
+  limit: number;
+  cursor: ReservationListCursor | null;
+} {
+  if (input.status && !STATUSES.has(input.status)) {
+    throw new ValidationError("Invalid reservation status");
+  }
+  if ((input.startDate && !input.endDate) || (!input.startDate && input.endDate)) {
+    throw new ValidationError("startDate and endDate must be supplied together");
+  }
+  const startDate = input.startDate ? date(input.startDate, "startDate") : null;
+  const endDate = input.endDate ? date(input.endDate, "endDate") : null;
+  if (startDate && endDate && startDate >= endDate) {
+    throw new ValidationError("endDate must be later than startDate");
+  }
+  const limit = input.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new ValidationError("limit must be between 1 and 100");
+  }
+  return {
+    status: input.status ?? null,
+    startDate,
+    endDate,
+    limit,
+    cursor: decodeCursor(input.cursor)
   };
 }
 
@@ -107,34 +156,37 @@ export class ReservationOperationsService {
       organizationId: input.organizationId,
       propertyId: input.propertyId
     });
-    if (input.status && !STATUSES.has(input.status)) {
-      throw new ValidationError("Invalid reservation status");
-    }
-    if ((input.startDate && !input.endDate) || (!input.startDate && input.endDate)) {
-      throw new ValidationError("startDate and endDate must be supplied together");
-    }
-    const startDate = input.startDate ? date(input.startDate, "startDate") : null;
-    const endDate = input.endDate ? date(input.endDate, "endDate") : null;
-    if (startDate && endDate && startDate >= endDate) {
-      throw new ValidationError("endDate must be later than startDate");
-    }
-    const limit = input.limit ?? 50;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      throw new ValidationError("limit must be between 1 and 100");
-    }
+    const normalized = filters(input);
     const rows = await this.reservations.listForProperty(db, {
       organizationId: input.organizationId,
       propertyId: input.propertyId,
-      status: input.status ?? null,
-      startDate,
-      endDate,
-      cursor: decodeCursor(input.cursor),
-      limit: limit + 1
+      ...normalized,
+      limit: normalized.limit + 1
     });
-    const page = rows.slice(0, limit);
+    const page = rows.slice(0, normalized.limit);
     return {
       reservations: page.map(summary),
-      nextCursor: rows.length > limit && page.length ? encodeCursor(page[page.length - 1]!) : null
+      nextCursor:
+        rows.length > normalized.limit && page.length ? encodeCursor(page[page.length - 1]!) : null
+    };
+  }
+
+  async listPlatform(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    input: ListPlatformReservationsInput
+  ): Promise<{ reservations: PlatformReservationSummaryView[]; nextCursor: string | null }> {
+    this.authorization.assert(actor, Permissions.RESERVATION_READ, { kind: "platform" });
+    const normalized = filters(input);
+    const rows = await this.reservations.listForPlatform(db, {
+      ...normalized,
+      limit: normalized.limit + 1
+    });
+    const page = rows.slice(0, normalized.limit);
+    return {
+      reservations: page.map(platformSummary),
+      nextCursor:
+        rows.length > normalized.limit && page.length ? encodeCursor(page[page.length - 1]!) : null
     };
   }
 
@@ -158,5 +210,16 @@ export class ReservationOperationsService {
       normalizedDate
     );
     return { propertyId, businessDate: normalizedDate, ...counts };
+  }
+
+  async platformOperationsSummary(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    businessDate: string
+  ): Promise<PlatformReservationOperationsSummary> {
+    this.authorization.assert(actor, Permissions.RESERVATION_READ, { kind: "platform" });
+    const normalizedDate = date(businessDate, "date");
+    const counts = await this.reservations.platformOperationCounts(db, normalizedDate);
+    return { businessDate: normalizedDate, ...counts };
   }
 }

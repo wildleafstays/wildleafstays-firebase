@@ -608,6 +608,9 @@ button:disabled {
   align-items: end;
   gap: 0.85rem;
 }
+.compact-filters {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
 .inline-filters {
   width: min(560px, 100%);
   grid-template-columns: repeat(2, minmax(180px, 1fr));
@@ -646,10 +649,9 @@ button:disabled {
 .reservation-row {
   padding: 1rem 0;
   display: grid;
-  grid-template-columns: minmax(210px, 1.2fr) minmax(210px, 1fr) minmax(
-      170px,
-      0.8fr
-    ) auto;
+  grid-template-columns:
+    minmax(210px, 1.2fr) minmax(210px, 1fr) minmax(170px, 0.8fr)
+    auto;
   align-items: center;
   gap: 1rem;
   border-bottom: 1px solid var(--line);
@@ -665,6 +667,15 @@ button:disabled {
 .reservation-row .muted {
   overflow-wrap: anywhere;
   font-size: 0.75rem;
+}
+.property-context {
+  width: fit-content;
+  padding: 0.25rem 0.45rem;
+  color: #695a3d;
+  background: #f7efdf;
+  border-radius: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 750;
 }
 .reservation-action {
   width: auto;
@@ -750,6 +761,9 @@ button:disabled {
     grid-template-columns: repeat(3, minmax(130px, 1fr));
   }
   .filter-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+  .compact-filters {
     grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
   .reservation-row {

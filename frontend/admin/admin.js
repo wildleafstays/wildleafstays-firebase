@@ -5,8 +5,10 @@ import {
 } from "./api-client.js";
 import {
   availableScreens,
+  canManagePlatformReservations,
   canReviewProperties,
   editableProperty,
+  platformReservationListPath,
   profilePayload,
   reservationListPath,
   reviewQueuePath,
@@ -30,6 +32,8 @@ const state = {
   rateCalendar: null,
   inventoryCalendar: null,
   operationsLayout: null,
+  platformReservations: [],
+  platformReservationCursor: null,
   reviewItems: [],
   reviewCursor: null,
   reviewSelection: null,
@@ -220,9 +224,11 @@ async function loadSession() {
     state.session.user.email || "Authenticated user";
   byId("roleLabel").textContent = canReviewProperties(state.session)
     ? "Wildleaf management"
-    : state.session.organizations.length
-      ? "Hotel partner"
-      : "New hotel owner";
+    : state.session.platformRoles.length
+      ? "Wildleaf management"
+      : state.session.organizations.length
+        ? "Hotel partner"
+        : "New hotel owner";
 
   const screens = availableScreens(state.session);
   document.querySelectorAll(".nav").forEach((item) => {
@@ -242,6 +248,7 @@ const screenCopy = {
   properties: ["Partner portal", "Your properties"],
   reservations: ["Partner operations", "Reservations"],
   calendar: ["Partner operations", "Rates and inventory"],
+  control: ["Wildleaf management", "Operations control center"],
   editor: ["Partner portal", "Hotel registration"],
   reviews: ["Wildleaf management", "Property reviews"],
 };
@@ -264,6 +271,7 @@ async function showScreen(name) {
   if (name === "properties") await loadProperties();
   if (name === "reservations") await loadReservations(false);
   if (name === "calendar") await loadCalendarWorkspace();
+  if (name === "control") await loadControlCenter(false);
   if (name === "reviews") await loadReviews(false);
 }
 
@@ -274,6 +282,7 @@ byId("refreshButton").addEventListener("click", () =>
     else if (state.screen === "properties") await loadProperties();
     else if (state.screen === "reservations") await loadReservations(false);
     else if (state.screen === "calendar") await loadCalendarWorkspace();
+    else if (state.screen === "control") await loadControlCenter(false);
     else if (state.screen === "editor" && state.property) {
       await openProperty(state.property.organizationId, state.property.id);
     } else if (state.screen === "reviews") await loadReviews(false);
@@ -902,6 +911,15 @@ function reservationRow(item, allowTransitions = true) {
       `${item.reservationReference} · ${item.productLabel}`,
     ),
   );
+  if (item.propertyName) {
+    primary.append(
+      textElement(
+        "span",
+        "property-context",
+        `${item.propertyName} · ${item.organizationName}`,
+      ),
+    );
+  }
   const stay = document.createElement("div");
   stay.append(
     textElement("strong", "", `${item.arrivalDate} → ${item.departureDate}`),
@@ -1015,6 +1033,92 @@ byId("openReservationsButton").addEventListener("click", () =>
   run(() => showScreen("reservations")),
 );
 
+async function loadControlCenter(append) {
+  const dateInput = byId("controlCenterDate");
+  if (!dateInput.value) dateInput.value = localDate();
+  const form = byId("controlCenterFilters");
+  const values = Object.fromEntries(new FormData(form));
+  if (
+    (values.startDate && !values.endDate) ||
+    (!values.startDate && values.endDate)
+  ) {
+    throw new Error("Choose both stay dates or leave both empty.");
+  }
+  if (!append) {
+    state.platformReservations = [];
+    state.platformReservationCursor = null;
+  }
+  const [summary, page] = await Promise.all([
+    api(`/v1/platform/reservations/operations-summary?date=${dateInput.value}`),
+    api(
+      platformReservationListPath({
+        status: values.status,
+        startDate: values.startDate,
+        endDate: values.endDate,
+        cursor: append ? state.platformReservationCursor : null,
+        limit: 50,
+      }),
+    ),
+  ]);
+  state.platformReservations = append
+    ? [...state.platformReservations, ...page.reservations]
+    : page.reservations;
+  state.platformReservationCursor = page.nextCursor;
+
+  const metricGrid = byId("controlCenterMetrics");
+  metricGrid.replaceChildren();
+  for (const [label, value] of [
+    ["Arrivals", summary.arrivals],
+    ["Departures", summary.departures],
+    ["In house", summary.inHouse],
+    ["Upcoming", summary.upcoming],
+    ["Awaiting payment", summary.paymentPending],
+  ]) {
+    const card = document.createElement("article");
+    card.className = "metric-card";
+    card.append(
+      textElement("strong", "", value),
+      textElement("span", "", label),
+    );
+    metricGrid.append(card);
+  }
+  renderControlCenterReservations();
+}
+
+function renderControlCenterReservations() {
+  const list = byId("controlCenterReservationList");
+  list.replaceChildren();
+  if (!state.platformReservations.length) {
+    list.append(
+      textElement(
+        "p",
+        "empty-state card",
+        "No reservations match these filters.",
+      ),
+    );
+  }
+  for (const reservation of state.platformReservations) {
+    list.append(
+      reservationRow(reservation, canManagePlatformReservations(state.session)),
+    );
+  }
+  byId("loadMoreControlCenterReservations").classList.toggle(
+    "hidden",
+    !state.platformReservationCursor,
+  );
+}
+
+byId("controlCenterDate").addEventListener("change", () =>
+  run(() => loadControlCenter(false)),
+);
+byId("controlCenterFilters").addEventListener("submit", (event) => {
+  event.preventDefault();
+  run(() => loadControlCenter(false));
+});
+byId("loadMoreControlCenterReservations").addEventListener("click", () =>
+  run(() => loadControlCenter(true)),
+);
+
 async function loadReservations(append) {
   const form = byId("reservationFilters");
   const propertySelect = byId("reservationPropertySelect");
@@ -1091,15 +1195,17 @@ byId("loadMoreReservations").addEventListener("click", () =>
 );
 
 async function transitionReservation(item, transition) {
-  const propertyId = byId("reservationPropertySelect").value;
+  const organizationId = item.organizationId || state.organizationId;
+  const propertyId = item.propertyId || byId("reservationPropertySelect").value;
   await api(
-    `/v1/partner/organizations/${state.organizationId}/properties/${propertyId}/reservations/${item.id}/${transition}`,
+    `/v1/partner/organizations/${organizationId}/properties/${propertyId}/reservations/${item.id}/${transition}`,
     {
       method: "POST",
       idempotencyKey: newIdempotencyKey(`reservation-${transition}`),
     },
   );
-  await loadReservations(false);
+  if (state.screen === "control") await loadControlCenter(false);
+  else await loadReservations(false);
   showMessage(
     transition === "check-in" ? "Guest checked in." : "Guest checked out.",
   );

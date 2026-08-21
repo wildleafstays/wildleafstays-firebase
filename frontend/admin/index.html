@@ -115,6 +115,9 @@
           <button class="nav hidden" type="button" data-screen="calendar">
             Rates & inventory
           </button>
+          <button class="nav hidden" type="button" data-screen="control">
+            Operations control
+          </button>
           <button class="nav hidden" type="button" data-screen="reviews">
             Review queue
           </button>
@@ -414,6 +417,48 @@
             </div>
             <div id="calendarGrid" class="calendar-scroll"></div>
           </section>
+        </section>
+
+        <section id="controlScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Wildleaf management</p>
+              <h2>Cross-property operations</h2>
+            </div>
+            <label
+              >Business date<input id="controlCenterDate" type="date"
+            /></label>
+          </div>
+          <div id="controlCenterMetrics" class="metric-grid"></div>
+          <form
+            id="controlCenterFilters"
+            class="card filter-grid compact-filters"
+          >
+            <label
+              >Status<select name="status">
+                <option value="">All statuses</option>
+                <option>HELD</option>
+                <option>PAYMENT_PENDING</option>
+                <option>CONFIRMED</option>
+                <option>CHECKED_IN</option>
+                <option>CHECKED_OUT</option>
+                <option>CANCELLED</option>
+                <option>EXPIRED</option>
+                <option>NO_SHOW</option>
+              </select></label
+            >
+            <label>Stays from<input name="startDate" type="date" /></label>
+            <label>Until<input name="endDate" type="date" /></label>
+            <button type="submit">Apply filters</button>
+          </form>
+          <div id="controlCenterReservationList" class="card-list"></div>
+          <button
+            id="loadMoreControlCenterReservations"
+            class="button-secondary hidden"
+            type="button"
+          >
+            Load more reservations
+          </button>
         </section>
 
         <section id="businessScreen" class="screen hidden">

@@ -755,6 +755,35 @@ describe("Phase 4D canonical HELD reservation", () => {
       paymentPending: 2
     });
 
+    const platformActor = {
+      ...fixture.actor,
+      platformRoles: ["SUPER_ADMIN" as const],
+      organizationMemberships: [],
+      propertyGrants: []
+    };
+    const platformPage = await operations.listPlatform(db, platformActor, { limit: 10 });
+    const fixtureReservations = platformPage.reservations.filter(
+      (reservation) => reservation.propertyId === fixture.propertyId
+    );
+    expect(fixtureReservations).toHaveLength(2);
+    expect(fixtureReservations[0]).toMatchObject({
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      organizationName: expect.any(String),
+      propertyName: expect.any(String)
+    });
+    const platformSummary = await operations.platformOperationsSummary(
+      db,
+      platformActor,
+      "2034-02-10"
+    );
+    expect(platformSummary.paymentPending).toBeGreaterThanOrEqual(2);
+
+    await expect(operations.listPlatform(db, fixture.actor, {})).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
     await expect(
       operations.list(
         db,
