@@ -51,6 +51,16 @@ interface RevenueRecognizedPostingInput {
   occurredAt: Date;
 }
 
+interface RevenueReversedPostingInput {
+  organizationId: string;
+  propertyId: string;
+  reservationId: string;
+  revenueReversalLineId: string;
+  amountMinor: number;
+  currencyCode: string;
+  occurredAt: Date;
+}
+
 interface EnsureJournalInput {
   organizationId: string;
   propertyId: string;
@@ -62,6 +72,7 @@ interface EnsureJournalInput {
   revenueScheduleLineId: string | null;
   stayCompletionHistoryId: string | null;
   recognitionDate: string | null;
+  revenueReversalLineId: string | null;
   amountMinor: number;
   currencyCode: string;
   occurredAt: Date;
@@ -148,22 +159,45 @@ export class FinancialLedgerPostingService {
       ];
     }
 
-    return [
-      {
-        lineNumber: 1,
-        accountCode: FinancialLedgerAccounts.GUEST_FUNDS_HELD,
-        direction: FinancialLedgerDirections.DEBIT,
-        amountMinor,
-        currencyCode
-      },
-      {
-        lineNumber: 2,
-        accountCode: FinancialLedgerAccounts.STAY_REVENUE,
-        direction: FinancialLedgerDirections.CREDIT,
-        amountMinor,
-        currencyCode
-      }
-    ];
+    if (journalType === FinancialLedgerJournalTypes.REVENUE_RECOGNIZED) {
+      return [
+        {
+          lineNumber: 1,
+          accountCode: FinancialLedgerAccounts.GUEST_FUNDS_HELD,
+          direction: FinancialLedgerDirections.DEBIT,
+          amountMinor,
+          currencyCode
+        },
+        {
+          lineNumber: 2,
+          accountCode: FinancialLedgerAccounts.STAY_REVENUE,
+          direction: FinancialLedgerDirections.CREDIT,
+          amountMinor,
+          currencyCode
+        }
+      ];
+    }
+
+    if (journalType === FinancialLedgerJournalTypes.REVENUE_REVERSED) {
+      return [
+        {
+          lineNumber: 1,
+          accountCode: FinancialLedgerAccounts.STAY_REVENUE,
+          direction: FinancialLedgerDirections.DEBIT,
+          amountMinor,
+          currencyCode
+        },
+        {
+          lineNumber: 2,
+          accountCode: FinancialLedgerAccounts.GUEST_FUNDS_HELD,
+          direction: FinancialLedgerDirections.CREDIT,
+          amountMinor,
+          currencyCode
+        }
+      ];
+    }
+
+    throw new ValidationError("Unsupported financial ledger journal type");
   }
 
   private async findExisting(
@@ -180,6 +214,10 @@ export class FinancialLedgerPostingService {
 
     if (input.revenueScheduleLineId !== null) {
       return this.ledger.findByRevenueScheduleLine(trx, input.revenueScheduleLineId);
+    }
+
+    if (input.revenueReversalLineId !== null) {
+      return this.ledger.findByRevenueReversalLine(trx, input.revenueReversalLineId);
     }
 
     throw new ValidationError("Financial ledger posting requires one immutable source record");
@@ -201,6 +239,7 @@ export class FinancialLedgerPostingService {
       existing.revenue_schedule_line_id !== input.revenueScheduleLineId ||
       existing.stay_completion_history_id !== input.stayCompletionHistoryId ||
       existing.recognition_date !== input.recognitionDate ||
+      existing.revenue_reversal_line_id !== input.revenueReversalLineId ||
       existing.amount_minor !== input.amountMinor ||
       existing.currency_code !== input.currencyCode ||
       existing.occurred_at.getTime() !== input.occurredAt.getTime()
@@ -294,7 +333,8 @@ export class FinancialLedgerPostingService {
         refundFinalizationId: null,
         revenueScheduleLineId: null,
         stayCompletionHistoryId: null,
-        recognitionDate: null
+        recognitionDate: null,
+        revenueReversalLineId: null
       },
       request
     );
@@ -314,7 +354,8 @@ export class FinancialLedgerPostingService {
         refundFinalizationId: input.refundFinalizationId,
         revenueScheduleLineId: null,
         stayCompletionHistoryId: null,
-        recognitionDate: null
+        recognitionDate: null,
+        revenueReversalLineId: null
       },
       request
     );
@@ -335,7 +376,30 @@ export class FinancialLedgerPostingService {
         refundFinalizationId: null,
         revenueScheduleLineId: input.revenueScheduleLineId,
         stayCompletionHistoryId: input.stayCompletionHistoryId,
-        recognitionDate: input.recognitionDate
+        recognitionDate: input.recognitionDate,
+        revenueReversalLineId: null
+      },
+      request
+    );
+  }
+
+  postRevenueReversed(
+    trx: Transaction<Database>,
+    input: RevenueReversedPostingInput,
+    request: RequestMetadata
+  ): Promise<FinancialLedgerPostingResult> {
+    return this.ensureJournal(
+      trx,
+      {
+        ...input,
+        paymentIntentId: null,
+        journalType: FinancialLedgerJournalTypes.REVENUE_REVERSED,
+        paymentEvidenceId: null,
+        refundFinalizationId: null,
+        revenueScheduleLineId: null,
+        stayCompletionHistoryId: null,
+        recognitionDate: null,
+        revenueReversalLineId: input.revenueReversalLineId
       },
       request
     );

@@ -1,4 +1,4 @@
-import type { Generated } from "kysely";
+import type { ColumnType, Generated } from "kysely";
 
 export interface FinancialLedgerJournalsTable {
   id: Generated<string>;
@@ -12,6 +12,11 @@ export interface FinancialLedgerJournalsTable {
   revenue_schedule_line_id: string | null;
   stay_completion_history_id: string | null;
   recognition_date: string | null;
+  revenue_reversal_line_id: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null | undefined
+  >;
   amount_minor: number;
   currency_code: string;
   occurred_at: Date;

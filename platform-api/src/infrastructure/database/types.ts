@@ -8,6 +8,10 @@ import type {
   RevenueRecognitionSchedulesTable
 } from "../../modules/finance/infrastructure/revenue-recognition-database-types.js";
 import type {
+  RevenueReversalLinesTable,
+  RevenueReversalsTable
+} from "../../modules/finance/infrastructure/revenue-reversal-database-types.js";
+import type {
   InventoryBlocksTable,
   InventoryDailyBucketsTable,
   InventoryEventsTable
@@ -479,6 +483,8 @@ export interface Database {
   financial_ledger_entries: FinancialLedgerEntriesTable;
   reservation_revenue_schedules: RevenueRecognitionSchedulesTable;
   reservation_revenue_schedule_lines: RevenueRecognitionScheduleLinesTable;
+  reservation_revenue_reversals: RevenueReversalsTable;
+  reservation_revenue_reversal_lines: RevenueReversalLinesTable;
   property_commercial_settings: PropertyCommercialSettingsTable;
   property_commercial_setting_versions: PropertyCommercialSettingVersionsTable;
   commercial_tax_policies: CommercialTaxPoliciesTable;

@@ -27,6 +27,7 @@ interface CreateJournalInput {
   revenueScheduleLineId: string | null;
   stayCompletionHistoryId: string | null;
   recognitionDate: string | null;
+  revenueReversalLineId: string | null;
   amountMinor: number;
   currencyCode: string;
   occurredAt: Date;
@@ -77,6 +78,17 @@ export class FinancialLedgerRepository {
       .executeTakeFirst();
   }
 
+  async findByRevenueReversalLine(
+    trx: Transaction<Database>,
+    revenueReversalLineId: string
+  ): Promise<FinancialLedgerJournalRecord | undefined> {
+    return trx
+      .selectFrom("financial_ledger_journals")
+      .selectAll()
+      .where("revenue_reversal_line_id", "=", revenueReversalLineId)
+      .executeTakeFirst();
+  }
+
   async findEntries(
     trx: Transaction<Database>,
     journalId: string
@@ -107,6 +119,7 @@ export class FinancialLedgerRepository {
         revenue_schedule_line_id: input.revenueScheduleLineId,
         stay_completion_history_id: input.stayCompletionHistoryId,
         recognition_date: input.recognitionDate,
+        revenue_reversal_line_id: input.revenueReversalLineId,
         amount_minor: input.amountMinor,
         currency_code: input.currencyCode,
         occurred_at: input.occurredAt,
@@ -159,6 +172,7 @@ export class FinancialLedgerRepository {
       revenueScheduleLineId: journal.revenue_schedule_line_id,
       stayCompletionHistoryId: journal.stay_completion_history_id,
       recognitionDate: journal.recognition_date,
+      revenueReversalLineId: journal.revenue_reversal_line_id,
       amountMinor: journal.amount_minor,
       currencyCode: journal.currency_code,
       occurredAt: journal.occurred_at.toISOString(),

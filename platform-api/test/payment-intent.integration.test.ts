@@ -13,6 +13,7 @@ import {
   RevenueLedgerPostingService,
   revenueRecognitionDateForLine
 } from "../src/modules/finance/application/revenue-ledger-posting-service.js";
+import { RevenueReversalService } from "../src/modules/finance/application/revenue-reversal-service.js";
 import { RevenueRecognitionScheduleService } from "../src/modules/finance/application/revenue-recognition-schedule-service.js";
 import { buildRevenueRecognitionBasis } from "../src/modules/finance/domain/revenue-recognition.js";
 import { VerifiedPaymentEvidenceService } from "../src/modules/payments/application/verified-payment-evidence-service.js";
@@ -5015,5 +5016,503 @@ describe("Phase 5E2B2 revenue ledger posting", () => {
           .execute();
       })
     ).rejects.toThrow(/recognition date/i);
+  });
+});
+
+describe("Phase 5E3 immutable post-stay revenue reversal", () => {
+  function reversalEvidenceInput(
+    fixture: Fixture,
+    payment: Awaited<ReturnType<typeof beginPayment>>
+  ) {
+    return {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      reservationId: payment.reservation.id,
+      paymentIntentId: payment.paymentIntent.id,
+      provider: "RAZORPAY",
+      providerEventId: `evt_${randomUUID()}`,
+      providerPaymentId: `pay_${randomUUID()}`,
+      providerOrderId: `order_${randomUUID()}`,
+      amountMinor: payment.paymentIntent.amountMinor,
+      currencyCode: payment.paymentIntent.currencyCode,
+      verificationMethod: "WEBHOOK_SIGNATURE" as const,
+      payloadSha256: "7".repeat(64)
+    };
+  }
+
+  function reversalFrontDeskActor(fixture: Fixture): ActorContext {
+    return {
+      userId: fixture.actor.userId,
+      email: fixture.actor.email,
+      platformRoles: [],
+      organizationMemberships: [],
+      propertyGrants: [
+        {
+          grantId: randomUUID(),
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          role: "FRONT_DESK"
+        }
+      ]
+    };
+  }
+
+  function reversalFinanceActor(fixture: Fixture): ActorContext {
+    return {
+      userId: fixture.actor.userId,
+      email: fixture.actor.email,
+      platformRoles: ["FINANCE_MANAGER"],
+      organizationMemberships: [],
+      propertyGrants: []
+    };
+  }
+
+  async function checkedOutForReversal() {
+    const fixture = await createFixture();
+    await configureCommercialCore(fixture);
+    await setPromotionMode(fixture, "NO_PROMOTIONS");
+    const quoted = await createFinalQuote(fixture);
+    await createQuoteHold(fixture, quoted.quote.id);
+    const held = await createHeldReservation(fixture, quoted.quote.id);
+    const payment = await beginPayment(fixture, held.reservation.id);
+
+    const evidence = await db
+      .transaction()
+      .execute((trx) =>
+        new VerifiedPaymentEvidenceService().record(
+          trx,
+          reversalEvidenceInput(fixture, payment),
+          metadata()
+        )
+      );
+
+    const processed = await db.transaction().execute((trx) =>
+      new VerifiedPaymentProcessor().process(
+        trx,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id,
+          paymentIntentId: payment.paymentIntent.id,
+          paymentEvidenceId: evidence.evidence.id
+        },
+        metadata()
+      )
+    );
+    expect(processed.outcome).toBe("RESERVATION_CONFIRMED");
+
+    const lifecycle = new StayLifecycleService();
+    const frontDesk = reversalFrontDeskActor(fixture);
+
+    await db.transaction().execute((trx) =>
+      lifecycle.checkIn(
+        trx,
+        frontDesk,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id
+        },
+        metadata()
+      )
+    );
+
+    await db.transaction().execute((trx) =>
+      lifecycle.checkOut(
+        trx,
+        frontDesk,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: held.reservation.id
+        },
+        metadata()
+      )
+    );
+
+    return { fixture, held, payment, evidence };
+  }
+
+  async function recognizedForReversal() {
+    const ready = await checkedOutForReversal();
+    const posted = await db.transaction().execute((trx) =>
+      new RevenueLedgerPostingService().postForCheckedOutReservation(
+        trx,
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id
+        },
+        metadata()
+      )
+    );
+
+    return { ...ready, posted };
+  }
+
+  async function reverseOne(
+    ready: Awaited<ReturnType<typeof recognizedForReversal>>,
+    options: {
+      operationId?: string;
+      actor?: ActorContext;
+      revenueScheduleLineId?: string;
+      amountMinor?: number;
+      reasonCode?: string;
+      note?: string;
+    } = {}
+  ) {
+    const source = ready.posted.journals[0]!;
+    const sourceLineId = options.revenueScheduleLineId ?? source.revenueScheduleLineId!;
+    const amountMinor = options.amountMinor ?? Math.min(100_000, source.amountMinor);
+
+    return db.transaction().execute((trx) =>
+      new RevenueReversalService().ensure(
+        trx,
+        options.actor ?? reversalFinanceActor(ready.fixture),
+        {
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          reservationId: ready.held.reservation.id,
+          operationId: options.operationId ?? randomUUID(),
+          reasonCode: options.reasonCode ?? "SERVICE_RECOVERY",
+          note: options.note ?? "Approved post-stay commercial revenue adjustment.",
+          lines: [{ revenueScheduleLineId: sourceLineId, amountMinor }]
+        },
+        metadata()
+      )
+    );
+  }
+
+  it("requires settlement permission before any revenue reversal can be created", async () => {
+    const ready = await recognizedForReversal();
+
+    await expect(reverseOne(ready, { actor: ready.fixture.actor })).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
+    const reversals = await db
+      .selectFrom("reservation_revenue_reversals")
+      .select("id")
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .execute();
+
+    expect(reversals).toHaveLength(0);
+  });
+
+  it("refuses reversal when no canonical REVENUE_RECOGNIZED source exists", async () => {
+    const ready = await checkedOutForReversal();
+
+    await expect(
+      db.transaction().execute((trx) =>
+        new RevenueReversalService().ensure(
+          trx,
+          reversalFinanceActor(ready.fixture),
+          {
+            organizationId: ready.fixture.organizationId,
+            propertyId: ready.fixture.propertyId,
+            reservationId: ready.held.reservation.id,
+            operationId: randomUUID(),
+            reasonCode: "SERVICE_RECOVERY",
+            note: "Approved post-stay commercial revenue adjustment.",
+            lines: [
+              {
+                revenueScheduleLineId: randomUUID(),
+                amountMinor: 100_000
+              }
+            ]
+          },
+          metadata()
+        )
+      )
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    const reversals = await db
+      .selectFrom("reservation_revenue_reversals")
+      .select("id")
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .execute();
+
+    expect(reversals).toHaveLength(0);
+  });
+
+  it("posts a partial reversal as DR STAY_REVENUE and CR GUEST_FUNDS_HELD without creating a provider refund", async () => {
+    const ready = await recognizedForReversal();
+    const result = await reverseOne(ready);
+
+    expect(result.created).toBe(true);
+    expect(result.createdJournalCount).toBe(1);
+    expect(result.reversal.lineCount).toBe(1);
+    expect(result.reversal.amountMinor).toBe(result.reversal.lines[0]!.amountMinor);
+
+    const line = result.reversal.lines[0]!;
+    const journal = result.journals[0]!;
+
+    expect(journal).toMatchObject({
+      journalType: "REVENUE_REVERSED",
+      paymentIntentId: null,
+      paymentEvidenceId: null,
+      refundFinalizationId: null,
+      revenueScheduleLineId: null,
+      stayCompletionHistoryId: null,
+      recognitionDate: null,
+      revenueReversalLineId: line.id,
+      amountMinor: line.amountMinor,
+      currencyCode: line.currencyCode
+    });
+
+    const entries = await db
+      .selectFrom("financial_ledger_entries")
+      .select(["line_number", "account_code", "direction", "amount_minor"])
+      .where("journal_id", "=", journal.id)
+      .orderBy("line_number", "asc")
+      .execute();
+
+    expect(entries).toEqual([
+      {
+        line_number: 1,
+        account_code: "STAY_REVENUE",
+        direction: "DEBIT",
+        amount_minor: line.amountMinor
+      },
+      {
+        line_number: 2,
+        account_code: "GUEST_FUNDS_HELD",
+        direction: "CREDIT",
+        amount_minor: line.amountMinor
+      }
+    ]);
+
+    const providerRefunds = await db
+      .selectFrom("payment_refund_requests")
+      .select("id")
+      .where("reservation_id", "=", ready.held.reservation.id)
+      .execute();
+    expect(providerRefunds).toHaveLength(0);
+
+    const audit = await db
+      .selectFrom("audit_events")
+      .select("action")
+      .where("entity_type", "=", "reservation_revenue_reversal")
+      .where("entity_id", "=", result.reversal.id)
+      .executeTakeFirstOrThrow();
+    expect(audit.action).toBe("finance.revenue.reversed");
+
+    const outbox = await db
+      .selectFrom("outbox_events")
+      .select("event_type")
+      .where("aggregate_type", "=", "reservation")
+      .where("aggregate_id", "=", ready.held.reservation.id)
+      .where("event_type", "=", "finance.revenue.reversed.v1")
+      .executeTakeFirstOrThrow();
+    expect(outbox.event_type).toBe("finance.revenue.reversed.v1");
+  });
+
+  it("replays the exact reversal operation without duplicating headers, lines or journals", async () => {
+    const ready = await recognizedForReversal();
+    const operationId = randomUUID();
+
+    const first = await reverseOne(ready, { operationId });
+    const second = await reverseOne(ready, { operationId });
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.createdJournalCount).toBe(0);
+    expect(second.reversal.id).toBe(first.reversal.id);
+    expect(second.reversal.lines.map((line) => line.id)).toEqual(
+      first.reversal.lines.map((line) => line.id)
+    );
+    expect(second.journals.map((journal) => journal.id)).toEqual(
+      first.journals.map((journal) => journal.id)
+    );
+
+    const [headers, lines, journals] = await Promise.all([
+      db
+        .selectFrom("reservation_revenue_reversals")
+        .select("id")
+        .where("reservation_id", "=", ready.held.reservation.id)
+        .execute(),
+      db
+        .selectFrom("reservation_revenue_reversal_lines")
+        .select("id")
+        .where("reversal_id", "=", first.reversal.id)
+        .execute(),
+      db
+        .selectFrom("financial_ledger_journals")
+        .select("id")
+        .where("journal_type", "=", "REVENUE_REVERSED")
+        .where("reservation_id", "=", ready.held.reservation.id)
+        .execute()
+    ]);
+
+    expect(headers).toHaveLength(1);
+    expect(lines).toHaveLength(1);
+    expect(journals).toHaveLength(1);
+  });
+
+  it("prevents cumulative reversals from exceeding the originally recognized revenue line", async () => {
+    const ready = await recognizedForReversal();
+    const source = ready.posted.journals.find((journal) => journal.amountMinor > 1)!;
+    expect(source).toBeTruthy();
+
+    await reverseOne(ready, {
+      revenueScheduleLineId: source.revenueScheduleLineId!,
+      amountMinor: source.amountMinor - 1
+    });
+
+    await expect(
+      reverseOne(ready, {
+        revenueScheduleLineId: source.revenueScheduleLineId!,
+        amountMinor: 2
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    const reversed = await db
+      .selectFrom("reservation_revenue_reversal_lines")
+      .select("amount_minor")
+      .where("revenue_schedule_line_id", "=", source.revenueScheduleLineId!)
+      .execute();
+
+    expect(reversed.reduce((sum, line) => sum + line.amount_minor, 0)).toBe(source.amountMinor - 1);
+  });
+
+  it("protects reversal headers, lines and reversal ledger journals from mutation", async () => {
+    const ready = await recognizedForReversal();
+    const result = await reverseOne(ready);
+    const line = result.reversal.lines[0]!;
+    const journal = result.journals[0]!;
+
+    await expect(
+      db
+        .updateTable("reservation_revenue_reversals")
+        .set({ reason_code: "MUTATION_MUST_FAIL" })
+        .where("id", "=", result.reversal.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db.deleteFrom("reservation_revenue_reversal_lines").where("id", "=", line.id).execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db
+        .updateTable("financial_ledger_journals")
+        .set({ amount_minor: journal.amountMinor + 1 })
+        .where("id", "=", journal.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+
+  it("rejects a forged reversal journal whose amount disagrees with the immutable reversal line", async () => {
+    const ready = await recognizedForReversal();
+    const financeActor = reversalFinanceActor(ready.fixture);
+    const source = ready.posted.journals[0]!;
+    const amountMinor = Math.min(100_000, source.amountMinor);
+
+    await expect(
+      db.transaction().execute(async (trx) => {
+        const reversalId = randomUUID();
+
+        const reversal = await trx
+          .insertInto("reservation_revenue_reversals")
+          .values({
+            id: reversalId,
+            organization_id: ready.fixture.organizationId,
+            property_id: ready.fixture.propertyId,
+            reservation_id: ready.held.reservation.id,
+            operation_id: randomUUID(),
+            reason_code: "SERVICE_RECOVERY",
+            note: "Forged reversal journal validation test.",
+            currency_code: source.currencyCode,
+            amount_minor: amountMinor,
+            line_count: 1,
+            actor_user_id: financeActor.userId,
+            source: "integration-test",
+            request_id: randomUUID(),
+            correlation_id: randomUUID()
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+
+        const reversalLineId = randomUUID();
+
+        await trx
+          .insertInto("reservation_revenue_reversal_lines")
+          .values({
+            id: reversalLineId,
+            reversal_id: reversalId,
+            organization_id: ready.fixture.organizationId,
+            property_id: ready.fixture.propertyId,
+            reservation_id: ready.held.reservation.id,
+            line_number: 1,
+            revenue_schedule_line_id: source.revenueScheduleLineId!,
+            revenue_recognition_journal_id: source.id,
+            amount_minor: amountMinor,
+            currency_code: source.currencyCode
+          })
+          .execute();
+
+        const forgedJournalId = randomUUID();
+        const forgedAmount = amountMinor + 1;
+
+        await trx
+          .insertInto("financial_ledger_journals")
+          .values({
+            id: forgedJournalId,
+            organization_id: ready.fixture.organizationId,
+            property_id: ready.fixture.propertyId,
+            reservation_id: ready.held.reservation.id,
+            payment_intent_id: null,
+            journal_type: "REVENUE_REVERSED",
+            payment_evidence_id: null,
+            refund_finalization_id: null,
+            revenue_schedule_line_id: null,
+            stay_completion_history_id: null,
+            recognition_date: null,
+            revenue_reversal_line_id: reversalLineId,
+            amount_minor: forgedAmount,
+            currency_code: source.currencyCode,
+            occurred_at: reversal.created_at,
+            source: "integration-test",
+            request_id: randomUUID(),
+            correlation_id: randomUUID()
+          })
+          .execute();
+
+        await trx
+          .insertInto("financial_ledger_entries")
+          .values([
+            {
+              id: randomUUID(),
+              journal_id: forgedJournalId,
+              organization_id: ready.fixture.organizationId,
+              property_id: ready.fixture.propertyId,
+              line_number: 1,
+              account_code: "STAY_REVENUE",
+              direction: "DEBIT",
+              amount_minor: forgedAmount,
+              currency_code: source.currencyCode
+            },
+            {
+              id: randomUUID(),
+              journal_id: forgedJournalId,
+              organization_id: ready.fixture.organizationId,
+              property_id: ready.fixture.propertyId,
+              line_number: 2,
+              account_code: "GUEST_FUNDS_HELD",
+              direction: "CREDIT",
+              amount_minor: forgedAmount,
+              currency_code: source.currencyCode
+            }
+          ])
+          .execute();
+      })
+    ).rejects.toThrow(/reversal economics|reversal line/i);
   });
 });
