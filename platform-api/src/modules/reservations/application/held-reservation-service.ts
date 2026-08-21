@@ -49,6 +49,13 @@ function sameLeadGuest(a: LeadGuestSnapshotView, b: LeadGuestSnapshotView): bool
   return a.name === b.name && a.email === b.email && a.phone === b.phone;
 }
 
+interface CreateFromQuoteHoldInput {
+  organizationId: string;
+  propertyId: string;
+  quoteId: string;
+  leadGuest: LeadGuestInput;
+}
+
 export class HeldReservationService {
   constructor(
     private readonly reservations = new ReservationRepository(),
@@ -59,23 +66,12 @@ export class HeldReservationService {
     private readonly now: () => Date = () => new Date()
   ) {}
 
-  async createFromQuoteHold(
+  private async createFromQuoteHoldCore(
     trx: Transaction<Database>,
-    actor: ActorContext,
-    input: {
-      organizationId: string;
-      propertyId: string;
-      quoteId: string;
-      leadGuest: LeadGuestInput;
-    },
+    actor: ActorContext | null,
+    input: CreateFromQuoteHoldInput,
     request: RequestMetadata
   ): Promise<HeldReservationResult> {
-    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
-      kind: "property",
-      organizationId: input.organizationId,
-      propertyId: input.propertyId
-    });
-
     const leadGuest = normalizeLeadGuest(input.leadGuest);
 
     const lockedQuote = await this.quoteHolds.lockQuote(
@@ -86,6 +82,10 @@ export class HeldReservationService {
     );
     if (!lockedQuote) {
       throw new NotFoundError("Quote not found");
+    }
+
+    if (actor === null && lockedQuote.source !== "public-api") {
+      throw new ValidationError("System held reservation requires a public-api quote");
     }
 
     const quote = await this.quotes.find(
@@ -147,15 +147,24 @@ export class HeldReservationService {
       );
     }
 
-    const holdResult = await this.holds.getHold(
-      trx,
-      actor,
-      input.organizationId,
-      input.propertyId,
-      quoteHold.inventory_hold_id,
-      request,
-      Permissions.RESERVATION_MANAGE
-    );
+    const holdResult =
+      actor === null
+        ? await this.holds.getHoldSystem(
+            trx,
+            input.organizationId,
+            input.propertyId,
+            quoteHold.inventory_hold_id,
+            request
+          )
+        : await this.holds.getHold(
+            trx,
+            actor,
+            input.organizationId,
+            input.propertyId,
+            quoteHold.inventory_hold_id,
+            request,
+            Permissions.RESERVATION_MANAGE
+          );
     const hold = holdResult.hold;
 
     if (hold.status !== "ACTIVE") {
@@ -192,7 +201,7 @@ export class HeldReservationService {
       quantity: quote.quantity,
       currencyCode: quote.currencyCode,
       totalMinor: quote.totalMinor,
-      createdByUserId: actor.userId,
+      createdByUserId: actor?.userId ?? null,
       request
     });
 
@@ -271,7 +280,7 @@ export class HeldReservationService {
       reservationId: created.id,
       organizationId: input.organizationId,
       propertyId: input.propertyId,
-      actorUserId: actor.userId,
+      actorUserId: actor?.userId ?? null,
       request
     });
 
@@ -279,6 +288,8 @@ export class HeldReservationService {
 
     await new AuditService(trx).record({
       actor,
+      actorType: actor ? "USER" : "SYSTEM",
+      actorRole: actor ? null : "PUBLIC_BOOKING",
       organizationId: input.organizationId,
       propertyId: input.propertyId,
       action: "reservation.held.created",
@@ -315,6 +326,35 @@ export class HeldReservationService {
     });
 
     return { created: true, reservation: view };
+  }
+
+  async createFromQuoteHold(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: CreateFromQuoteHoldInput,
+    request: RequestMetadata
+  ): Promise<HeldReservationResult> {
+    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
+      kind: "property",
+      organizationId: input.organizationId,
+      propertyId: input.propertyId
+    });
+
+    return this.createFromQuoteHoldCore(trx, actor, input, request);
+  }
+
+  async createFromQuoteHoldSystem(
+    trx: Transaction<Database>,
+    input: CreateFromQuoteHoldInput,
+    request: RequestMetadata
+  ): Promise<HeldReservationResult> {
+    if (request.source !== "public-api") {
+      throw new ValidationError(
+        "System held reservation creation requires public-api request source"
+      );
+    }
+
+    return this.createFromQuoteHoldCore(trx, null, input, request);
   }
 
   async getReservation(

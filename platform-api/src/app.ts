@@ -140,10 +140,6 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     }
   );
 
-  await registerPublicCatalogRoutes(app, { db: deps.db });
-
-  const userRepository = new UserRepository(deps.db);
-  const accessRepository = new AccessRepository(deps.db);
   const razorpayProvider =
     deps.config.RAZORPAY_KEY_ID &&
     deps.config.RAZORPAY_KEY_SECRET &&
@@ -154,6 +150,14 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
           webhookSecret: deps.config.RAZORPAY_WEBHOOK_SECRET
         })
       : null;
+
+  await registerPublicCatalogRoutes(app, {
+    db: deps.db,
+    razorpayOrderGateway: razorpayProvider
+  });
+
+  const userRepository = new UserRepository(deps.db);
+  const accessRepository = new AccessRepository(deps.db);
 
   await registerSessionRoutes(app, {
     identityVerifier: deps.identityVerifier,

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Transaction } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
-import { ConflictError, NotFoundError } from "../../../shared/errors/app-error.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import type { ActorContext } from "../../access/domain/actor-context.js";
@@ -19,6 +19,12 @@ function paymentReference(): string {
   return `PI-${randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase()}`;
 }
 
+interface BeginPaymentInput {
+  organizationId: string;
+  propertyId: string;
+  reservationId: string;
+}
+
 export class BeginPaymentService {
   constructor(
     private readonly now: () => Date = () => new Date(),
@@ -28,22 +34,12 @@ export class BeginPaymentService {
     private readonly authorization = new AuthorizationService()
   ) {}
 
-  async beginPayment(
+  private async beginPaymentCore(
     trx: Transaction<Database>,
-    actor: ActorContext,
-    input: {
-      organizationId: string;
-      propertyId: string;
-      reservationId: string;
-    },
+    actor: ActorContext | null,
+    input: BeginPaymentInput,
     request: RequestMetadata
   ): Promise<BeginPaymentResult> {
-    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
-      kind: "property",
-      organizationId: input.organizationId,
-      propertyId: input.propertyId
-    });
-
     const reservation = await this.reservations.findByIdForUpdate(
       trx,
       input.organizationId,
@@ -52,6 +48,10 @@ export class BeginPaymentService {
     );
     if (!reservation) {
       throw new NotFoundError("Reservation not found");
+    }
+
+    if (actor === null && reservation.source !== "public-api") {
+      throw new ValidationError("System payment requires a public-api reservation");
     }
 
     if (reservation.status !== "HELD" && reservation.status !== "PAYMENT_PENDING") {
@@ -78,6 +78,10 @@ export class BeginPaymentService {
       input.propertyId,
       reservation.id
     );
+
+    if (actor === null && existingIntent && existingIntent.source !== "public-api") {
+      throw new ValidationError("System payment requires a public-api payment intent");
+    }
 
     if (reservation.status === "PAYMENT_PENDING" && !existingIntent) {
       throw new ConflictError("Reservation is PAYMENT_PENDING but has no active payment intent", {
@@ -109,15 +113,24 @@ export class BeginPaymentService {
       );
     }
 
-    const holdResult = await this.holds.getHold(
-      trx,
-      actor,
-      input.organizationId,
-      input.propertyId,
-      reservation.inventory_hold_id,
-      request,
-      Permissions.RESERVATION_MANAGE
-    );
+    const holdResult =
+      actor === null
+        ? await this.holds.getHoldSystem(
+            trx,
+            input.organizationId,
+            input.propertyId,
+            reservation.inventory_hold_id,
+            request
+          )
+        : await this.holds.getHold(
+            trx,
+            actor,
+            input.organizationId,
+            input.propertyId,
+            reservation.inventory_hold_id,
+            request,
+            Permissions.RESERVATION_MANAGE
+          );
     const hold = holdResult.hold;
     if (hold.status !== "ACTIVE") {
       throw new ConflictError("Reservation inventory hold is no longer active", {
@@ -172,7 +185,7 @@ export class BeginPaymentService {
       amountMinor: reservation.total_minor,
       currencyCode: reservation.currency_code,
       expiresAt: authoritativeExpiry,
-      createdByUserId: actor.userId,
+      createdByUserId: actor?.userId ?? null,
       request
     });
 
@@ -190,7 +203,7 @@ export class BeginPaymentService {
         status: intent.status,
         expiresAt: intent.expires_at.toISOString()
       },
-      actorUserId: actor.userId,
+      actorUserId: actor?.userId ?? null,
       request
     });
 
@@ -215,7 +228,7 @@ export class BeginPaymentService {
       fromStatus: "HELD",
       toStatus: "PAYMENT_PENDING",
       reason: "PAYMENT_INTENT_CREATED",
-      actorUserId: actor.userId,
+      actorUserId: actor?.userId ?? null,
       request
     });
 
@@ -225,6 +238,8 @@ export class BeginPaymentService {
 
     await audit.record({
       actor,
+      actorType: actor ? "USER" : "SYSTEM",
+      actorRole: actor ? null : "PUBLIC_BOOKING",
       organizationId: input.organizationId,
       propertyId: input.propertyId,
       action: "payment.intent.created",
@@ -244,6 +259,8 @@ export class BeginPaymentService {
 
     await audit.record({
       actor,
+      actorType: actor ? "USER" : "SYSTEM",
+      actorRole: actor ? null : "PUBLIC_BOOKING",
       organizationId: input.organizationId,
       propertyId: input.propertyId,
       action: "reservation.payment.started",
@@ -294,6 +311,33 @@ export class BeginPaymentService {
       paymentIntent: paymentView,
       reservation: reservationView
     };
+  }
+
+  async beginPayment(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: BeginPaymentInput,
+    request: RequestMetadata
+  ): Promise<BeginPaymentResult> {
+    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
+      kind: "property",
+      organizationId: input.organizationId,
+      propertyId: input.propertyId
+    });
+
+    return this.beginPaymentCore(trx, actor, input, request);
+  }
+
+  async beginPaymentSystem(
+    trx: Transaction<Database>,
+    input: BeginPaymentInput,
+    request: RequestMetadata
+  ): Promise<BeginPaymentResult> {
+    if (request.source !== "public-api") {
+      throw new ValidationError("System payment creation requires public-api request source");
+    }
+
+    return this.beginPaymentCore(trx, null, input, request);
   }
 
   async getPaymentIntent(

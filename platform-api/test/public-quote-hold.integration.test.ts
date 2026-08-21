@@ -6,6 +6,11 @@ import { createDatabase } from "../src/infrastructure/database/database.js";
 import type { ActorContext } from "../src/modules/access/domain/actor-context.js";
 import { CommercialRuleService } from "../src/modules/commercial/application/commercial-rule-service.js";
 import { PromotionRuleService } from "../src/modules/commercial/application/promotion-rule-service.js";
+import type { RazorpayOrderGateway } from "../src/modules/payments/application/razorpay-order-service.js";
+import type {
+  RazorpayCreateOrderInput,
+  RazorpayOrder
+} from "../src/modules/payments/infrastructure/razorpay-provider.js";
 import { CreateOrganizationService } from "../src/modules/organizations/application/create-organization-service.js";
 import { registerPublicCatalogRoutes } from "../src/modules/public-booking/transport/public-catalog-routes.js";
 import { CreatePropertyDraftService } from "../src/modules/properties/application/create-property-draft-service.js";
@@ -30,6 +35,43 @@ interface Fixture {
 let app: FastifyInstance;
 let fixture: Fixture;
 let incompleteFixture: Fixture;
+let razorpayGateway: FakeRazorpayGateway;
+
+class FakeRazorpayGateway implements RazorpayOrderGateway {
+  private readonly orders = new Map<string, RazorpayOrder>();
+  createCalls = 0;
+
+  publicKeyId(): string {
+    return "rzp_test_phase6d_public";
+  }
+
+  async createOrder(input: RazorpayCreateOrderInput): Promise<RazorpayOrder> {
+    this.createCalls += 1;
+
+    const existing = this.orders.get(input.receipt);
+    if (existing) return existing;
+
+    const order: RazorpayOrder = {
+      id: `order_${randomUUID().replaceAll("-", "")}`,
+      amount: input.amountMinor,
+      amountPaid: 0,
+      amountDue: input.amountMinor,
+      currency: input.currencyCode,
+      receipt: input.receipt,
+      status: "created",
+      attempts: 0,
+      createdAt: Math.floor(Date.now() / 1000)
+    };
+
+    this.orders.set(input.receipt, order);
+    return order;
+  }
+
+  async findOrdersByReceipt(receipt: string): Promise<RazorpayOrder[]> {
+    const order = this.orders.get(receipt);
+    return order ? [order] : [];
+  }
+}
 
 function metadata(source = "integration-test") {
   return {
@@ -387,6 +429,48 @@ async function createPublicQuote(
   });
 }
 
+async function createPublicQuoteAndHold(
+  target: Fixture,
+  arrivalDate: string,
+  departureDate: string
+) {
+  const quoteResponse = await createPublicQuote(target, arrivalDate, departureDate);
+  expect(quoteResponse.statusCode).toBe(201);
+
+  const quote = (
+    quoteResponse.json() as {
+      quote: {
+        id: string;
+        quoteReference: string;
+        totalMinor: number;
+        currencyCode: string;
+      };
+    }
+  ).quote;
+
+  const holdResponse = await app.inject({
+    method: "POST",
+    url: `/v1/public/properties/${target.publicSlug}/quotes/${quote.id}/hold`,
+    headers: {
+      "idempotency-key": `public-hold-${randomUUID()}`
+    }
+  });
+
+  expect(holdResponse.statusCode).toBe(201);
+
+  return {
+    quote,
+    hold: (
+      holdResponse.json() as {
+        hold: {
+          id: string;
+          expiresAt: string;
+        };
+      }
+    ).hold
+  };
+}
+
 beforeAll(async () => {
   fixture = await createFixture(true);
   incompleteFixture = await createFixture(false);
@@ -398,7 +482,11 @@ beforeAll(async () => {
     void reply.header("x-correlation-id", request.correlationId);
   });
   registerErrorHandler(app);
-  await registerPublicCatalogRoutes(app, { db });
+  razorpayGateway = new FakeRazorpayGateway();
+  await registerPublicCatalogRoutes(app, {
+    db,
+    razorpayOrderGateway: razorpayGateway
+  });
 });
 
 afterAll(async () => {
@@ -746,5 +834,316 @@ describe("Phase 6C public exact quote and inventory hold", () => {
 
     const hidden = await createPublicQuote(incompleteFixture, "2034-06-10", "2034-06-12");
     expect(hidden.statusCode).toBe(404);
+  });
+});
+describe("Phase 6D public guest reservation and Razorpay checkout", () => {
+  it("creates one SYSTEM/null-user reservation, payment intent and Razorpay order and replays safely", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2034-02-20", "2034-02-22");
+
+    const checkoutKey = `public-checkout-${randomUUID()}`;
+    const callsBefore = razorpayGateway.createCalls;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        "idempotency-key": checkoutKey
+      },
+      payload: {
+        leadGuest: {
+          name: "  Public   Guest  ",
+          email: "PUBLIC.GUEST@EXAMPLE.COM",
+          phone: "+919876543210"
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.headers["cache-control"]).toBe("no-store");
+
+    const body = response.json() as {
+      reservation: {
+        id: string;
+        reservationReference: string;
+        quoteId: string;
+        status: string;
+        totalMinor: number;
+        currencyCode: string;
+        leadGuest: {
+          name: string;
+          email: string | null;
+          phone: string | null;
+        };
+      };
+      paymentIntent: {
+        id: string;
+        paymentReference: string;
+        reservationId: string;
+        status: string;
+        amountMinor: number;
+        currencyCode: string;
+        expiresAt: string;
+      };
+      checkout: {
+        keyId: string;
+        orderId: string;
+        paymentIntentId: string;
+        reservationId: string;
+        amountMinor: number;
+        currencyCode: string;
+        receipt: string;
+        expiresAt: string;
+      };
+    };
+
+    expect(body.reservation).toMatchObject({
+      quoteId: quote.id,
+      status: "PAYMENT_PENDING",
+      totalMinor: quote.totalMinor,
+      currencyCode: quote.currencyCode,
+      leadGuest: {
+        name: "Public Guest",
+        email: "public.guest@example.com",
+        phone: "+919876543210"
+      }
+    });
+
+    expect(body.paymentIntent).toMatchObject({
+      reservationId: body.reservation.id,
+      status: "PENDING",
+      amountMinor: quote.totalMinor,
+      currencyCode: quote.currencyCode
+    });
+
+    expect(body.checkout).toMatchObject({
+      keyId: "rzp_test_phase6d_public",
+      paymentIntentId: body.paymentIntent.id,
+      reservationId: body.reservation.id,
+      amountMinor: quote.totalMinor,
+      currencyCode: quote.currencyCode
+    });
+
+    expect(body.checkout.receipt).toMatch(/^WL-[A-Fa-f0-9]{32}$/);
+    expect(razorpayGateway.createCalls).toBe(callsBefore + 1);
+
+    const [reservationRow, paymentRow, providerOrderRow] = await Promise.all([
+      db
+        .selectFrom("reservations")
+        .select(["quote_id", "status", "source", "created_by_user_id"])
+        .where("id", "=", body.reservation.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("payment_intents")
+        .select([
+          "reservation_id",
+          "status",
+          "source",
+          "created_by_user_id",
+          "amount_minor",
+          "currency_code"
+        ])
+        .where("id", "=", body.paymentIntent.id)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("payment_provider_orders")
+        .select([
+          "payment_intent_id",
+          "reservation_id",
+          "provider",
+          "source",
+          "amount_minor",
+          "currency_code"
+        ])
+        .where("payment_intent_id", "=", body.paymentIntent.id)
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(reservationRow).toEqual({
+      quote_id: quote.id,
+      status: "PAYMENT_PENDING",
+      source: "public-api",
+      created_by_user_id: null
+    });
+
+    expect(paymentRow).toEqual({
+      reservation_id: body.reservation.id,
+      status: "PENDING",
+      source: "public-api",
+      created_by_user_id: null,
+      amount_minor: quote.totalMinor,
+      currency_code: quote.currencyCode
+    });
+
+    expect(providerOrderRow).toEqual({
+      payment_intent_id: body.paymentIntent.id,
+      reservation_id: body.reservation.id,
+      provider: "RAZORPAY",
+      source: "public-api",
+      amount_minor: quote.totalMinor,
+      currency_code: quote.currencyCode
+    });
+
+    const correlationId = response.headers["x-correlation-id"];
+    expect(typeof correlationId).toBe("string");
+
+    const audits = await db
+      .selectFrom("audit_events")
+      .select(["action", "actor_type", "actor_user_id", "actor_role"])
+      .where("property_id", "=", fixture.propertyId)
+      .where("correlation_id", "=", String(correlationId))
+      .where("actor_role", "=", "PUBLIC_BOOKING")
+      .execute();
+
+    expect(audits.map((row) => row.action).sort()).toEqual(
+      [
+        "payment.intent.created",
+        "payment.provider_order.linked",
+        "reservation.held.created",
+        "reservation.payment.started"
+      ].sort()
+    );
+
+    expect(audits.every((row) => row.actor_type === "SYSTEM")).toBe(true);
+    expect(audits.every((row) => row.actor_user_id === null)).toBe(true);
+
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain(fixture.organizationId);
+    expect(serialized).not.toContain(fixture.propertyId);
+
+    const replay = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        "idempotency-key": checkoutKey
+      },
+      payload: {
+        leadGuest: {
+          name: "  Public   Guest  ",
+          email: "PUBLIC.GUEST@EXAMPLE.COM",
+          phone: "+919876543210"
+        }
+      }
+    });
+
+    expect(replay.statusCode).toBe(201);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+    expect(replay.json()).toEqual(body);
+    expect(razorpayGateway.createCalls).toBe(callsBefore + 1);
+
+    const reservationCount = await db
+      .selectFrom("reservations")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("quote_id", "=", quote.id)
+      .executeTakeFirstOrThrow();
+
+    const paymentCount = await db
+      .selectFrom("payment_intents")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("reservation_id", "=", body.reservation.id)
+      .executeTakeFirstOrThrow();
+
+    expect(Number(reservationCount.count)).toBe(1);
+    expect(Number(paymentCount.count)).toBe(1);
+  });
+
+  it("refuses to replace the immutable lead guest on a public checkout retry with a new key", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2034-02-23", "2034-02-25");
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        "idempotency-key": `public-checkout-first-${randomUUID()}`
+      },
+      payload: {
+        leadGuest: {
+          name: "Guest One",
+          email: "guest.one@example.com",
+          phone: null
+        }
+      }
+    });
+
+    expect(first.statusCode).toBe(201);
+
+    const callsAfterFirst = razorpayGateway.createCalls;
+
+    const conflicting = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        "idempotency-key": `public-checkout-conflict-${randomUUID()}`
+      },
+      payload: {
+        leadGuest: {
+          name: "Guest Two",
+          email: "guest.two@example.com",
+          phone: null
+        }
+      }
+    });
+
+    expect(conflicting.statusCode).toBe(409);
+    expect(razorpayGateway.createCalls).toBe(callsAfterFirst);
+
+    const count = await db
+      .selectFrom("reservations")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("quote_id", "=", quote.id)
+      .executeTakeFirstOrThrow();
+
+    expect(Number(count.count)).toBe(1);
+  });
+
+  it("rejects checkout before reservation mutation when Razorpay is unavailable", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2034-02-26", "2034-02-28");
+
+    const noProviderApp = Fastify({ logger: false });
+    noProviderApp.decorateRequest("correlationId", "");
+
+    noProviderApp.addHook("onRequest", async (request, reply) => {
+      request.correlationId = request.id;
+      void reply.header("x-request-id", request.id);
+      void reply.header("x-correlation-id", request.correlationId);
+    });
+
+    registerErrorHandler(noProviderApp);
+    await registerPublicCatalogRoutes(noProviderApp, { db });
+
+    try {
+      const before = await db
+        .selectFrom("reservations")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("quote_id", "=", quote.id)
+        .executeTakeFirstOrThrow();
+
+      const response = await noProviderApp.inject({
+        method: "POST",
+        url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+        headers: {
+          "idempotency-key": `public-checkout-no-provider-${randomUUID()}`
+        },
+        payload: {
+          leadGuest: {
+            name: "No Provider Guest",
+            email: "no.provider@example.com",
+            phone: null
+          }
+        }
+      });
+
+      expect(response.statusCode).toBe(503);
+
+      const after = await db
+        .selectFrom("reservations")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("quote_id", "=", quote.id)
+        .executeTakeFirstOrThrow();
+
+      expect(Number(after.count)).toBe(Number(before.count));
+      expect(Number(after.count)).toBe(0);
+    } finally {
+      await noProviderApp.close();
+    }
   });
 });

@@ -1,7 +1,12 @@
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
-import { AppError, ConflictError, NotFoundError } from "../../../shared/errors/app-error.js";
+import {
+  AppError,
+  ConflictError,
+  NotFoundError,
+  ValidationError
+} from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import type { ActorContext } from "../../access/domain/actor-context.js";
@@ -179,17 +184,11 @@ export class RazorpayOrderService {
     };
   }
 
-  async prepareCheckout(
-    actor: ActorContext,
+  private async prepareCheckoutCore(
+    actor: ActorContext | null,
     input: PrepareInput,
     request: RequestMetadata
   ): Promise<PrepareRazorpayCheckoutResult> {
-    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
-      kind: "property",
-      organizationId: input.organizationId,
-      propertyId: input.propertyId
-    });
-
     const initial = await this.db.transaction().execute(async (trx) => {
       const intent = await this.payments.findById(
         trx,
@@ -208,6 +207,15 @@ export class RazorpayOrderService {
         input.reservationId
       );
       if (!reservation) throw new NotFoundError("Reservation not found");
+
+      if (
+        actor === null &&
+        (intent.source !== "public-api" || reservation.source !== "public-api")
+      ) {
+        throw new ValidationError(
+          "System Razorpay checkout requires public-api reservation and payment intent"
+        );
+      }
 
       if (intent.status !== "PENDING") {
         throw new ConflictError(
@@ -239,6 +247,11 @@ export class RazorpayOrderService {
         input.reservationId,
         input.paymentIntentId
       );
+
+      if (actor === null && existing && existing.source !== "public-api") {
+        throw new ValidationError("System Razorpay checkout requires a public-api provider order");
+      }
+
       if (existing) this.assertStoredMapping(existing, intent, receipt);
 
       return { intent, receipt, existing };
@@ -299,6 +312,15 @@ export class RazorpayOrderService {
       );
       if (!reservation) throw new NotFoundError("Reservation not found");
 
+      if (
+        actor === null &&
+        (intent.source !== "public-api" || reservation.source !== "public-api")
+      ) {
+        throw new ValidationError(
+          "System Razorpay checkout requires public-api reservation and payment intent"
+        );
+      }
+
       const receipt = receiptForIntent(intent.id);
       this.assertProviderOrder(providerOrder, intent, receipt);
 
@@ -343,6 +365,10 @@ export class RazorpayOrderService {
         });
       }
 
+      if (actor === null && stored.source !== "public-api") {
+        throw new ValidationError("System Razorpay checkout requires a public-api provider order");
+      }
+
       this.assertStoredMapping(stored, intent, receipt);
       if (stored.provider_order_id !== providerOrder.id) {
         throw new ConflictError("Payment intent is already linked to a different Razorpay order", {
@@ -369,12 +395,14 @@ export class RazorpayOrderService {
             providerCreatedAt: stored.provider_created_at.toISOString(),
             recovered
           },
-          actorUserId: actor.userId,
+          actorUserId: actor?.userId ?? null,
           request
         });
 
         await new AuditService(trx).record({
           actor,
+          actorType: actor ? "USER" : "SYSTEM",
+          actorRole: actor ? null : "PUBLIC_BOOKING",
           organizationId: input.organizationId,
           propertyId: input.propertyId,
           action: "payment.provider_order.linked",
@@ -435,5 +463,30 @@ export class RazorpayOrderService {
       providerOrder: this.providerOrders.view(persisted.stored),
       checkout: this.checkout(persisted.intent, persisted.stored)
     };
+  }
+
+  async prepareCheckout(
+    actor: ActorContext,
+    input: PrepareInput,
+    request: RequestMetadata
+  ): Promise<PrepareRazorpayCheckoutResult> {
+    this.authorization.assert(actor, Permissions.RESERVATION_MANAGE, {
+      kind: "property",
+      organizationId: input.organizationId,
+      propertyId: input.propertyId
+    });
+
+    return this.prepareCheckoutCore(actor, input, request);
+  }
+
+  async prepareCheckoutSystem(
+    input: PrepareInput,
+    request: RequestMetadata
+  ): Promise<PrepareRazorpayCheckoutResult> {
+    if (request.source !== "public-api") {
+      throw new ValidationError("System Razorpay checkout requires public-api request source");
+    }
+
+    return this.prepareCheckoutCore(null, input, request);
   }
 }

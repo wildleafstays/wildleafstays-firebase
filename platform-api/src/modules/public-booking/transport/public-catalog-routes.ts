@@ -4,13 +4,17 @@ import type { Database } from "../../../infrastructure/database/types.js";
 import { ValidationError } from "../../../shared/errors/app-error.js";
 import { requestMetadata } from "../../../shared/http/request-metadata.js";
 import { IdempotencyService } from "../../../shared/idempotency/idempotency-service.js";
+import type { RazorpayOrderGateway } from "../../payments/application/razorpay-order-service.js";
 import { PublicAvailabilityService } from "../application/public-availability-service.js";
 import { PublicCatalogService } from "../application/public-catalog-service.js";
+import { PublicCheckoutService } from "../application/public-checkout-service.js";
 import { PublicQuoteService } from "../application/public-quote-service.js";
 import type { PublicAvailabilityRequest } from "../domain/public-availability.js";
+import type { PublicCheckoutRequest } from "../domain/public-checkout.js";
 import type { PublicQuoteRequest } from "../domain/public-quote.js";
 export interface PublicCatalogRouteDependencies {
   db: Kysely<Database>;
+  razorpayOrderGateway?: RazorpayOrderGateway | null;
 }
 
 interface PublicPropertiesQuery {
@@ -641,6 +645,136 @@ const publicQuoteHoldResponseSchema = {
   }
 } as const;
 
+const publicLeadGuestSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["name"],
+  properties: {
+    name: { type: "string", minLength: 1, maxLength: 160 },
+    email: {
+      anyOf: [{ type: "string", minLength: 3, maxLength: 320 }, { type: "null" }]
+    },
+    phone: {
+      anyOf: [{ type: "string", minLength: 8, maxLength: 40 }, { type: "null" }]
+    }
+  }
+} as const;
+
+const publicCheckoutRequestSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["leadGuest"],
+  properties: {
+    leadGuest: publicLeadGuestSchema
+  }
+} as const;
+
+const publicCheckoutReservationSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "id",
+    "reservationReference",
+    "quoteId",
+    "status",
+    "holdExpiresAt",
+    "arrivalDate",
+    "departureDate",
+    "productType",
+    "roomCategoryId",
+    "quantity",
+    "currencyCode",
+    "totalMinor",
+    "leadGuest"
+  ],
+  properties: {
+    id: { type: "string", format: "uuid" },
+    reservationReference: { type: "string" },
+    quoteId: { type: "string", format: "uuid" },
+    status: { type: "string", const: "PAYMENT_PENDING" },
+    holdExpiresAt: { type: "string" },
+    arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    productType: {
+      type: "string",
+      enum: ["ROOM_CATEGORY", "FULL_PROPERTY"]
+    },
+    roomCategoryId: nullableUuid,
+    quantity: { type: "integer", minimum: 1 },
+    currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+    totalMinor: { type: "integer", minimum: 1 },
+    leadGuest: {
+      type: "object",
+      additionalProperties: false,
+      required: ["name", "email", "phone"],
+      properties: {
+        name: { type: "string" },
+        email: nullableString,
+        phone: nullableString
+      }
+    }
+  }
+} as const;
+
+const publicPaymentIntentSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "id",
+    "paymentReference",
+    "reservationId",
+    "status",
+    "amountMinor",
+    "currencyCode",
+    "expiresAt"
+  ],
+  properties: {
+    id: { type: "string", format: "uuid" },
+    paymentReference: { type: "string" },
+    reservationId: { type: "string", format: "uuid" },
+    status: { type: "string", const: "PENDING" },
+    amountMinor: { type: "integer", minimum: 1 },
+    currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+    expiresAt: { type: "string" }
+  }
+} as const;
+
+const publicRazorpayCheckoutSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "keyId",
+    "orderId",
+    "paymentIntentId",
+    "reservationId",
+    "amountMinor",
+    "currencyCode",
+    "receipt",
+    "expiresAt"
+  ],
+  properties: {
+    keyId: { type: "string" },
+    orderId: { type: "string" },
+    paymentIntentId: { type: "string", format: "uuid" },
+    reservationId: { type: "string", format: "uuid" },
+    amountMinor: { type: "integer", minimum: 1 },
+    currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+    receipt: { type: "string" },
+    expiresAt: { type: "string" }
+  }
+} as const;
+
+const publicCheckoutResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["reservation", "paymentIntent", "checkout"],
+  properties: {
+    reservation: publicCheckoutReservationSchema,
+    paymentIntent: publicPaymentIntentSchema,
+    checkout: publicRazorpayCheckoutSchema
+  }
+} as const;
+
 function requirePublicIdempotencyKey(headers: Record<string, unknown>): string {
   const key = headers["idempotency-key"];
   if (typeof key !== "string" || !/^[A-Za-z0-9._:-]{16,200}$/.test(key)) {
@@ -664,6 +798,10 @@ export async function registerPublicCatalogRoutes(
   const service = new PublicCatalogService();
   const availabilityService = new PublicAvailabilityService();
   const publicQuoteService = new PublicQuoteService();
+  const publicCheckoutService = new PublicCheckoutService(
+    deps.db,
+    deps.razorpayOrderGateway ?? null
+  );
   const idempotency = new IdempotencyService(deps.db);
 
   app.get(
@@ -976,6 +1114,84 @@ export async function registerPublicCatalogRoutes(
 
       if (result.replayed) void reply.header("idempotency-replayed", "true");
       return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{ Params: PublicQuoteParams; Body: PublicCheckoutRequest }>(
+    "/v1/public/properties/:publicSlug/quotes/:quoteId/checkout",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Create a public reservation and prepare Razorpay checkout",
+        description:
+          "Creates the canonical HELD reservation and provider-neutral payment intent atomically from the active public quote hold, then prepares the Razorpay order only after that database transaction commits. Browser callbacks never confirm the reservation.",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug", "quoteId"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            },
+            quoteId: { type: "string", format: "uuid" }
+          }
+        },
+        headers: publicIdempotencyHeaders,
+        body: publicCheckoutRequestSchema,
+        response: {
+          201: publicCheckoutResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      publicCheckoutService.assertProviderAvailable();
+
+      const key = requirePublicIdempotencyKey(request.headers);
+      const metadata = requestMetadata(request, "public-api");
+      const body: PublicCheckoutRequest = {
+        leadGuest: {
+          name: request.body.leadGuest.name,
+          email: request.body.leadGuest.email ?? null,
+          phone: request.body.leadGuest.phone ?? null
+        }
+      };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey:
+            `public.checkout:${request.params.publicSlug.toLowerCase()}:` + request.params.quoteId,
+          key,
+          requestBody: body
+        },
+        async (trx) => ({
+          statusCode: 201,
+          body: await publicCheckoutService.createReservationPayment(
+            trx,
+            request.params.publicSlug,
+            request.params.quoteId,
+            body,
+            metadata
+          )
+        })
+      );
+
+      const checkout = await publicCheckoutService.prepareCheckout(
+        request.params.publicSlug,
+        result.body.reservation.id,
+        result.body.paymentIntent.id,
+        metadata
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+
+      return reply.status(result.statusCode).send({
+        ...result.body,
+        checkout
+      });
     }
   );
 }
