@@ -1,5 +1,12 @@
 import type { ColumnType, Generated } from "kysely";
 import type {
+  QualityAssessmentResultsTable,
+  QualityAssessmentsTable,
+  QualityStandardTemplateItemsTable,
+  QualityStandardTemplatesTable,
+  QualityStandardTemplateVersionsTable
+} from "../../modules/quality/infrastructure/quality-audit-database-types.js";
+import type {
   FinancialLedgerEntriesTable,
   FinancialLedgerJournalsTable
 } from "../../modules/finance/infrastructure/financial-ledger-database-types.js";
@@ -507,6 +514,11 @@ export interface Database {
   promotion_campaign_versions: PromotionCampaignVersionsTable;
   promotion_assignments: PromotionAssignmentsTable;
   promotion_rule_events: PromotionRuleEventsTable;
+  quality_standard_templates: QualityStandardTemplatesTable;
+  quality_standard_template_versions: QualityStandardTemplateVersionsTable;
+  quality_standard_template_items: QualityStandardTemplateItemsTable;
+  quality_assessments: QualityAssessmentsTable;
+  quality_assessment_results: QualityAssessmentResultsTable;
   audit_events: AuditEventsTable;
   idempotency_keys: IdempotencyKeysTable;
   outbox_events: OutboxEventsTable;

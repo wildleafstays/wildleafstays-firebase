@@ -32,15 +32,49 @@ beforeAll(async () => app.ready());
 afterAll(async () => app.close());
 
 describe("owner operations route contract", () => {
-  it("publishes reservation operations, reports, audit and rate-product reads", async () => {
+  it("publishes reservation operations, reports, audit, quality and rate-product reads", async () => {
     const response = await app.inject({ method: "GET", url: "/openapi.json" });
     expect(response.statusCode).toBe(200);
     const document = response.json() as { paths: Record<string, Record<string, unknown>> };
     const organization = "/v1/partner/organizations/{organizationId}";
     const property = `${organization}/properties/{propertyId}`;
+    const platformQuality = "/v1/platform/quality";
+    const platformProperty = "/v1/platform/properties/{propertyId}";
 
     expect(document.paths[`${organization}/audit-events`]?.["get"]).toBeDefined();
     expect(document.paths[`${organization}/audit-events/{auditEventId}`]?.["get"]).toBeDefined();
+    expect(document.paths[`${platformQuality}/templates`]?.["post"]).toBeDefined();
+    expect(
+      document.paths[`${platformQuality}/templates/{templateId}/versions`]?.["post"]
+    ).toBeDefined();
+    expect(
+      document.paths[`${platformQuality}/templates/{templateId}/versions/{versionId}/items`]?.[
+        "put"
+      ]
+    ).toBeDefined();
+    expect(
+      document.paths[`${platformQuality}/templates/{templateId}/versions/{versionId}/publish`]?.[
+        "post"
+      ]
+    ).toBeDefined();
+
+    expect(document.paths[`${platformProperty}/quality-assessments`]?.["get"]).toBeDefined();
+    expect(document.paths[`${platformProperty}/quality-assessments`]?.["post"]).toBeDefined();
+    expect(
+      document.paths[`${platformProperty}/quality-assessments/{assessmentId}`]?.["get"]
+    ).toBeDefined();
+    expect(
+      document.paths[`${platformProperty}/quality-assessments/{assessmentId}/start`]?.["post"]
+    ).toBeDefined();
+    expect(
+      document.paths[`${platformProperty}/quality-assessments/{assessmentId}/results`]?.["put"]
+    ).toBeDefined();
+    expect(
+      document.paths[`${platformProperty}/quality-assessments/{assessmentId}/complete`]?.["post"]
+    ).toBeDefined();
+
+    expect(document.paths[`${property}/quality-assessments`]?.["get"]).toBeDefined();
+    expect(document.paths[`${property}/quality-assessments/{assessmentId}`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reservations`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reservations/operations-summary`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reports/occupancy`]?.["get"]).toBeDefined();

@@ -4,6 +4,7 @@ import { loadConfig } from "../src/config/env.js";
 import { createDatabase } from "../src/infrastructure/database/database.js";
 import type { ActorContext } from "../src/modules/access/domain/actor-context.js";
 import { AuditExplorerService } from "../src/modules/audit/application/audit-explorer-service.js";
+import { QualityAuditService } from "../src/modules/quality/application/quality-audit-service.js";
 import { CommercialRuleService } from "../src/modules/commercial/application/commercial-rule-service.js";
 import { InventoryAllocationService } from "../src/modules/inventory/application/inventory-allocation-service.js";
 import { InventoryHoldService } from "../src/modules/inventory/application/inventory-hold-service.js";
@@ -6040,6 +6041,555 @@ describe("Phase 5E3 immutable post-stay revenue reversal", () => {
     });
 
     expect(crossOrganizationList.items).toEqual([]);
+  });
+  function phase7FQualityAuditor(fixture: Fixture): ActorContext {
+    return {
+      ...fixture.actor,
+      platformRoles: ["QUALITY_AUDITOR"]
+    };
+  }
+
+  async function createPhase7FPublishedStandard(service: QualityAuditService, actor: ActorContext) {
+    const code = `Q${randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase()}`;
+
+    const template = await service.createTemplate(db, actor, {
+      code,
+      name: `Phase 7F Standard ${code}`,
+      request: metadata()
+    });
+
+    const version = await service.createTemplateVersion(db, actor, {
+      templateId: template.id,
+      title: "Phase 7F Property Standard",
+      notes: "Permanent integration-test quality standard.",
+      request: metadata()
+    });
+
+    const items = await service.replaceTemplateItems(db, actor, {
+      templateId: template.id,
+      versionId: version.id,
+      items: [
+        {
+          code: "FIRE_SAFETY",
+          title: "Fire and electrical safety",
+          category: "guest-safety",
+          checkType: "MANDATORY_PASS",
+          sortOrder: 1
+        },
+        {
+          code: "HOUSEKEEPING",
+          title: "Housekeeping quality",
+          category: "housekeeping",
+          checkType: "SCORED_QUALITY_ITEM",
+          maxScore: 10,
+          sortOrder: 2
+        },
+        {
+          code: "ACCESS_DISCLOSURE",
+          title: "Access disclosure",
+          category: "accessibility",
+          checkType: "INFORMATIONAL_DISCLOSURE",
+          sortOrder: 3
+        },
+        {
+          code: "SIGNAGE_IMPROVEMENT",
+          title: "Guest signage improvement",
+          category: "guest-information",
+          checkType: "IMPROVEMENT_RECOMMENDATION",
+          sortOrder: 4
+        }
+      ],
+      request: metadata()
+    });
+
+    const published = await service.publishTemplateVersion(db, actor, {
+      templateId: template.id,
+      versionId: version.id,
+      request: metadata()
+    });
+
+    return { template, version: published, items };
+  }
+
+  it("Phase 7F completes a failed quality assessment with exact audit history and no property lifecycle mutation", async () => {
+    const fixture = await createFixture();
+    const actor = phase7FQualityAuditor(fixture);
+    const service = new QualityAuditService();
+
+    const propertyBefore = await db
+      .selectFrom("properties")
+      .select("status")
+      .where("id", "=", fixture.propertyId)
+      .executeTakeFirstOrThrow();
+
+    const standard = await createPhase7FPublishedStandard(service, actor);
+
+    const assessment = await service.createAssessment(db, actor, {
+      propertyId: fixture.propertyId,
+      templateVersionId: standard.version.id,
+      triggerType: "SAFETY_INCIDENT",
+      triggerReference: "Permanent Phase 7F safety trigger",
+      assignedAuditorUserId: actor.userId,
+      request: metadata()
+    });
+
+    const started = await service.startAssessment(db, actor, {
+      propertyId: fixture.propertyId,
+      assessmentId: assessment.id,
+      request: metadata()
+    });
+
+    expect(started.status).toBe("IN_PROGRESS");
+
+    const mandatory = standard.items.find((item) => item.code === "FIRE_SAFETY")!;
+    const scored = standard.items.find((item) => item.code === "HOUSEKEEPING")!;
+    const disclosure = standard.items.find((item) => item.code === "ACCESS_DISCLOSURE")!;
+    const improvement = standard.items.find((item) => item.code === "SIGNAGE_IMPROVEMENT")!;
+
+    await service.recordAssessmentResults(db, actor, {
+      propertyId: fixture.propertyId,
+      assessmentId: assessment.id,
+      results: [
+        {
+          templateItemId: mandatory.id,
+          resultStatus: "FAIL",
+          notes: "Mandatory fire-safety requirement failed."
+        },
+        {
+          templateItemId: scored.id,
+          resultStatus: "PASS",
+          score: 7,
+          notes: "Housekeeping score recorded."
+        },
+        {
+          templateItemId: disclosure.id,
+          resultStatus: "OBSERVED",
+          notes: "Access information verified."
+        },
+        {
+          templateItemId: improvement.id,
+          resultStatus: "OBSERVED",
+          notes: "Additional signage recommended."
+        }
+      ],
+      request: metadata()
+    });
+
+    const completed = await service.completeAssessment(db, actor, {
+      propertyId: fixture.propertyId,
+      assessmentId: assessment.id,
+      request: metadata()
+    });
+
+    expect(completed).toMatchObject({
+      status: "COMPLETED",
+      outcome: "FAIL",
+      mandatoryFailureCount: 1,
+      scoreBasisPoints: 7000,
+      requiresLifecycleReview: true
+    });
+
+    const platformList = await service.listPlatformAssessments(db, actor, fixture.propertyId);
+    expect(platformList.map((item) => item.id)).toContain(assessment.id);
+
+    const platformDetail = await service.getPlatformAssessment(
+      db,
+      actor,
+      fixture.propertyId,
+      assessment.id
+    );
+    expect(platformDetail.templateItems).toHaveLength(4);
+    expect(platformDetail.results).toHaveLength(4);
+
+    const ownerList = await service.listPartnerAssessments(
+      db,
+      fixture.actor,
+      fixture.organizationId,
+      fixture.propertyId
+    );
+    expect(ownerList.map((item) => item.id)).toContain(assessment.id);
+
+    const ownerDetail = await service.getPartnerAssessment(
+      db,
+      fixture.actor,
+      fixture.organizationId,
+      fixture.propertyId,
+      assessment.id
+    );
+    expect(ownerDetail.id).toBe(assessment.id);
+
+    const expectedAuditActions = [
+      "QUALITY_TEMPLATE_CREATED",
+      "QUALITY_TEMPLATE_VERSION_CREATED",
+      "QUALITY_TEMPLATE_ITEMS_REPLACED",
+      "QUALITY_TEMPLATE_VERSION_PUBLISHED",
+      "QUALITY_ASSESSMENT_CREATED",
+      "QUALITY_ASSESSMENT_STARTED",
+      "QUALITY_ASSESSMENT_RESULTS_RECORDED",
+      "QUALITY_ASSESSMENT_COMPLETED"
+    ];
+
+    const auditRows = await db
+      .selectFrom("audit_events")
+      .select("action")
+      .where("actor_user_id", "=", actor.userId)
+      .where("action", "in", expectedAuditActions)
+      .execute();
+
+    const actions = new Set(auditRows.map((row) => row.action));
+
+    for (const action of expectedAuditActions) {
+      expect(actions.has(action)).toBe(true);
+    }
+
+    const propertyAfter = await db
+      .selectFrom("properties")
+      .select("status")
+      .where("id", "=", fixture.propertyId)
+      .executeTakeFirstOrThrow();
+
+    expect(propertyAfter.status).toBe(propertyBefore.status);
+  });
+
+  it("Phase 7F enforces quality authorization, version immutability, trigger taxonomy and exact published-version binding", async () => {
+    const fixture = await createFixture();
+    const actor = phase7FQualityAuditor(fixture);
+    const service = new QualityAuditService();
+
+    await expect(
+      service.createTemplate(db, fixture.actor, {
+        code: `Q${randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
+        name: "Owner Must Not Manage Quality",
+        request: metadata()
+      })
+    ).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
+    const standard = await createPhase7FPublishedStandard(service, actor);
+
+    await expect(
+      service.replaceTemplateItems(db, actor, {
+        templateId: standard.template.id,
+        versionId: standard.version.id,
+        items: [],
+        request: metadata()
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    await expect(
+      db
+        .updateTable("quality_standard_template_versions")
+        .set({ title: "Mutation must fail" })
+        .where("id", "=", standard.version.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    await expect(
+      db
+        .updateTable("quality_standard_template_items")
+        .set({ title: "Mutation must fail" })
+        .where("id", "=", standard.items[0]!.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    const secondVersion = await service.createTemplateVersion(db, actor, {
+      templateId: standard.template.id,
+      title: "Phase 7F Property Standard Version Two",
+      request: metadata()
+    });
+
+    expect(secondVersion.versionNumber).toBe(2);
+    expect(secondVersion.status).toBe("DRAFT");
+
+    const originalVersion = await db
+      .selectFrom("quality_standard_template_versions")
+      .select(["version_number", "status"])
+      .where("id", "=", standard.version.id)
+      .executeTakeFirstOrThrow();
+
+    expect(originalVersion).toEqual({
+      version_number: 1,
+      status: "PUBLISHED"
+    });
+
+    const draftAssessmentId = randomUUID();
+
+    await db
+      .insertInto("quality_assessments")
+      .values({
+        id: draftAssessmentId,
+        organization_id: fixture.organizationId,
+        property_id: fixture.propertyId,
+        template_version_id: secondVersion.id,
+        trigger_type: "SCHEDULED_AUDIT",
+        created_by_user_id: actor.userId
+      })
+      .execute();
+
+    await expect(
+      service.startAssessment(db, actor, {
+        propertyId: fixture.propertyId,
+        assessmentId: draftAssessmentId,
+        request: metadata()
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    await expect(
+      service.createAssessment(db, actor, {
+        propertyId: fixture.propertyId,
+        templateVersionId: standard.version.id,
+        triggerType: "INVALID_TRIGGER",
+        request: metadata()
+      })
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400
+    });
+
+    const approvedTriggers = [
+      "SCHEDULED_AUDIT",
+      "REPEATED_LOW_REVIEWS",
+      "SERIOUS_COMPLAINT",
+      "OWNERSHIP_MANAGEMENT_CHANGE",
+      "RENOVATION",
+      "SAFETY_INCIDENT"
+    ] as const;
+
+    const createdTriggers: string[] = [];
+
+    for (const trigger of approvedTriggers) {
+      const assessment = await service.createAssessment(db, actor, {
+        propertyId: fixture.propertyId,
+        templateVersionId: standard.version.id,
+        triggerType: trigger,
+        request: metadata()
+      });
+      createdTriggers.push(assessment.triggerType);
+    }
+
+    expect(createdTriggers).toEqual(approvedTriggers);
+  });
+
+  it("Phase 7F validates result types, requires complete coverage, produces PASS and locks completed history", async () => {
+    const fixture = await createFixture();
+    const actor = phase7FQualityAuditor(fixture);
+    const service = new QualityAuditService();
+    const standard = await createPhase7FPublishedStandard(service, actor);
+
+    const assessment = await service.createAssessment(db, actor, {
+      propertyId: fixture.propertyId,
+      templateVersionId: standard.version.id,
+      triggerType: "SCHEDULED_AUDIT",
+      request: metadata()
+    });
+
+    await service.startAssessment(db, actor, {
+      propertyId: fixture.propertyId,
+      assessmentId: assessment.id,
+      request: metadata()
+    });
+
+    const mandatory = standard.items.find((item) => item.code === "FIRE_SAFETY")!;
+    const scored = standard.items.find((item) => item.code === "HOUSEKEEPING")!;
+    const disclosure = standard.items.find((item) => item.code === "ACCESS_DISCLOSURE")!;
+    const improvement = standard.items.find((item) => item.code === "SIGNAGE_IMPROVEMENT")!;
+
+    await service.recordAssessmentResults(db, actor, {
+      propertyId: fixture.propertyId,
+      assessmentId: assessment.id,
+      results: [
+        {
+          templateItemId: mandatory.id,
+          resultStatus: "PASS"
+        }
+      ],
+      request: metadata()
+    });
+
+    await expect(
+      service.completeAssessment(db, actor, {
+        propertyId: fixture.propertyId,
+        assessmentId: assessment.id,
+        request: metadata()
+      })
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400
+    });
+
+    await expect(
+      service.recordAssessmentResults(db, actor, {
+        propertyId: fixture.propertyId,
+        assessmentId: assessment.id,
+        results: [
+          {
+            templateItemId: mandatory.id,
+            resultStatus: "PASS"
+          },
+          {
+            templateItemId: scored.id,
+            resultStatus: "PASS"
+          }
+        ],
+        request: metadata()
+      })
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400
+    });
+
+    await service.recordAssessmentResults(db, actor, {
+      propertyId: fixture.propertyId,
+      assessmentId: assessment.id,
+      results: [
+        {
+          templateItemId: mandatory.id,
+          resultStatus: "PASS"
+        },
+        {
+          templateItemId: scored.id,
+          resultStatus: "PASS",
+          score: 10
+        },
+        {
+          templateItemId: disclosure.id,
+          resultStatus: "OBSERVED",
+          notes: "Disclosure observed."
+        },
+        {
+          templateItemId: improvement.id,
+          resultStatus: "NOT_APPLICABLE",
+          notes: "No recommendation required."
+        }
+      ],
+      request: metadata()
+    });
+
+    const completed = await service.completeAssessment(db, actor, {
+      propertyId: fixture.propertyId,
+      assessmentId: assessment.id,
+      request: metadata()
+    });
+
+    expect(completed).toMatchObject({
+      status: "COMPLETED",
+      outcome: "PASS",
+      mandatoryFailureCount: 0,
+      scoreBasisPoints: 10000,
+      requiresLifecycleReview: false
+    });
+
+    await expect(
+      service.recordAssessmentResults(db, actor, {
+        propertyId: fixture.propertyId,
+        assessmentId: assessment.id,
+        results: [],
+        request: metadata()
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+
+    await expect(
+      db
+        .updateTable("quality_assessments")
+        .set({ requires_lifecycle_review: true })
+        .where("id", "=", assessment.id)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    const resultRow = await db
+      .selectFrom("quality_assessment_results")
+      .select("id")
+      .where("assessment_id", "=", assessment.id)
+      .executeTakeFirstOrThrow();
+
+    await expect(
+      db.deleteFrom("quality_assessment_results").where("id", "=", resultRow.id).execute()
+    ).rejects.toThrow(/immutable/i);
+  });
+
+  it("Phase 7F prevents partner cross-tenant quality leakage while OWNER remains read-only", async () => {
+    const fixture = await createFixture();
+    const otherFixture = await createFixture();
+    const actor = phase7FQualityAuditor(fixture);
+    const service = new QualityAuditService();
+    const standard = await createPhase7FPublishedStandard(service, actor);
+
+    const assessment = await service.createAssessment(db, actor, {
+      propertyId: fixture.propertyId,
+      templateVersionId: standard.version.id,
+      triggerType: "RENOVATION",
+      request: metadata()
+    });
+
+    const own = await service.getPartnerAssessment(
+      db,
+      fixture.actor,
+      fixture.organizationId,
+      fixture.propertyId,
+      assessment.id
+    );
+
+    expect(own.id).toBe(assessment.id);
+
+    await expect(
+      service.listPartnerAssessments(
+        db,
+        fixture.actor,
+        otherFixture.organizationId,
+        otherFixture.propertyId
+      )
+    ).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
+    await expect(
+      service.getPartnerAssessment(
+        db,
+        fixture.actor,
+        otherFixture.organizationId,
+        otherFixture.propertyId,
+        assessment.id
+      )
+    ).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
+    await expect(
+      service.listPartnerAssessments(
+        db,
+        fixture.actor,
+        otherFixture.organizationId,
+        fixture.propertyId
+      )
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      statusCode: 404
+    });
+
+    await expect(
+      service.createAssessment(db, fixture.actor, {
+        propertyId: fixture.propertyId,
+        templateVersionId: standard.version.id,
+        triggerType: "RENOVATION",
+        request: metadata()
+      })
+    ).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
   });
   it("requires settlement permission before any revenue reversal can be created", async () => {
     const ready = await recognizedForReversal();

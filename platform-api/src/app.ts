@@ -25,6 +25,7 @@ import { registerPaymentRoutes } from "./modules/payments/transport/payment-rout
 import { registerPublicCatalogRoutes } from "./modules/public-booking/transport/public-catalog-routes.js";
 import { MAX_PROPERTY_DOCUMENT_BYTES } from "./modules/property-onboarding/application/property-asset-upload-service.js";
 import { registerPropertyOnboardingRoutes } from "./modules/property-onboarding/transport/property-onboarding-routes.js";
+import { registerQualityAuditRoutes } from "./modules/quality/transport/quality-audit-routes.js";
 import { registerPropertyRoutes } from "./modules/properties/transport/property-routes.js";
 import { registerPropertySetupRoutes } from "./modules/property-setup/transport/property-setup-routes.js";
 import { registerQuoteRoutes } from "./modules/quotes/transport/quote-routes.js";
@@ -218,6 +219,12 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     userRepository,
     accessRepository,
     propertyAssetStorage: deps.propertyAssetStorage ?? new UnavailablePropertyAssetStorage()
+  });
+  await registerQualityAuditRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
   });
 
   await registerInventoryRoutes(app, {
