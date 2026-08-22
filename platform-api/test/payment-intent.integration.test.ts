@@ -7,6 +7,7 @@ import { CommercialRuleService } from "../src/modules/commercial/application/com
 import { InventoryAllocationService } from "../src/modules/inventory/application/inventory-allocation-service.js";
 import { InventoryHoldService } from "../src/modules/inventory/application/inventory-hold-service.js";
 import { QuoteHoldService } from "../src/modules/quotes/application/quote-hold-service.js";
+import { OwnerReportService } from "../src/modules/reports/application/owner-report-service.js";
 import { HeldReservationService } from "../src/modules/reservations/application/held-reservation-service.js";
 import { StayLifecycleService } from "../src/modules/reservations/application/stay-lifecycle-service.js";
 import {
@@ -4070,6 +4071,43 @@ describe("Phase 5E2A canonical stay lifecycle", () => {
     );
   }
 
+  it("Phase 7E1A reports canonical confirmed room occupancy", async () => {
+    const ready = await confirmedStayFixture();
+
+    const report = await new OwnerReportService().occupancy(db, ready.fixture.actor, {
+      organizationId: ready.fixture.organizationId,
+      propertyId: ready.fixture.propertyId,
+      startDate: ready.held.reservation.arrivalDate,
+      endDate: ready.held.reservation.departureDate
+    });
+
+    expect(report).toMatchObject({
+      propertyId: ready.fixture.propertyId,
+      startDate: "2034-02-10",
+      endDate: "2034-02-12",
+      nights: 2,
+      capacityBasis: "CURRENT_ACTIVE_PHYSICAL_UNITS",
+      confirmedReservationCount: 1,
+      capacityRoomNights: 4,
+      confirmedRoomNights: 2,
+      confirmedOccupancyBps: 5000
+    });
+
+    expect(report.days).toEqual([
+      {
+        date: "2034-02-10",
+        capacityRooms: 2,
+        confirmedRooms: 1,
+        confirmedOccupancyBps: 5000
+      },
+      {
+        date: "2034-02-11",
+        capacityRooms: 2,
+        confirmedRooms: 1,
+        confirmedOccupancyBps: 5000
+      }
+    ]);
+  });
   it("lets FRONT_DESK check in a confirmed reservation and records one canonical boundary", async () => {
     const ready = await confirmedStayFixture();
     const actor = frontDeskActor(ready.fixture);

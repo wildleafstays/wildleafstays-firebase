@@ -1,0 +1,83 @@
+import type { FastifyInstance } from "fastify";
+import type { Kysely } from "kysely";
+import type { Database } from "../../../infrastructure/database/types.js";
+import type { IdentityVerifier } from "../../../infrastructure/identity/identity-verifier.js";
+import { AuthenticationError } from "../../../shared/errors/app-error.js";
+import { requireAuthentication } from "../../../shared/http/authenticate.js";
+import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
+import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
+import { OwnerReportService } from "../application/owner-report-service.js";
+
+export interface ReportRouteDependencies {
+  db: Kysely<Database>;
+  identityVerifier: IdentityVerifier;
+  userRepository: UserRepository;
+  accessRepository: AccessRepository;
+}
+
+interface PropertyParams {
+  organizationId: string;
+  propertyId: string;
+}
+
+interface OccupancyQuery {
+  startDate: string;
+  endDate: string;
+}
+
+const propertyParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["organizationId", "propertyId"],
+  properties: {
+    organizationId: { type: "string", format: "uuid" },
+    propertyId: { type: "string", format: "uuid" }
+  }
+} as const;
+
+export async function registerReportRoutes(
+  app: FastifyInstance,
+  deps: ReportRouteDependencies
+): Promise<void> {
+  const authenticate = requireAuthentication(deps);
+  const reports = new OwnerReportService();
+
+  app.get<{ Params: PropertyParams; Querystring: OccupancyQuery }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/reports/occupancy",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reports"],
+        summary: "Get the property's confirmed occupancy report",
+        description:
+          "Returns a tenant-scoped, read-only confirmed booking and occupancy report for the half-open stay-date range [startDate, endDate). Confirmed room commitments come from canonical inventory. Full-property confirmation occupies the property's current active physical-unit capacity for that night.",
+        security: [{ bearerAuth: [] }],
+        params: propertyParamsSchema,
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          required: ["startDate", "endDate"],
+          properties: {
+            startDate: { type: "string", format: "date" },
+            endDate: { type: "string", format: "date" }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) {
+        throw new AuthenticationError();
+      }
+
+      const result = await reports.occupancy(deps.db, request.actor, {
+        organizationId: request.params.organizationId,
+        propertyId: request.params.propertyId,
+        startDate: request.query.startDate,
+        endDate: request.query.endDate
+      });
+
+      void reply.header("cache-control", "no-store, private");
+      return result;
+    }
+  );
+}

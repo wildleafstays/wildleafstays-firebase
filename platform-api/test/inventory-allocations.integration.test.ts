@@ -6,6 +6,7 @@ import type { ActorContext } from "../src/modules/access/domain/actor-context.js
 import { InventoryAllocationService } from "../src/modules/inventory/application/inventory-allocation-service.js";
 import { InventoryHoldService } from "../src/modules/inventory/application/inventory-hold-service.js";
 import { InventoryService } from "../src/modules/inventory/application/inventory-service.js";
+import { OwnerReportService } from "../src/modules/reports/application/owner-report-service.js";
 import type { InventoryHoldItemInput } from "../src/modules/inventory/domain/inventory-hold.js";
 import type { SaleMode } from "../src/modules/inventory/domain/inventory.js";
 import { CreateOrganizationService } from "../src/modules/organizations/application/create-organization-service.js";
@@ -350,6 +351,40 @@ describe("Phase 3C confirmed inventory allocations", () => {
     });
   });
 
+  it("Phase 7E1A reports confirmed full-property inventory as full occupancy", async () => {
+    const fixture = await createFixture("BOTH", [2]);
+    const hold = await createHold(fixture, [fullPropertyItem]);
+
+    await confirmHold(fixture, hold.hold.id, "RES-7E1A-FULL");
+
+    const report = await new OwnerReportService().occupancy(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      startDate: "2032-01-01",
+      endDate: "2032-01-02"
+    });
+
+    expect(report).toMatchObject({
+      propertyId: fixture.propertyId,
+      startDate: "2032-01-01",
+      endDate: "2032-01-02",
+      nights: 1,
+      capacityBasis: "CURRENT_ACTIVE_PHYSICAL_UNITS",
+      confirmedReservationCount: 0,
+      capacityRoomNights: 2,
+      confirmedRoomNights: 2,
+      confirmedOccupancyBps: 10000
+    });
+
+    expect(report.days).toEqual([
+      {
+        date: "2032-01-01",
+        capacityRooms: 2,
+        confirmedRooms: 2,
+        confirmedOccupancyBps: 10000
+      }
+    ]);
+  });
   it("supports full-property-only confirmation without room inventory", async () => {
     const fixture = await createFixture("FULL_PROPERTY_ONLY", []);
     const hold = await createHold(fixture, [fullPropertyItem]);

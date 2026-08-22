@@ -28,6 +28,7 @@ import { registerPropertyRoutes } from "./modules/properties/transport/property-
 import { registerPropertySetupRoutes } from "./modules/property-setup/transport/property-setup-routes.js";
 import { registerQuoteRoutes } from "./modules/quotes/transport/quote-routes.js";
 import { registerRateRoutes } from "./modules/rates/transport/rate-routes.js";
+import { registerReportRoutes } from "./modules/reports/transport/report-routes.js";
 import { registerReservationRoutes } from "./modules/reservations/transport/reservation-routes.js";
 import { registerErrorHandler } from "./shared/http/error-handler.js";
 
@@ -247,6 +248,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await registerReservationRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  await registerReportRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,
