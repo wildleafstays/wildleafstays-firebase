@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/env.js";
 import { createDatabase } from "../src/infrastructure/database/database.js";
 import type { ActorContext } from "../src/modules/access/domain/actor-context.js";
+import { AuditExplorerService } from "../src/modules/audit/application/audit-explorer-service.js";
 import { CommercialRuleService } from "../src/modules/commercial/application/commercial-rule-service.js";
 import { InventoryAllocationService } from "../src/modules/inventory/application/inventory-allocation-service.js";
 import { InventoryHoldService } from "../src/modules/inventory/application/inventory-hold-service.js";
@@ -5684,6 +5685,361 @@ describe("Phase 5E3 immutable post-stay revenue reversal", () => {
       code: "NOT_FOUND",
       statusCode: 404
     });
+  });
+  async function insertPhase7E2AuditEvent(
+    fixture: Fixture,
+    options: {
+      id?: string;
+      organizationId?: string;
+      propertyId?: string | null;
+      actorType?: "USER" | "SYSTEM" | "PROVIDER";
+      actorUserId?: string | null;
+      actorRole?: string | null;
+      action?: string;
+      entityType?: string;
+      entityId?: string;
+      before?: Record<string, unknown> | null;
+      after?: Record<string, unknown> | null;
+      metadata?: Record<string, unknown>;
+      reason?: string | null;
+      createdAt?: Date;
+    } = {}
+  ) {
+    const request = metadata();
+    const auditActorType = options.actorType ?? "USER";
+
+    return db
+      .insertInto("audit_events")
+      .values({
+        id: options.id ?? randomUUID(),
+        actor_type: auditActorType,
+        actor_user_id:
+          options.actorUserId !== undefined
+            ? options.actorUserId
+            : auditActorType === "USER"
+              ? fixture.actor.userId
+              : null,
+        actor_role:
+          options.actorRole !== undefined
+            ? options.actorRole
+            : auditActorType === "USER"
+              ? "OWNER"
+              : null,
+        organization_id: options.organizationId ?? fixture.organizationId,
+        property_id: options.propertyId === undefined ? fixture.propertyId : options.propertyId,
+        action: options.action ?? "phase7e2.test",
+        entity_type: options.entityType ?? "phase7e2_test",
+        entity_id: options.entityId ?? randomUUID(),
+        before_json: options.before ?? null,
+        after_json: options.after ?? { status: "RECORDED" },
+        metadata_json: options.metadata ?? { fixture: "phase7e2" },
+        reason: options.reason ?? null,
+        source: "phase7e2-integration",
+        request_id: request.requestId,
+        correlation_id: request.correlationId,
+        ip_address: "203.0.113.17",
+        user_agent: "phase7e2-sensitive-test-agent",
+        created_at: options.createdAt ?? new Date("2040-01-01T00:00:00.000Z")
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  }
+
+  it("Phase 7E2 lists tenant-scoped audit history with filters and stable cursor pagination", async () => {
+    const fixture = await createFixture();
+    const otherFixture = await createFixture();
+    const service = new AuditExplorerService();
+
+    const sameCreatedAt = new Date("2040-03-02T10:00:00.000Z");
+    const olderCreatedAt = new Date("2040-03-01T10:00:00.000Z");
+
+    const pageThree = await insertPhase7E2AuditEvent(fixture, {
+      id: "00000000-0000-4000-8000-000000000303",
+      action: "phase7e2.page",
+      entityId: "page-three",
+      createdAt: sameCreatedAt
+    });
+
+    const pageTwo = await insertPhase7E2AuditEvent(fixture, {
+      id: "00000000-0000-4000-8000-000000000302",
+      propertyId: null,
+      action: "phase7e2.page",
+      entityId: "page-two-organization",
+      createdAt: sameCreatedAt
+    });
+
+    const pageOne = await insertPhase7E2AuditEvent(fixture, {
+      id: "00000000-0000-4000-8000-000000000301",
+      action: "phase7e2.page",
+      entityId: "page-one",
+      createdAt: sameCreatedAt
+    });
+
+    const pageOlder = await insertPhase7E2AuditEvent(fixture, {
+      id: "00000000-0000-4000-8000-000000000300",
+      actorType: "SYSTEM",
+      actorUserId: null,
+      actorRole: null,
+      action: "phase7e2.page",
+      entityId: "page-older",
+      createdAt: olderCreatedAt
+    });
+
+    await insertPhase7E2AuditEvent(otherFixture, {
+      id: "00000000-0000-4000-8000-000000000399",
+      action: "phase7e2.page",
+      entityId: "cross-organization",
+      createdAt: new Date("2040-03-03T10:00:00.000Z")
+    });
+
+    const firstPage = await service.list(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      action: "phase7e2.page",
+      entityType: "phase7e2_test",
+      limit: 2
+    });
+
+    expect(firstPage.organizationId).toBe(fixture.organizationId);
+    expect(firstPage.items.map((item) => item.id)).toEqual([pageThree.id, pageTwo.id]);
+    expect(firstPage.items[1]!.propertyId).toBeNull();
+    expect(firstPage.nextCursor).not.toBeNull();
+
+    const secondPage = await service.list(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      action: "phase7e2.page",
+      entityType: "phase7e2_test",
+      limit: 2,
+      cursor: firstPage.nextCursor!
+    });
+
+    expect(secondPage.items.map((item) => item.id)).toEqual([pageOne.id, pageOlder.id]);
+    expect(secondPage.nextCursor).toBeNull();
+
+    const pagedIds = [
+      ...firstPage.items.map((item) => item.id),
+      ...secondPage.items.map((item) => item.id)
+    ];
+
+    expect(pagedIds).toEqual([pageThree.id, pageTwo.id, pageOne.id, pageOlder.id]);
+    expect(new Set(pagedIds).size).toBe(4);
+    expect(pagedIds).not.toContain("00000000-0000-4000-8000-000000000399");
+
+    const propertyOnly = await service.list(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      action: "phase7e2.page",
+      entityType: "phase7e2_test"
+    });
+
+    expect(propertyOnly.items.map((item) => item.id)).toEqual([
+      pageThree.id,
+      pageOne.id,
+      pageOlder.id
+    ]);
+    expect(propertyOnly.items.every((item) => item.propertyId === fixture.propertyId)).toBe(true);
+
+    const filtered = await insertPhase7E2AuditEvent(fixture, {
+      id: "00000000-0000-4000-8000-000000000350",
+      action: "phase7e2.filtered",
+      entityType: "phase7e2_filter",
+      entityId: "filter-target",
+      createdAt: new Date("2040-03-04T10:00:00.000Z")
+    });
+
+    const exactFilter = await service.list(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      actorType: "USER",
+      actorUserId: fixture.actor.userId,
+      action: "phase7e2.filtered",
+      entityType: "phase7e2_filter",
+      entityId: "filter-target"
+    });
+
+    expect(exactFilter.items.map((item) => item.id)).toEqual([filtered.id]);
+
+    const rangeStart = new Date("2040-04-01T00:00:00.000Z");
+    const rangeEnd = new Date("2040-04-02T00:00:00.000Z");
+
+    const includedAtStart = await insertPhase7E2AuditEvent(fixture, {
+      id: "00000000-0000-4000-8000-000000000401",
+      action: "phase7e2.range",
+      entityType: "phase7e2_range",
+      entityId: "included-at-start",
+      createdAt: rangeStart
+    });
+
+    await insertPhase7E2AuditEvent(fixture, {
+      id: "00000000-0000-4000-8000-000000000402",
+      action: "phase7e2.range",
+      entityType: "phase7e2_range",
+      entityId: "excluded-at-end",
+      createdAt: rangeEnd
+    });
+
+    const ranged = await service.list(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      action: "phase7e2.range",
+      entityType: "phase7e2_range",
+      createdFrom: rangeStart.toISOString(),
+      createdBefore: rangeEnd.toISOString()
+    });
+
+    expect(ranged.items.map((item) => item.id)).toEqual([includedAtStart.id]);
+  });
+
+  it("Phase 7E2 requires organization AUDIT_READ and validates list controls", async () => {
+    const fixture = await createFixture();
+    const service = new AuditExplorerService();
+
+    const adminActor: ActorContext = {
+      ...fixture.actor,
+      organizationMemberships: fixture.actor.organizationMemberships.map((membership) => ({
+        ...membership,
+        role: "ADMIN"
+      })),
+      propertyGrants: []
+    };
+
+    await expect(
+      service.list(db, adminActor, {
+        organizationId: fixture.organizationId
+      })
+    ).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
+    const propertyOnlyActor: ActorContext = {
+      userId: fixture.actor.userId,
+      email: fixture.actor.email,
+      platformRoles: [],
+      organizationMemberships: [],
+      propertyGrants: [
+        {
+          grantId: randomUUID(),
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          role: "MANAGER"
+        }
+      ]
+    };
+
+    await expect(
+      service.list(db, propertyOnlyActor, {
+        organizationId: fixture.organizationId
+      })
+    ).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+
+    await expect(
+      service.list(db, fixture.actor, {
+        organizationId: fixture.organizationId,
+        cursor: "%%%"
+      })
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400
+    });
+
+    await expect(
+      service.list(db, fixture.actor, {
+        organizationId: fixture.organizationId,
+        limit: 0
+      })
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400
+    });
+
+    await expect(
+      service.list(db, fixture.actor, {
+        organizationId: fixture.organizationId,
+        limit: 101
+      })
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400
+    });
+
+    await expect(
+      service.list(db, fixture.actor, {
+        organizationId: fixture.organizationId,
+        createdFrom: "2040-05-02T00:00:00.000Z",
+        createdBefore: "2040-05-02T00:00:00.000Z"
+      })
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400
+    });
+  });
+
+  it("Phase 7E2 returns safe audit detail and hides cross-organization events", async () => {
+    const fixture = await createFixture();
+    const otherFixture = await createFixture();
+    const service = new AuditExplorerService();
+
+    const event = await insertPhase7E2AuditEvent(fixture, {
+      id: "00000000-0000-4000-8000-000000000501",
+      action: "phase7e2.detail",
+      entityType: "phase7e2_detail",
+      entityId: "detail-target",
+      before: { status: "BEFORE", amountMinor: 100 },
+      after: { status: "AFTER", amountMinor: 120 },
+      metadata: { channel: "audit-explorer", sequence: 7 },
+      reason: "PHASE_7E2_TEST",
+      createdAt: new Date("2040-06-01T12:00:00.000Z")
+    });
+
+    const detail = await service.get(db, fixture.actor, fixture.organizationId, event.id);
+
+    expect(detail).toEqual({
+      id: event.id,
+      organizationId: fixture.organizationId,
+      propertyId: fixture.propertyId,
+      actorType: "USER",
+      actorUserId: fixture.actor.userId,
+      actorRole: "OWNER",
+      action: "phase7e2.detail",
+      entityType: "phase7e2_detail",
+      entityId: "detail-target",
+      before: { status: "BEFORE", amountMinor: 100 },
+      after: { status: "AFTER", amountMinor: 120 },
+      metadata: { channel: "audit-explorer", sequence: 7 },
+      reason: "PHASE_7E2_TEST",
+      source: "phase7e2-integration",
+      requestId: event.request_id,
+      correlationId: event.correlation_id,
+      createdAt: event.created_at.toISOString()
+    });
+
+    expect(detail).not.toHaveProperty("ipAddress");
+    expect(detail).not.toHaveProperty("userAgent");
+
+    const otherEvent = await insertPhase7E2AuditEvent(otherFixture, {
+      id: "00000000-0000-4000-8000-000000000599",
+      action: "phase7e2.cross-org-detail",
+      entityType: "phase7e2_detail",
+      entityId: "other-organization",
+      createdAt: new Date("2040-06-02T12:00:00.000Z")
+    });
+
+    await expect(
+      service.get(db, fixture.actor, fixture.organizationId, otherEvent.id)
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      statusCode: 404
+    });
+
+    const crossOrganizationList = await service.list(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      action: "phase7e2.cross-org-detail",
+      entityType: "phase7e2_detail"
+    });
+
+    expect(crossOrganizationList.items).toEqual([]);
   });
   it("requires settlement permission before any revenue reversal can be created", async () => {
     const ready = await recognizedForReversal();

@@ -11,6 +11,7 @@ import type { IdentityVerifier } from "./infrastructure/identity/identity-verifi
 import type { PropertyAssetStorage } from "./infrastructure/storage/property-asset-storage.js";
 import { UnavailablePropertyAssetStorage } from "./infrastructure/storage/unavailable-property-asset-storage.js";
 import { AccessRepository } from "./modules/access/infrastructure/access-repository.js";
+import { registerAuditRoutes } from "./modules/audit/transport/audit-routes.js";
 import { registerCommercialRuleRoutes } from "./modules/commercial/transport/commercial-rule-routes.js";
 import { registerPromotionRuleRoutes } from "./modules/commercial/transport/promotion-rule-routes.js";
 import { UserRepository } from "./modules/identity/infrastructure/user-repository.js";
@@ -184,6 +185,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await registerOrganizationRoutes(app, {
+    db: deps.db,
+    identityVerifier: deps.identityVerifier,
+    userRepository,
+    accessRepository
+  });
+
+  await registerAuditRoutes(app, {
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,

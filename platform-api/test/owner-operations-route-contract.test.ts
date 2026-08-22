@@ -32,12 +32,15 @@ beforeAll(async () => app.ready());
 afterAll(async () => app.close());
 
 describe("owner operations route contract", () => {
-  it("publishes reservation operations, reports and rate-product reads", async () => {
+  it("publishes reservation operations, reports, audit and rate-product reads", async () => {
     const response = await app.inject({ method: "GET", url: "/openapi.json" });
     expect(response.statusCode).toBe(200);
     const document = response.json() as { paths: Record<string, Record<string, unknown>> };
-    const property = "/v1/partner/organizations/{organizationId}/properties/{propertyId}";
+    const organization = "/v1/partner/organizations/{organizationId}";
+    const property = `${organization}/properties/{propertyId}`;
 
+    expect(document.paths[`${organization}/audit-events`]?.["get"]).toBeDefined();
+    expect(document.paths[`${organization}/audit-events/{auditEventId}`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reservations`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reservations/operations-summary`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reports/occupancy`]?.["get"]).toBeDefined();
