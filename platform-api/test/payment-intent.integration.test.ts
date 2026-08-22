@@ -5171,6 +5171,136 @@ describe("Phase 5E3 immutable post-stay revenue reversal", () => {
     return { fixture, held, payment, evidence };
   }
 
+  async function markPortfolioPropertyLive(fixture: Fixture, name: string) {
+    const now = new Date();
+
+    return db
+      .updateTable("properties")
+      .set({
+        name,
+        status: "LIVE",
+        public_slug: `phase7e1c-${randomUUID()}`,
+        approved_at: now,
+        live_at: now
+      })
+      .where("organization_id", "=", fixture.organizationId)
+      .where("id", "=", fixture.propertyId)
+      .returning(["id", "name", "timezone"])
+      .executeTakeFirstOrThrow();
+  }
+
+  async function createPortfolioProperty(
+    fixture: Fixture,
+    options: {
+      name: string;
+      activeRooms: number;
+      live: boolean;
+    }
+  ) {
+    const created = await db.transaction().execute((trx) =>
+      new CreatePropertyDraftService().execute(
+        trx,
+        fixture.actor,
+        {
+          organizationId: fixture.organizationId,
+          name: options.name,
+          timezone: "Asia/Kolkata"
+        },
+        metadata()
+      )
+    );
+
+    const propertyId = created.property.id;
+
+    if (options.activeRooms > 0) {
+      await db
+        .updateTable("properties")
+        .set({
+          property_type: "HOTEL",
+          sale_mode: "ROOMS_ONLY"
+        })
+        .where("organization_id", "=", fixture.organizationId)
+        .where("id", "=", propertyId)
+        .execute();
+
+      const setup = new PropertySetupService();
+      const marker = randomUUID().replaceAll("-", "").slice(0, 6).toUpperCase();
+
+      const category = await db.transaction().execute((trx) =>
+        setup.createRoomCategory(
+          trx,
+          fixture.actor,
+          {
+            organizationId: fixture.organizationId,
+            propertyId,
+            code: `P7C${marker}`,
+            name: `${options.name} Rooms`,
+            accommodationType: "ROOM",
+            description: null,
+            baseOccupancy: 2,
+            maxAdults: 3,
+            maxChildren: 2,
+            maxOccupancy: 4,
+            sizeSqm: 28,
+            bedConfiguration: "1 King Bed",
+            extraBedAllowed: true,
+            defaultViewLabel: "Portfolio View",
+            sortOrder: 1
+          },
+          metadata()
+        )
+      );
+
+      for (let index = 1; index <= options.activeRooms; index++) {
+        await db.transaction().execute((trx) =>
+          setup.createPhysicalUnit(
+            trx,
+            fixture.actor,
+            {
+              organizationId: fixture.organizationId,
+              propertyId,
+              roomCategoryId: category.roomCategory.id,
+              structureId: null,
+              floorId: null,
+              unitCode: `P7C-${marker}-${index}`,
+              displayName: `${options.name} Room ${index}`,
+              hasView: true,
+              viewLabel: "Portfolio View",
+              wheelchairAccessible: false,
+              stepFreeAccessible: false,
+              liftAccessible: false,
+              smokingPolicy: "NON_SMOKING",
+              internalNotes: null,
+              sortOrder: index
+            },
+            metadata()
+          )
+        );
+      }
+    }
+
+    if (options.live) {
+      const now = new Date();
+
+      await db
+        .updateTable("properties")
+        .set({
+          status: "LIVE",
+          public_slug: `phase7e1c-${randomUUID()}`,
+          approved_at: now,
+          live_at: now
+        })
+        .where("organization_id", "=", fixture.organizationId)
+        .where("id", "=", propertyId)
+        .execute();
+    }
+
+    return {
+      propertyId,
+      name: options.name,
+      timezone: "Asia/Kolkata"
+    };
+  }
   async function recognizedForReversal() {
     const ready = await checkedOutForReversal();
     const posted = await db.transaction().execute((trx) =>
@@ -5351,6 +5481,209 @@ describe("Phase 5E3 immutable post-stay revenue reversal", () => {
         netRecognizedRevenueMinor: recognizedOnReversalDate - reversal.reversal.amountMinor
       }
     ]);
+  });
+  it("Phase 7E1C reports weighted LIVE portfolio occupancy and recognized revenue", async () => {
+    const ready = await recognizedForReversal();
+    const reversal = await reverseOne(ready);
+
+    const alpha = await markPortfolioPropertyLive(ready.fixture, "Alpha Portfolio Hotel");
+
+    const beta = await createPortfolioProperty(ready.fixture, {
+      name: "Beta Portfolio Hotel",
+      activeRooms: 3,
+      live: true
+    });
+
+    await createPortfolioProperty(ready.fixture, {
+      name: "Draft Portfolio Hotel",
+      activeRooms: 0,
+      live: false
+    });
+
+    const service = new OwnerReportService();
+
+    const report = await service.portfolioPerformance(db, ready.fixture.actor, {
+      organizationId: ready.fixture.organizationId,
+      startDate: ready.held.reservation.arrivalDate,
+      endDate: ready.held.reservation.departureDate
+    });
+
+    expect(report).toMatchObject({
+      organizationId: ready.fixture.organizationId,
+      startDate: "2034-02-10",
+      endDate: "2034-02-12",
+      currencyCode: ready.payment.paymentIntent.currencyCode,
+      propertyCount: 2,
+      currentActivePhysicalRooms: 5,
+      capacityRoomNights: 10,
+      confirmedRoomNights: 2,
+      occupancyBps: 2000,
+      recognizedRevenueMinor: ready.posted.revenueBasisMinor,
+      reversedRevenueMinor: 0,
+      netRecognizedRevenueMinor: ready.posted.revenueBasisMinor
+    });
+
+    expect(report.properties).toEqual([
+      {
+        propertyId: alpha.id,
+        name: "Alpha Portfolio Hotel",
+        timezone: alpha.timezone,
+        currentActivePhysicalRooms: 2,
+        capacityRoomNights: 4,
+        confirmedRoomNights: 2,
+        occupancyBps: 5000,
+        recognizedRevenueMinor: ready.posted.revenueBasisMinor,
+        reversedRevenueMinor: 0,
+        netRecognizedRevenueMinor: ready.posted.revenueBasisMinor
+      },
+      {
+        propertyId: beta.propertyId,
+        name: "Beta Portfolio Hotel",
+        timezone: beta.timezone,
+        currentActivePhysicalRooms: 3,
+        capacityRoomNights: 6,
+        confirmedRoomNights: 0,
+        occupancyBps: 0,
+        recognizedRevenueMinor: 0,
+        reversedRevenueMinor: 0,
+        netRecognizedRevenueMinor: 0
+      }
+    ]);
+
+    const reversalJournal = reversal.journals[0]!;
+    expect(reversalJournal.journalType).toBe("REVENUE_REVERSED");
+
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: alpha.timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(new Date(reversalJournal.occurredAt));
+
+    const datePart = (type: "year" | "month" | "day") => {
+      const part = parts.find((candidate) => candidate.type === type);
+      expect(part).toBeDefined();
+      return part!.value;
+    };
+
+    const reversalDate = `${datePart("year")}-${datePart("month")}-${datePart("day")}`;
+
+    const reversalEndDate = new Date(
+      new Date(`${reversalDate}T00:00:00.000Z`).getTime() + 86_400_000
+    )
+      .toISOString()
+      .slice(0, 10);
+
+    const recognizedOnReversalDate = ready.posted.journals
+      .filter((journal) => journal.recognitionDate === reversalDate)
+      .reduce((sum, journal) => sum + journal.amountMinor, 0);
+
+    const reversalReport = await service.portfolioPerformance(db, ready.fixture.actor, {
+      organizationId: ready.fixture.organizationId,
+      startDate: reversalDate,
+      endDate: reversalEndDate
+    });
+
+    expect(reversalReport).toMatchObject({
+      organizationId: ready.fixture.organizationId,
+      currencyCode: ready.payment.paymentIntent.currencyCode,
+      propertyCount: 2,
+      recognizedRevenueMinor: recognizedOnReversalDate,
+      reversedRevenueMinor: reversal.reversal.amountMinor,
+      netRecognizedRevenueMinor: recognizedOnReversalDate - reversal.reversal.amountMinor
+    });
+
+    const alphaReversal = reversalReport.properties.find(
+      (property) => property.propertyId === alpha.id
+    );
+
+    expect(alphaReversal).toMatchObject({
+      recognizedRevenueMinor: recognizedOnReversalDate,
+      reversedRevenueMinor: reversal.reversal.amountMinor,
+      netRecognizedRevenueMinor: recognizedOnReversalDate - reversal.reversal.amountMinor
+    });
+
+    const propertyOnlyActor: ActorContext = {
+      userId: ready.fixture.actor.userId,
+      email: ready.fixture.actor.email,
+      platformRoles: [],
+      organizationMemberships: [],
+      propertyGrants: [
+        {
+          grantId: randomUUID(),
+          organizationId: ready.fixture.organizationId,
+          propertyId: ready.fixture.propertyId,
+          role: "MANAGER"
+        }
+      ]
+    };
+
+    await expect(
+      service.portfolioPerformance(db, propertyOnlyActor, {
+        organizationId: ready.fixture.organizationId,
+        startDate: ready.held.reservation.arrivalDate,
+        endDate: ready.held.reservation.departureDate
+      })
+    ).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+      statusCode: 403
+    });
+  });
+  it("Phase 7E1C returns an empty portfolio for an existing organization with no LIVE properties", async () => {
+    const fixture = await createFixture();
+
+    const organization = await db
+      .selectFrom("organizations")
+      .select("currency_code")
+      .where("id", "=", fixture.organizationId)
+      .executeTakeFirstOrThrow();
+
+    const report = await new OwnerReportService().portfolioPerformance(db, fixture.actor, {
+      organizationId: fixture.organizationId,
+      startDate: "2034-02-10",
+      endDate: "2034-02-12"
+    });
+
+    expect(report).toEqual({
+      organizationId: fixture.organizationId,
+      startDate: "2034-02-10",
+      endDate: "2034-02-12",
+      currencyCode: organization.currency_code,
+      propertyCount: 0,
+      currentActivePhysicalRooms: 0,
+      capacityRoomNights: 0,
+      confirmedRoomNights: 0,
+      occupancyBps: null,
+      recognizedRevenueMinor: 0,
+      reversedRevenueMinor: 0,
+      netRecognizedRevenueMinor: 0,
+      properties: []
+    });
+  });
+
+  it("Phase 7E1C returns not found for a nonexistent organization after organization authorization", async () => {
+    const fixture = await createFixture();
+    const missingOrganizationId = randomUUID();
+
+    const missingOrganizationActor: ActorContext = {
+      ...fixture.actor,
+      organizationMemberships: fixture.actor.organizationMemberships.map((membership) => ({
+        ...membership,
+        organizationId: missingOrganizationId
+      })),
+      propertyGrants: []
+    };
+
+    await expect(
+      new OwnerReportService().portfolioPerformance(db, missingOrganizationActor, {
+        organizationId: missingOrganizationId,
+        startDate: "2034-02-10",
+        endDate: "2034-02-12"
+      })
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      statusCode: 404
+    });
   });
   it("requires settlement permission before any revenue reversal can be created", async () => {
     const ready = await recognizedForReversal();

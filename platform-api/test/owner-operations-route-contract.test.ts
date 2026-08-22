@@ -42,6 +42,11 @@ describe("owner operations route contract", () => {
     expect(document.paths[`${property}/reservations/operations-summary`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reports/occupancy`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reports/recognized-revenue`]?.["get"]).toBeDefined();
+    expect(
+      document.paths["/v1/partner/organizations/{organizationId}/reports/portfolio-performance"]?.[
+        "get"
+      ]
+    ).toBeDefined();
     expect(document.paths[`${property}/rates/products`]?.["get"]).toBeDefined();
     expect(document.paths["/v1/platform/reservations"]?.["get"]).toBeDefined();
     expect(document.paths["/v1/platform/reservations/operations-summary"]?.["get"]).toBeDefined();

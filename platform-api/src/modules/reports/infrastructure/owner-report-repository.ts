@@ -18,6 +18,26 @@ export interface RecognizedRevenueDayRecord {
   amount_minor: string;
 }
 
+export interface PortfolioPropertyContextRecord {
+  property_id: string;
+  name: string;
+  timezone: string;
+  capacity: number;
+}
+
+export interface PortfolioConfirmedInventoryRecord {
+  property_id: string;
+  stay_date: string;
+  bucket_type: string;
+  confirmed_quantity: number;
+}
+
+export interface PortfolioMoneyRecord {
+  property_id: string;
+  currency_code: string;
+  amount_minor: string;
+}
+
 export class OwnerReportRepository {
   async activePhysicalUnitCapacity(
     db: Kysely<Database>,
@@ -152,6 +172,129 @@ export class OwnerReportRepository {
       .where(sql<boolean>`${localDate} >= ${startDate}::date`)
       .where(sql<boolean>`${localDate} < ${endDate}::date`)
       .groupBy([sql.ref("date"), "journal.currency_code"])
+      .execute();
+  }
+
+  async organizationCurrency(
+    db: Kysely<Database>,
+    organizationId: string
+  ): Promise<string | undefined> {
+    const row = await db
+      .selectFrom("organizations")
+      .select("currency_code")
+      .where("id", "=", organizationId)
+      .executeTakeFirst();
+
+    return row?.currency_code;
+  }
+
+  async listLivePortfolioProperties(
+    db: Kysely<Database>,
+    organizationId: string
+  ): Promise<PortfolioPropertyContextRecord[]> {
+    return db
+      .selectFrom("properties as property")
+      .leftJoin("physical_units as unit", (join) =>
+        join
+          .onRef("unit.organization_id", "=", "property.organization_id")
+          .onRef("unit.property_id", "=", "property.id")
+          .on("unit.status", "=", "ACTIVE")
+      )
+      .select([
+        "property.id as property_id",
+        "property.name",
+        "property.timezone",
+        sql<number>`count(unit.id)::int`.as("capacity")
+      ])
+      .where("property.organization_id", "=", organizationId)
+      .where("property.status", "=", "LIVE")
+      .groupBy(["property.id", "property.name", "property.timezone"])
+      .orderBy("property.name")
+      .orderBy("property.id")
+      .execute();
+  }
+
+  async listPortfolioConfirmedInventory(
+    db: Kysely<Database>,
+    organizationId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<PortfolioConfirmedInventoryRecord[]> {
+    return db
+      .selectFrom("inventory_daily_buckets as bucket")
+      .innerJoin("properties as property", (join) =>
+        join
+          .onRef("property.organization_id", "=", "bucket.organization_id")
+          .onRef("property.id", "=", "bucket.property_id")
+      )
+      .select([
+        "bucket.property_id",
+        "bucket.stay_date",
+        "bucket.bucket_type",
+        sql<number>`sum(bucket.confirmed_quantity)::int`.as("confirmed_quantity")
+      ])
+      .where("bucket.organization_id", "=", organizationId)
+      .where("property.status", "=", "LIVE")
+      .where("bucket.stay_date", ">=", startDate)
+      .where("bucket.stay_date", "<", endDate)
+      .where("bucket.confirmed_quantity", ">", 0)
+      .groupBy(["bucket.property_id", "bucket.stay_date", "bucket.bucket_type"])
+      .execute();
+  }
+
+  async listPortfolioRecognizedRevenue(
+    db: Kysely<Database>,
+    organizationId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<PortfolioMoneyRecord[]> {
+    return db
+      .selectFrom("financial_ledger_journals as journal")
+      .innerJoin("properties as property", (join) =>
+        join
+          .onRef("property.organization_id", "=", "journal.organization_id")
+          .onRef("property.id", "=", "journal.property_id")
+      )
+      .select([
+        "journal.property_id",
+        "journal.currency_code",
+        sql<string>`sum(journal.amount_minor)::text`.as("amount_minor")
+      ])
+      .where("journal.organization_id", "=", organizationId)
+      .where("property.status", "=", "LIVE")
+      .where("journal.journal_type", "=", "REVENUE_RECOGNIZED")
+      .where("journal.recognition_date", ">=", startDate)
+      .where("journal.recognition_date", "<", endDate)
+      .groupBy(["journal.property_id", "journal.currency_code"])
+      .execute();
+  }
+
+  async listPortfolioRevenueReversals(
+    db: Kysely<Database>,
+    organizationId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<PortfolioMoneyRecord[]> {
+    const localDate = sql<string>`(journal.occurred_at at time zone property.timezone)::date`;
+
+    return db
+      .selectFrom("financial_ledger_journals as journal")
+      .innerJoin("properties as property", (join) =>
+        join
+          .onRef("property.organization_id", "=", "journal.organization_id")
+          .onRef("property.id", "=", "journal.property_id")
+      )
+      .select([
+        "journal.property_id",
+        "journal.currency_code",
+        sql<string>`sum(journal.amount_minor)::text`.as("amount_minor")
+      ])
+      .where("journal.organization_id", "=", organizationId)
+      .where("property.status", "=", "LIVE")
+      .where("journal.journal_type", "=", "REVENUE_REVERSED")
+      .where(sql<boolean>`${localDate} >= ${startDate}::date`)
+      .where(sql<boolean>`${localDate} < ${endDate}::date`)
+      .groupBy(["journal.property_id", "journal.currency_code"])
       .execute();
   }
 }

@@ -15,6 +15,10 @@ export interface ReportRouteDependencies {
   accessRepository: AccessRepository;
 }
 
+interface OrganizationParams {
+  organizationId: string;
+}
+
 interface PropertyParams {
   organizationId: string;
   propertyId: string;
@@ -24,6 +28,15 @@ interface ReportDateRangeQuery {
   startDate: string;
   endDate: string;
 }
+
+const organizationParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["organizationId"],
+  properties: {
+    organizationId: { type: "string", format: "uuid" }
+  }
+} as const;
 
 const propertyParamsSchema = {
   type: "object",
@@ -105,6 +118,36 @@ export async function registerReportRoutes(
       const result = await reports.recognizedRevenue(deps.db, request.actor, {
         organizationId: request.params.organizationId,
         propertyId: request.params.propertyId,
+        startDate: request.query.startDate,
+        endDate: request.query.endDate
+      });
+
+      void reply.header("cache-control", "no-store, private");
+      return result;
+    }
+  );
+
+  app.get<{ Params: OrganizationParams; Querystring: ReportDateRangeQuery }>(
+    "/v1/partner/organizations/:organizationId/reports/portfolio-performance",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reports"],
+        summary: "Get organization portfolio performance",
+        description:
+          "Returns a read-only organization portfolio report for LIVE properties over the half-open date range [startDate, endDate). Occupancy uses canonical confirmed inventory and current active physical-unit capacity. Recognized stay revenue uses REVENUE_RECOGNIZED by recognition_date, while REVENUE_REVERSED uses each property's local calendar date of occurred_at. Payment receipts, refunds, booking value and forecast revenue are excluded.",
+        security: [{ bearerAuth: [] }],
+        params: organizationParamsSchema,
+        querystring: reportDateRangeQuerySchema
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) {
+        throw new AuthenticationError();
+      }
+
+      const result = await reports.portfolioPerformance(deps.db, request.actor, {
+        organizationId: request.params.organizationId,
         startDate: request.query.startDate,
         endDate: request.query.endDate
       });

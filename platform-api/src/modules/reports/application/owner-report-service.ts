@@ -10,13 +10,14 @@ import {
   type OwnerOccupancyReportView
 } from "../domain/owner-occupancy-report.js";
 import type {
+  OwnerPortfolioPropertyView,
+  OwnerPortfolioReportView
+} from "../domain/owner-portfolio-report.js";
+import type {
   OwnerRecognizedRevenueDayView,
   OwnerRecognizedRevenueReportView
 } from "../domain/owner-recognized-revenue-report.js";
-import {
-  OwnerReportRepository,
-  type RecognizedRevenueDayRecord
-} from "../infrastructure/owner-report-repository.js";
+import { OwnerReportRepository } from "../infrastructure/owner-report-repository.js";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -82,7 +83,10 @@ function addMoney(left: number, right: number): number {
   return total;
 }
 
-function assertCanonicalCurrency(rows: RecognizedRevenueDayRecord[], currencyCode: string): void {
+function assertCanonicalCurrency(
+  rows: Array<{ currency_code: string }>,
+  currencyCode: string
+): void {
   const mismatch = rows.find((row) => row.currency_code !== currencyCode);
   if (mismatch) {
     throw new ConflictError("Financial ledger currency does not match organization currency");
@@ -294,6 +298,168 @@ export class OwnerReportService {
       reversedRevenueMinor,
       netRecognizedRevenueMinor,
       days
+    };
+  }
+
+  async portfolioPerformance(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    input: {
+      organizationId: string;
+      startDate: string;
+      endDate: string;
+    }
+  ): Promise<OwnerPortfolioReportView> {
+    for (const permission of [
+      Permissions.ORGANIZATION_READ,
+      Permissions.RESERVATION_READ,
+      Permissions.INVENTORY_READ,
+      Permissions.FINANCE_READ
+    ]) {
+      this.authorization.assert(actor, permission, {
+        kind: "organization",
+        organizationId: input.organizationId
+      });
+    }
+
+    const dates = reportDates(input.startDate, input.endDate, "Portfolio reports");
+
+    const currencyCode = await this.reports.organizationCurrency(db, input.organizationId);
+    if (!currencyCode) {
+      throw new NotFoundError("Organization not found");
+    }
+
+    const [propertyRows, inventoryRows, recognizedRows, reversedRows] = await Promise.all([
+      this.reports.listLivePortfolioProperties(db, input.organizationId),
+      this.reports.listPortfolioConfirmedInventory(
+        db,
+        input.organizationId,
+        input.startDate,
+        input.endDate
+      ),
+      this.reports.listPortfolioRecognizedRevenue(
+        db,
+        input.organizationId,
+        input.startDate,
+        input.endDate
+      ),
+      this.reports.listPortfolioRevenueReversals(
+        db,
+        input.organizationId,
+        input.startDate,
+        input.endDate
+      )
+    ]);
+
+    assertCanonicalCurrency(recognizedRows, currencyCode);
+    assertCanonicalCurrency(reversedRows, currencyCode);
+
+    const inventoryByPropertyDate = new Map<
+      string,
+      { roomConfirmed: number; fullPropertyConfirmed: boolean }
+    >();
+
+    for (const row of inventoryRows) {
+      const key = `${row.property_id}:${row.stay_date}`;
+      const current = inventoryByPropertyDate.get(key) ?? {
+        roomConfirmed: 0,
+        fullPropertyConfirmed: false
+      };
+
+      if (row.bucket_type === "FULL_PROPERTY") {
+        current.fullPropertyConfirmed = current.fullPropertyConfirmed || row.confirmed_quantity > 0;
+      } else if (row.bucket_type === "ROOM_CATEGORY") {
+        current.roomConfirmed += row.confirmed_quantity;
+      }
+
+      inventoryByPropertyDate.set(key, current);
+    }
+
+    const recognizedByProperty = new Map<string, number>();
+    for (const row of recognizedRows) {
+      recognizedByProperty.set(row.property_id, aggregateMoney(row.amount_minor));
+    }
+
+    const reversedByProperty = new Map<string, number>();
+    for (const row of reversedRows) {
+      reversedByProperty.set(row.property_id, aggregateMoney(row.amount_minor));
+    }
+
+    const properties: OwnerPortfolioPropertyView[] = propertyRows.map((property) => {
+      const currentActivePhysicalRooms = Number(property.capacity);
+      const capacityRoomNights = currentActivePhysicalRooms * dates.length;
+
+      const confirmedRoomNights = dates.reduce((sum, date) => {
+        const inventory = inventoryByPropertyDate.get(`${property.property_id}:${date}`);
+        const confirmedRooms = inventory?.fullPropertyConfirmed
+          ? currentActivePhysicalRooms
+          : (inventory?.roomConfirmed ?? 0);
+
+        return sum + confirmedRooms;
+      }, 0);
+
+      const recognizedRevenueMinor = recognizedByProperty.get(property.property_id) ?? 0;
+      const reversedRevenueMinor = reversedByProperty.get(property.property_id) ?? 0;
+      const netRecognizedRevenueMinor = recognizedRevenueMinor - reversedRevenueMinor;
+
+      if (!Number.isSafeInteger(netRecognizedRevenueMinor)) {
+        throw new ConflictError("Financial report net total exceeds safe reporting precision");
+      }
+
+      return {
+        propertyId: property.property_id,
+        name: property.name,
+        timezone: property.timezone,
+        currentActivePhysicalRooms,
+        capacityRoomNights,
+        confirmedRoomNights,
+        occupancyBps: occupancyBps(confirmedRoomNights, capacityRoomNights),
+        recognizedRevenueMinor,
+        reversedRevenueMinor,
+        netRecognizedRevenueMinor
+      };
+    });
+
+    const currentActivePhysicalRooms = properties.reduce(
+      (sum, property) => sum + property.currentActivePhysicalRooms,
+      0
+    );
+    const capacityRoomNights = properties.reduce(
+      (sum, property) => sum + property.capacityRoomNights,
+      0
+    );
+    const confirmedRoomNights = properties.reduce(
+      (sum, property) => sum + property.confirmedRoomNights,
+      0
+    );
+    const recognizedRevenueMinor = properties.reduce(
+      (sum, property) => addMoney(sum, property.recognizedRevenueMinor),
+      0
+    );
+    const reversedRevenueMinor = properties.reduce(
+      (sum, property) => addMoney(sum, property.reversedRevenueMinor),
+      0
+    );
+    const netRecognizedRevenueMinor = recognizedRevenueMinor - reversedRevenueMinor;
+
+    if (!Number.isSafeInteger(netRecognizedRevenueMinor)) {
+      throw new ConflictError("Financial report net total exceeds safe reporting precision");
+    }
+
+    return {
+      organizationId: input.organizationId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      currencyCode,
+      propertyCount: properties.length,
+      currentActivePhysicalRooms,
+      capacityRoomNights,
+      confirmedRoomNights,
+      occupancyBps: occupancyBps(confirmedRoomNights, capacityRoomNights),
+      recognizedRevenueMinor,
+      reversedRevenueMinor,
+      netRecognizedRevenueMinor,
+      properties
     };
   }
 }
