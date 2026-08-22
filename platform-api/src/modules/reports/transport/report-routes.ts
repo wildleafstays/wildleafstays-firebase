@@ -20,7 +20,7 @@ interface PropertyParams {
   propertyId: string;
 }
 
-interface OccupancyQuery {
+interface ReportDateRangeQuery {
   startDate: string;
   endDate: string;
 }
@@ -35,6 +35,16 @@ const propertyParamsSchema = {
   }
 } as const;
 
+const reportDateRangeQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["startDate", "endDate"],
+  properties: {
+    startDate: { type: "string", format: "date" },
+    endDate: { type: "string", format: "date" }
+  }
+} as const;
+
 export async function registerReportRoutes(
   app: FastifyInstance,
   deps: ReportRouteDependencies
@@ -42,7 +52,7 @@ export async function registerReportRoutes(
   const authenticate = requireAuthentication(deps);
   const reports = new OwnerReportService();
 
-  app.get<{ Params: PropertyParams; Querystring: OccupancyQuery }>(
+  app.get<{ Params: PropertyParams; Querystring: ReportDateRangeQuery }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/reports/occupancy",
     {
       preHandler: authenticate,
@@ -53,15 +63,7 @@ export async function registerReportRoutes(
           "Returns a tenant-scoped, read-only confirmed booking and occupancy report for the half-open stay-date range [startDate, endDate). Confirmed room commitments come from canonical inventory. Full-property confirmation occupies the property's current active physical-unit capacity for that night.",
         security: [{ bearerAuth: [] }],
         params: propertyParamsSchema,
-        querystring: {
-          type: "object",
-          additionalProperties: false,
-          required: ["startDate", "endDate"],
-          properties: {
-            startDate: { type: "string", format: "date" },
-            endDate: { type: "string", format: "date" }
-          }
-        }
+        querystring: reportDateRangeQuerySchema
       }
     },
     async (request, reply) => {
@@ -70,6 +72,37 @@ export async function registerReportRoutes(
       }
 
       const result = await reports.occupancy(deps.db, request.actor, {
+        organizationId: request.params.organizationId,
+        propertyId: request.params.propertyId,
+        startDate: request.query.startDate,
+        endDate: request.query.endDate
+      });
+
+      void reply.header("cache-control", "no-store, private");
+      return result;
+    }
+  );
+
+  app.get<{ Params: PropertyParams; Querystring: ReportDateRangeQuery }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/reports/recognized-revenue",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Reports"],
+        summary: "Get the property's recognized stay revenue report",
+        description:
+          "Returns tenant-scoped recognized stay revenue for the half-open date range [startDate, endDate). REVENUE_RECOGNIZED is grouped by canonical recognition_date. REVENUE_REVERSED is grouped by the property's local calendar date of occurred_at. Payment receipts, refunds, booking value and forecast revenue are not included.",
+        security: [{ bearerAuth: [] }],
+        params: propertyParamsSchema,
+        querystring: reportDateRangeQuerySchema
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) {
+        throw new AuthenticationError();
+      }
+
+      const result = await reports.recognizedRevenue(deps.db, request.actor, {
         organizationId: request.params.organizationId,
         propertyId: request.params.propertyId,
         startDate: request.query.startDate,

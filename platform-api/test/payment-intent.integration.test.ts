@@ -5221,6 +5221,137 @@ describe("Phase 5E3 immutable post-stay revenue reversal", () => {
     );
   }
 
+  it("Phase 7E1B reports canonical recognized revenue and property-local reversals", async () => {
+    const ready = await recognizedForReversal();
+    const reversal = await reverseOne(ready);
+
+    const recognizedReport = await new OwnerReportService().recognizedRevenue(
+      db,
+      ready.fixture.actor,
+      {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        startDate: ready.held.reservation.arrivalDate,
+        endDate: ready.held.reservation.departureDate
+      }
+    );
+
+    expect(recognizedReport).toMatchObject({
+      propertyId: ready.fixture.propertyId,
+      startDate: "2034-02-10",
+      endDate: "2034-02-12",
+      timezone: "Asia/Kolkata",
+      currencyCode: ready.payment.paymentIntent.currencyCode,
+      recognizedRevenueMinor: ready.posted.revenueBasisMinor,
+      reversedRevenueMinor: 0,
+      netRecognizedRevenueMinor: ready.posted.revenueBasisMinor
+    });
+
+    const recognizedByDate = new Map<string, number>();
+
+    for (const journal of ready.posted.journals) {
+      expect(journal.journalType).toBe("REVENUE_RECOGNIZED");
+      expect(journal.recognitionDate).not.toBeNull();
+
+      const date = journal.recognitionDate!;
+      recognizedByDate.set(date, (recognizedByDate.get(date) ?? 0) + journal.amountMinor);
+    }
+
+    expect(recognizedReport.days).toEqual([
+      {
+        date: "2034-02-10",
+        recognizedRevenueMinor: recognizedByDate.get("2034-02-10") ?? 0,
+        reversedRevenueMinor: 0,
+        netRecognizedRevenueMinor: recognizedByDate.get("2034-02-10") ?? 0
+      },
+      {
+        date: "2034-02-11",
+        recognizedRevenueMinor: recognizedByDate.get("2034-02-11") ?? 0,
+        reversedRevenueMinor: 0,
+        netRecognizedRevenueMinor: recognizedByDate.get("2034-02-11") ?? 0
+      }
+    ]);
+
+    const paymentJournal = await db
+      .selectFrom("financial_ledger_journals")
+      .select(["journal_type", "amount_minor"])
+      .where("payment_evidence_id", "=", ready.evidence.evidence.id)
+      .executeTakeFirstOrThrow();
+
+    expect(paymentJournal).toEqual({
+      journal_type: "PAYMENT_RECEIVED",
+      amount_minor: ready.payment.paymentIntent.amountMinor
+    });
+
+    expect(recognizedReport.recognizedRevenueMinor).toBe(ready.payment.paymentIntent.amountMinor);
+
+    const property = await db
+      .selectFrom("properties")
+      .select("timezone")
+      .where("organization_id", "=", ready.fixture.organizationId)
+      .where("id", "=", ready.fixture.propertyId)
+      .executeTakeFirstOrThrow();
+
+    const reversalJournal = reversal.journals[0]!;
+    expect(reversalJournal.journalType).toBe("REVENUE_REVERSED");
+    expect(reversalJournal.recognitionDate).toBeNull();
+
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: property.timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(new Date(reversalJournal.occurredAt));
+
+    const datePart = (type: "year" | "month" | "day") => {
+      const part = parts.find((candidate) => candidate.type === type);
+      expect(part).toBeDefined();
+      return part!.value;
+    };
+
+    const reversalDate = `${datePart("year")}-${datePart("month")}-${datePart("day")}`;
+
+    const reversalEndDate = new Date(
+      new Date(`${reversalDate}T00:00:00.000Z`).getTime() + 86_400_000
+    )
+      .toISOString()
+      .slice(0, 10);
+
+    const reversalReport = await new OwnerReportService().recognizedRevenue(
+      db,
+      ready.fixture.actor,
+      {
+        organizationId: ready.fixture.organizationId,
+        propertyId: ready.fixture.propertyId,
+        startDate: reversalDate,
+        endDate: reversalEndDate
+      }
+    );
+
+    const recognizedOnReversalDate = ready.posted.journals
+      .filter((journal) => journal.recognitionDate === reversalDate)
+      .reduce((sum, journal) => sum + journal.amountMinor, 0);
+
+    expect(reversalReport).toMatchObject({
+      propertyId: ready.fixture.propertyId,
+      startDate: reversalDate,
+      endDate: reversalEndDate,
+      timezone: property.timezone,
+      currencyCode: ready.payment.paymentIntent.currencyCode,
+      recognizedRevenueMinor: recognizedOnReversalDate,
+      reversedRevenueMinor: reversal.reversal.amountMinor,
+      netRecognizedRevenueMinor: recognizedOnReversalDate - reversal.reversal.amountMinor
+    });
+
+    expect(reversalReport.days).toEqual([
+      {
+        date: reversalDate,
+        recognizedRevenueMinor: recognizedOnReversalDate,
+        reversedRevenueMinor: reversal.reversal.amountMinor,
+        netRecognizedRevenueMinor: recognizedOnReversalDate - reversal.reversal.amountMinor
+      }
+    ]);
+  });
   it("requires settlement permission before any revenue reversal can be created", async () => {
     const ready = await recognizedForReversal();
 

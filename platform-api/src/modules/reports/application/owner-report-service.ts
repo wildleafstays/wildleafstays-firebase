@@ -1,6 +1,6 @@
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
-import { NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { ActorContext } from "../../access/domain/actor-context.js";
 import { AuthorizationService } from "../../access/domain/authorization-service.js";
 import { Permissions } from "../../access/domain/permissions.js";
@@ -9,11 +9,18 @@ import {
   type OwnerOccupancyDayView,
   type OwnerOccupancyReportView
 } from "../domain/owner-occupancy-report.js";
-import { OwnerReportRepository } from "../infrastructure/owner-report-repository.js";
+import type {
+  OwnerRecognizedRevenueDayView,
+  OwnerRecognizedRevenueReportView
+} from "../domain/owner-recognized-revenue-report.js";
+import {
+  OwnerReportRepository,
+  type RecognizedRevenueDayRecord
+} from "../infrastructure/owner-report-repository.js";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_REPORT_NIGHTS = 366;
+const MAX_REPORT_DAYS = 366;
 
 function parseDate(value: string, field: string): Date {
   if (!DATE_PATTERN.test(value)) {
@@ -28,20 +35,20 @@ function parseDate(value: string, field: string): Date {
   return parsed;
 }
 
-function reportDates(startDate: string, endDate: string): string[] {
+function reportDates(startDate: string, endDate: string, reportLabel: string): string[] {
   const start = parseDate(startDate, "startDate");
   const end = parseDate(endDate, "endDate");
-  const nights = Math.round((end.getTime() - start.getTime()) / DAY_MS);
+  const days = Math.round((end.getTime() - start.getTime()) / DAY_MS);
 
-  if (nights <= 0) {
+  if (days <= 0) {
     throw new ValidationError("endDate must be later than startDate");
   }
 
-  if (nights > MAX_REPORT_NIGHTS) {
-    throw new ValidationError(`Occupancy reports cannot exceed ${MAX_REPORT_NIGHTS} nights`);
+  if (days > MAX_REPORT_DAYS) {
+    throw new ValidationError(`${reportLabel} cannot exceed ${MAX_REPORT_DAYS} days`);
   }
 
-  return Array.from({ length: nights }, (_, index) =>
+  return Array.from({ length: days }, (_, index) =>
     new Date(start.getTime() + index * DAY_MS).toISOString().slice(0, 10)
   );
 }
@@ -52,6 +59,34 @@ function occupancyBps(confirmedRooms: number, capacityRooms: number): number | n
   }
 
   return Math.round((confirmedRooms * 10_000) / capacityRooms);
+}
+
+function aggregateMoney(value: string): number {
+  if (!/^\d+$/.test(value)) {
+    throw new ConflictError("Financial ledger aggregate is not a non-negative integer");
+  }
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new ConflictError("Financial ledger aggregate exceeds safe reporting precision");
+  }
+
+  return parsed;
+}
+
+function addMoney(left: number, right: number): number {
+  const total = left + right;
+  if (!Number.isSafeInteger(total)) {
+    throw new ConflictError("Financial report total exceeds safe reporting precision");
+  }
+  return total;
+}
+
+function assertCanonicalCurrency(rows: RecognizedRevenueDayRecord[], currencyCode: string): void {
+  const mismatch = rows.find((row) => row.currency_code !== currencyCode);
+  if (mismatch) {
+    throw new ConflictError("Financial ledger currency does not match organization currency");
+  }
 }
 
 export class OwnerReportService {
@@ -81,7 +116,7 @@ export class OwnerReportService {
       propertyId: input.propertyId
     });
 
-    const dates = reportDates(input.startDate, input.endDate);
+    const dates = reportDates(input.startDate, input.endDate, "Occupancy reports");
 
     const capacityRooms = await this.reports.activePhysicalUnitCapacity(
       db,
@@ -157,6 +192,107 @@ export class OwnerReportService {
       capacityRoomNights,
       confirmedRoomNights,
       confirmedOccupancyBps: occupancyBps(confirmedRoomNights, capacityRoomNights),
+      days
+    };
+  }
+
+  async recognizedRevenue(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      startDate: string;
+      endDate: string;
+    }
+  ): Promise<OwnerRecognizedRevenueReportView> {
+    this.authorization.assert(actor, Permissions.FINANCE_READ, {
+      kind: "property",
+      organizationId: input.organizationId,
+      propertyId: input.propertyId
+    });
+
+    const dates = reportDates(input.startDate, input.endDate, "Recognized revenue reports");
+
+    const context = await this.reports.propertyFinancialContext(
+      db,
+      input.organizationId,
+      input.propertyId
+    );
+
+    if (!context) {
+      throw new NotFoundError("Property not found");
+    }
+
+    const [recognizedRows, reversedRows] = await Promise.all([
+      this.reports.listRecognizedRevenueByDate(
+        db,
+        input.organizationId,
+        input.propertyId,
+        input.startDate,
+        input.endDate
+      ),
+      this.reports.listRevenueReversalsByLocalDate(
+        db,
+        input.organizationId,
+        input.propertyId,
+        context.timezone,
+        input.startDate,
+        input.endDate
+      )
+    ]);
+
+    assertCanonicalCurrency(recognizedRows, context.currency_code);
+    assertCanonicalCurrency(reversedRows, context.currency_code);
+
+    const recognizedByDate = new Map<string, number>();
+    const reversedByDate = new Map<string, number>();
+
+    for (const row of recognizedRows) {
+      recognizedByDate.set(row.date, aggregateMoney(row.amount_minor));
+    }
+
+    for (const row of reversedRows) {
+      reversedByDate.set(row.date, aggregateMoney(row.amount_minor));
+    }
+
+    const days: OwnerRecognizedRevenueDayView[] = dates.map((date) => {
+      const recognizedRevenueMinor = recognizedByDate.get(date) ?? 0;
+      const reversedRevenueMinor = reversedByDate.get(date) ?? 0;
+
+      return {
+        date,
+        recognizedRevenueMinor,
+        reversedRevenueMinor,
+        netRecognizedRevenueMinor: recognizedRevenueMinor - reversedRevenueMinor
+      };
+    });
+
+    const recognizedRevenueMinor = days.reduce(
+      (sum, day) => addMoney(sum, day.recognizedRevenueMinor),
+      0
+    );
+
+    const reversedRevenueMinor = days.reduce(
+      (sum, day) => addMoney(sum, day.reversedRevenueMinor),
+      0
+    );
+
+    const netRecognizedRevenueMinor = recognizedRevenueMinor - reversedRevenueMinor;
+
+    if (!Number.isSafeInteger(netRecognizedRevenueMinor)) {
+      throw new ConflictError("Financial report net total exceeds safe reporting precision");
+    }
+
+    return {
+      propertyId: input.propertyId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      timezone: context.timezone,
+      currencyCode: context.currency_code,
+      recognizedRevenueMinor,
+      reversedRevenueMinor,
+      netRecognizedRevenueMinor,
       days
     };
   }

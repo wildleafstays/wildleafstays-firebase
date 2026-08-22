@@ -7,6 +7,17 @@ export interface ConfirmedInventoryDayRecord {
   confirmed_quantity: number;
 }
 
+export interface PropertyFinancialContextRecord {
+  timezone: string;
+  currency_code: string;
+}
+
+export interface RecognizedRevenueDayRecord {
+  date: string;
+  currency_code: string;
+  amount_minor: string;
+}
+
 export class OwnerReportRepository {
   async activePhysicalUnitCapacity(
     db: Kysely<Database>,
@@ -78,6 +89,69 @@ export class OwnerReportRepository {
       .groupBy(["stay_date", "bucket_type"])
       .orderBy("stay_date")
       .orderBy("bucket_type")
+      .execute();
+  }
+
+  async propertyFinancialContext(
+    db: Kysely<Database>,
+    organizationId: string,
+    propertyId: string
+  ): Promise<PropertyFinancialContextRecord | undefined> {
+    return db
+      .selectFrom("properties as property")
+      .innerJoin("organizations as organization", "organization.id", "property.organization_id")
+      .select(["property.timezone", "organization.currency_code"])
+      .where("property.organization_id", "=", organizationId)
+      .where("property.id", "=", propertyId)
+      .executeTakeFirst();
+  }
+
+  async listRecognizedRevenueByDate(
+    db: Kysely<Database>,
+    organizationId: string,
+    propertyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<RecognizedRevenueDayRecord[]> {
+    return db
+      .selectFrom("financial_ledger_journals as journal")
+      .select([
+        sql<string>`journal.recognition_date::text`.as("date"),
+        "journal.currency_code",
+        sql<string>`sum(journal.amount_minor)::text`.as("amount_minor")
+      ])
+      .where("journal.organization_id", "=", organizationId)
+      .where("journal.property_id", "=", propertyId)
+      .where("journal.journal_type", "=", "REVENUE_RECOGNIZED")
+      .where("journal.recognition_date", ">=", startDate)
+      .where("journal.recognition_date", "<", endDate)
+      .groupBy(["journal.recognition_date", "journal.currency_code"])
+      .execute();
+  }
+
+  async listRevenueReversalsByLocalDate(
+    db: Kysely<Database>,
+    organizationId: string,
+    propertyId: string,
+    timezone: string,
+    startDate: string,
+    endDate: string
+  ): Promise<RecognizedRevenueDayRecord[]> {
+    const localDate = sql<string>`(journal.occurred_at at time zone ${timezone})::date`;
+
+    return db
+      .selectFrom("financial_ledger_journals as journal")
+      .select([
+        sql<string>`${localDate}::text`.as("date"),
+        "journal.currency_code",
+        sql<string>`sum(journal.amount_minor)::text`.as("amount_minor")
+      ])
+      .where("journal.organization_id", "=", organizationId)
+      .where("journal.property_id", "=", propertyId)
+      .where("journal.journal_type", "=", "REVENUE_REVERSED")
+      .where(sql<boolean>`${localDate} >= ${startDate}::date`)
+      .where(sql<boolean>`${localDate} < ${endDate}::date`)
+      .groupBy([sql.ref("date"), "journal.currency_code"])
       .execute();
   }
 }

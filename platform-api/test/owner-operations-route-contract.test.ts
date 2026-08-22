@@ -32,7 +32,7 @@ beforeAll(async () => app.ready());
 afterAll(async () => app.close());
 
 describe("owner operations route contract", () => {
-  it("publishes reservation operations and rate-product reads", async () => {
+  it("publishes reservation operations, reports and rate-product reads", async () => {
     const response = await app.inject({ method: "GET", url: "/openapi.json" });
     expect(response.statusCode).toBe(200);
     const document = response.json() as { paths: Record<string, Record<string, unknown>> };
@@ -41,6 +41,7 @@ describe("owner operations route contract", () => {
     expect(document.paths[`${property}/reservations`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reservations/operations-summary`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/reports/occupancy`]?.["get"]).toBeDefined();
+    expect(document.paths[`${property}/reports/recognized-revenue`]?.["get"]).toBeDefined();
     expect(document.paths[`${property}/rates/products`]?.["get"]).toBeDefined();
     expect(document.paths["/v1/platform/reservations"]?.["get"]).toBeDefined();
     expect(document.paths["/v1/platform/reservations/operations-summary"]?.["get"]).toBeDefined();
