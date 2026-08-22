@@ -13,7 +13,9 @@ export interface PaymentRefundRequestView extends JsonObject {
   id: string;
   paymentIntentId: string;
   paymentEvidenceId: string;
+  refundSource: PaymentRefundSource;
   reconciliationCaseId: string | null;
+  cancellationDecisionId: string | null;
   organizationId: string;
   propertyId: string;
   reservationId: string;

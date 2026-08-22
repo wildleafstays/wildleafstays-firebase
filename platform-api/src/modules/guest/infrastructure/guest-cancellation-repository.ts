@@ -23,6 +23,12 @@ export interface GuestCancellationBookedEconomics {
   nights: GuestCancellationQuoteNightRecord[];
 }
 
+export interface GuestCancellationReservationScope {
+  organizationId: string;
+  propertyId: string;
+  propertyTimezone: string;
+}
+
 export interface InsertGuestCancellationDecisionInput {
   reservationId: string;
   organizationId: string;
@@ -50,6 +56,35 @@ export interface InsertGuestCancellationDecisionInput {
 }
 
 export class GuestCancellationRepository {
+  async findOwnedReservationScope(
+    trx: Transaction<Database>,
+    userId: string,
+    reservationId: string
+  ): Promise<GuestCancellationReservationScope | undefined> {
+    const row = await trx
+      .selectFrom("guest_reservation_links as link")
+      .innerJoin("reservations as reservation", "reservation.id", "link.reservation_id")
+      .innerJoin("properties as property", "property.id", "reservation.property_id")
+      .select([
+        "reservation.organization_id as organization_id",
+        "reservation.property_id as property_id",
+        "property.timezone as property_timezone"
+      ])
+      .where("link.user_id", "=", userId)
+      .where("link.reservation_id", "=", reservationId)
+      .executeTakeFirst();
+
+    if (!row) {
+      return undefined;
+    }
+
+    return {
+      organizationId: row.organization_id,
+      propertyId: row.property_id,
+      propertyTimezone: row.property_timezone
+    };
+  }
+
   async findExistingDecision(
     trx: Transaction<Database>,
     organizationId: string,
