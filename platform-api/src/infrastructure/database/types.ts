@@ -1,5 +1,6 @@
 import type { ColumnType, Generated } from "kysely";
 import type { GuestReservationLinksTable } from "../../modules/guest/infrastructure/guest-self-service-database-types.js";
+import type { ReservationCancellationDecisionsTable } from "../../modules/guest/infrastructure/guest-cancellation-database-types.js";
 import type {
   QualityAssessmentResultsTable,
   QualityAssessmentsTable,
@@ -478,6 +479,7 @@ export interface Database {
   reservation_lead_guest_snapshots: ReservationLeadGuestSnapshotsTable;
   reservation_status_history: ReservationStatusHistoryTable;
   guest_reservation_links: GuestReservationLinksTable;
+  reservation_cancellation_decisions: ReservationCancellationDecisionsTable;
   payment_intents: PaymentIntentsTable;
   payment_events: PaymentEventsTable;
   payment_provider_evidence: PaymentProviderEvidenceTable;

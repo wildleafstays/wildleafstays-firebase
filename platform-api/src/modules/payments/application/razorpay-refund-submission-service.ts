@@ -106,6 +106,20 @@ export class RazorpayRefundSubmissionService {
     }
   }
 
+  private reconciliationCaseId(refund: PaymentRefundRequestRecord): string {
+    if (refund.refund_source !== "RECONCILIATION" || refund.reconciliation_case_id === null) {
+      throw new ConflictError(
+        "Current Razorpay refund submission requires a reconciliation-backed refund request",
+        {
+          refundRequestId: refund.id,
+          refundSource: refund.refund_source
+        }
+      );
+    }
+
+    return refund.reconciliation_case_id;
+  }
+
   private assertOpenReconciliation(
     reconciliation: PaymentReconciliationRecord | undefined,
     refund: PaymentRefundRequestRecord
@@ -252,9 +266,10 @@ export class RazorpayRefundSubmissionService {
         }
       }
 
+      const reconciliationCaseId = this.reconciliationCaseId(refund);
       const reconciliation = await this.processing.findReconciliationByIdForUpdate(
         trx,
-        refund.reconciliation_case_id
+        reconciliationCaseId
       );
       this.assertOpenReconciliation(reconciliation, refund);
 
@@ -291,7 +306,7 @@ export class RazorpayRefundSubmissionService {
         notes: {
           refundRequestId: initial.refund.id,
           paymentIntentId: initial.refund.payment_intent_id,
-          reconciliationCaseId: initial.refund.reconciliation_case_id,
+          reconciliationCaseId: this.reconciliationCaseId(initial.refund),
           reasonCode: initial.refund.reason_code,
           refundAttemptSequence: String(initial.attemptSequence)
         }
@@ -339,7 +354,7 @@ export class RazorpayRefundSubmissionService {
           attemptSequence: initial.attemptSequence,
           paymentIntentId: refund.payment_intent_id,
           paymentEvidenceId: refund.payment_evidence_id,
-          reconciliationCaseId: refund.reconciliation_case_id,
+          reconciliationCaseId: this.reconciliationCaseId(refund),
           organizationId: refund.organization_id,
           propertyId: refund.property_id,
           reservationId: refund.reservation_id,

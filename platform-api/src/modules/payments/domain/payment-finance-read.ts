@@ -78,7 +78,7 @@ export interface FinanceRefundRequestView {
   id: string;
   paymentIntentId: string;
   paymentEvidenceId: string;
-  reconciliationCaseId: string;
+  reconciliationCaseId: string | null;
   provider: string;
   providerPaymentId: string;
   amountMinor: number;
