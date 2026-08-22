@@ -1,6 +1,8 @@
 import type { Kysely, Transaction } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import { AppError, ConflictError, NotFoundError } from "../../../shared/errors/app-error.js";
+import type { ActorContext } from "../../access/domain/actor-context.js";
+import { GuestSelfService } from "../../guest/application/guest-self-service.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import {
   RazorpayOrderService,
@@ -89,7 +91,8 @@ export class PublicCheckoutService {
     razorpayGateway: RazorpayOrderGateway | null,
     private readonly properties = new PublicAvailabilityRepository(),
     private readonly reservations = new HeldReservationService(),
-    private readonly payments = new BeginPaymentService()
+    private readonly payments = new BeginPaymentService(),
+    private readonly guestSelfService = new GuestSelfService(db)
   ) {
     this.razorpayOrders = razorpayGateway ? new RazorpayOrderService(db, razorpayGateway) : null;
   }
@@ -125,7 +128,8 @@ export class PublicCheckoutService {
     publicSlug: string,
     quoteId: string,
     input: PublicCheckoutRequest,
-    request: RequestMetadata
+    request: RequestMetadata,
+    actor: ActorContext | null
   ): Promise<PublicCheckoutPreparation> {
     const property = await this.liveProperty(trx, publicSlug);
 
@@ -163,6 +167,16 @@ export class PublicCheckoutService {
         quoteId,
         reservationId: held.reservation.id,
         paymentIntentId: payment.paymentIntent.id
+      });
+    }
+
+    if (actor) {
+      await this.guestSelfService.linkAuthenticatedCheckout(trx, {
+        actor,
+        reservationId: held.reservation.id,
+        organizationId: property.organization_id,
+        propertyId: property.id,
+        request
       });
     }
 

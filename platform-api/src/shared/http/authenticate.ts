@@ -10,28 +10,51 @@ export interface AuthenticationDependencies {
   accessRepository: AccessRepository;
 }
 
+async function authenticateRequest(
+  request: FastifyRequest,
+  deps: AuthenticationDependencies
+): Promise<void> {
+  const authorization = request.headers.authorization ?? "";
+  const [scheme, token] = authorization.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    throw new AuthenticationError();
+  }
+
+  try {
+    const identity = await deps.identityVerifier.verifyIdToken(token);
+    const user = await deps.userRepository.upsertFromIdentity(identity);
+
+    if (user.status !== "ACTIVE") {
+      throw new AuthenticationError("User account is not active");
+    }
+
+    request.actor = await deps.accessRepository.loadActorContext(user);
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      throw error;
+    }
+
+    request.log.warn({ err: error }, "Identity verification failed");
+    throw new AuthenticationError("Invalid or expired authentication token");
+  }
+}
+
 export function requireAuthentication(deps: AuthenticationDependencies) {
   return async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
-    const authorization = request.headers.authorization ?? "";
-    const [scheme, token] = authorization.split(" ");
+    await authenticateRequest(request, deps);
+  };
+}
 
-    if (scheme !== "Bearer" || !token) {
-      throw new AuthenticationError();
+export function authenticateIfPresent(deps: AuthenticationDependencies) {
+  return async function optionallyAuthenticate(
+    request: FastifyRequest,
+    _reply: FastifyReply
+  ): Promise<void> {
+    if (request.headers.authorization === undefined) {
+      return;
     }
 
-    try {
-      const identity = await deps.identityVerifier.verifyIdToken(token);
-      const user = await deps.userRepository.upsertFromIdentity(identity);
-      if (user.status !== "ACTIVE") {
-        throw new AuthenticationError("User account is not active");
-      }
-      request.actor = await deps.accessRepository.loadActorContext(user);
-    } catch (error) {
-      if (error instanceof AuthenticationError) {
-        throw error;
-      }
-      request.log.warn({ err: error }, "Identity verification failed");
-      throw new AuthenticationError("Invalid or expired authentication token");
-    }
+    await authenticateRequest(request, deps);
   };
 }

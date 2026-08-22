@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
+import swagger from "@fastify/swagger";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/env.js";
 import { createDatabase } from "../src/infrastructure/database/database.js";
+import type {
+  IdentityVerifier,
+  VerifiedIdentity
+} from "../src/infrastructure/identity/identity-verifier.js";
 import type { ActorContext } from "../src/modules/access/domain/actor-context.js";
+import { AccessRepository } from "../src/modules/access/infrastructure/access-repository.js";
 import { CommercialRuleService } from "../src/modules/commercial/application/commercial-rule-service.js";
 import { PromotionRuleService } from "../src/modules/commercial/application/promotion-rule-service.js";
 import type { RazorpayOrderGateway } from "../src/modules/payments/application/razorpay-order-service.js";
@@ -11,6 +17,9 @@ import type {
   RazorpayCreateOrderInput,
   RazorpayOrder
 } from "../src/modules/payments/infrastructure/razorpay-provider.js";
+import { registerGuestSelfServiceRoutes } from "../src/modules/guest/transport/guest-self-service-routes.js";
+import { UserRepository } from "../src/modules/identity/infrastructure/user-repository.js";
+import { registerSessionRoutes } from "../src/modules/identity/transport/session-routes.js";
 import { CreateOrganizationService } from "../src/modules/organizations/application/create-organization-service.js";
 import { registerPublicCatalogRoutes } from "../src/modules/public-booking/transport/public-catalog-routes.js";
 import { CreatePropertyDraftService } from "../src/modules/properties/application/create-property-draft-service.js";
@@ -36,6 +45,9 @@ let app: FastifyInstance;
 let fixture: Fixture;
 let incompleteFixture: Fixture;
 let razorpayGateway: FakeRazorpayGateway;
+let identityVerifier: FakeIdentityVerifier;
+let userRepository: UserRepository;
+let accessRepository: AccessRepository;
 
 class FakeRazorpayGateway implements RazorpayOrderGateway {
   private readonly orders = new Map<string, RazorpayOrder>();
@@ -70,6 +82,53 @@ class FakeRazorpayGateway implements RazorpayOrderGateway {
   async findOrdersByReceipt(receipt: string): Promise<RazorpayOrder[]> {
     const order = this.orders.get(receipt);
     return order ? [order] : [];
+  }
+}
+
+interface IssuedGuestIdentity {
+  token: string;
+  subject: string;
+  email: string;
+}
+
+class FakeIdentityVerifier implements IdentityVerifier {
+  private readonly identities = new Map<string, VerifiedIdentity>();
+
+  issue(email: string, displayName: string): IssuedGuestIdentity {
+    const suffix = randomUUID().replaceAll("-", "");
+    const token = `phase8a-token-${suffix}`;
+    const subject = `phase8a-subject-${suffix}`;
+    const atIndex = email.indexOf("@");
+
+    if (atIndex <= 0) {
+      throw new Error("Phase 8A fake identity requires an email address");
+    }
+
+    const uniqueEmail = `${email.slice(0, atIndex)}.${suffix.slice(0, 12)}` + email.slice(atIndex);
+
+    this.identities.set(token, {
+      provider: "firebase",
+      subject,
+      email: uniqueEmail,
+      displayName,
+      emailVerified: true
+    });
+
+    return {
+      token,
+      subject,
+      email: uniqueEmail
+    };
+  }
+
+  async verifyIdToken(token: string): Promise<VerifiedIdentity> {
+    const identity = this.identities.get(token);
+
+    if (!identity) {
+      throw new Error("Invalid Phase 8A test identity token");
+    }
+
+    return identity;
   }
 }
 
@@ -474,19 +533,62 @@ async function createPublicQuoteAndHold(
 beforeAll(async () => {
   fixture = await createFixture(true);
   incompleteFixture = await createFixture(false);
+
   app = Fastify({ logger: false });
+  app.decorateRequest("actor", null);
   app.decorateRequest("correlationId", "");
+
   app.addHook("onRequest", async (request, reply) => {
     request.correlationId = request.id;
     void reply.header("x-request-id", request.id);
     void reply.header("x-correlation-id", request.correlationId);
   });
+
+  await app.register(swagger, {
+    openapi: {
+      openapi: "3.0.3",
+      info: {
+        title: "Wildleaf Phase 8A Integration Test API",
+        version: "8A"
+      },
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer"
+          }
+        }
+      }
+    }
+  });
+
   registerErrorHandler(app);
+
   razorpayGateway = new FakeRazorpayGateway();
+  identityVerifier = new FakeIdentityVerifier();
+  userRepository = new UserRepository(db);
+  accessRepository = new AccessRepository(db);
+
+  const authentication = {
+    identityVerifier,
+    userRepository,
+    accessRepository
+  };
+
   await registerPublicCatalogRoutes(app, {
     db,
+    authentication,
     razorpayOrderGateway: razorpayGateway
   });
+
+  await registerSessionRoutes(app, authentication);
+
+  await registerGuestSelfServiceRoutes(app, {
+    db,
+    ...authentication
+  });
+
+  await app.ready();
 });
 
 afterAll(async () => {
@@ -1256,5 +1358,641 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       reservation: { status: "CONFIRMED" },
       paymentIntent: { status: "SUCCEEDED" }
     });
+  });
+});
+interface Phase8aCheckoutBody {
+  reservation: {
+    id: string;
+    reservationReference: string;
+    quoteId: string;
+    status: string;
+  };
+  paymentIntent: {
+    id: string;
+  };
+}
+
+interface Phase8aBooking {
+  quoteId: string;
+  reservationId: string;
+  reservationReference: string;
+  idempotencyKey: string;
+}
+
+async function phase8aUserId(identity: IssuedGuestIdentity): Promise<string> {
+  const row = await db
+    .selectFrom("users")
+    .select("id")
+    .where("auth_provider", "=", "firebase")
+    .where("auth_subject", "=", identity.subject)
+    .executeTakeFirstOrThrow();
+
+  return row.id;
+}
+
+async function createPhase8aBooking(input: {
+  arrivalDate: string;
+  departureDate: string;
+  identity?: IssuedGuestIdentity | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  idempotencyKey?: string;
+}): Promise<Phase8aBooking> {
+  const { quote } = await createPublicQuoteAndHold(fixture, input.arrivalDate, input.departureDate);
+
+  const idempotencyKey = input.idempotencyKey ?? `phase8a-checkout-${randomUUID()}`;
+
+  const headers: Record<string, string> = {
+    "idempotency-key": idempotencyKey
+  };
+
+  if (input.identity) {
+    headers["authorization"] = `Bearer ${input.identity.token}`;
+  }
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+    headers,
+    payload: {
+      leadGuest: {
+        name: input.name,
+        email: input.email,
+        phone: input.phone
+      }
+    }
+  });
+
+  expect(response.statusCode).toBe(201);
+
+  const body = response.json() as Phase8aCheckoutBody;
+
+  return {
+    quoteId: quote.id,
+    reservationId: body.reservation.id,
+    reservationReference: body.reservation.reservationReference,
+    idempotencyKey
+  };
+}
+
+describe("Phase 8A guest account and self-service foundation", () => {
+  let guestOne: IssuedGuestIdentity;
+  let guestTwo: IssuedGuestIdentity;
+  let emailMatchGuest: IssuedGuestIdentity;
+  let phoneOnlyGuest: IssuedGuestIdentity;
+
+  let guestOneBookingA: Phase8aBooking;
+  let guestOneBookingB: Phase8aBooking;
+  let guestTwoBooking: Phase8aBooking;
+  let anonymousEmailBooking: Phase8aBooking;
+  let anonymousPhoneBooking: Phase8aBooking;
+
+  beforeAll(async () => {
+    guestOne = identityVerifier.issue("phase8a.guest.one@example.invalid", "Phase 8A Guest One");
+
+    guestTwo = identityVerifier.issue("phase8a.guest.two@example.invalid", "Phase 8A Guest Two");
+
+    emailMatchGuest = identityVerifier.issue(
+      "phase8a.matching.email@example.invalid",
+      "Phase 8A Matching Email"
+    );
+
+    phoneOnlyGuest = identityVerifier.issue(
+      "phase8a.phone.account@example.invalid",
+      "Phase 8A Phone Account"
+    );
+
+    guestOneBookingA = await createPhase8aBooking({
+      arrivalDate: "2035-01-10",
+      departureDate: "2035-01-12",
+      identity: guestOne,
+      name: "Guest One A",
+      email: guestOne.email,
+      phone: "+919810000001"
+    });
+
+    guestOneBookingB = await createPhase8aBooking({
+      arrivalDate: "2035-01-13",
+      departureDate: "2035-01-15",
+      identity: guestOne,
+      name: "Guest One B",
+      email: guestOne.email,
+      phone: "+919810000001"
+    });
+
+    guestTwoBooking = await createPhase8aBooking({
+      arrivalDate: "2035-01-16",
+      departureDate: "2035-01-18",
+      identity: guestTwo,
+      name: "Guest Two",
+      email: guestTwo.email,
+      phone: "+919810000002"
+    });
+
+    anonymousEmailBooking = await createPhase8aBooking({
+      arrivalDate: "2035-01-19",
+      departureDate: "2035-01-21",
+      identity: null,
+      name: "Matching Email Anonymous Guest",
+      email: emailMatchGuest.email,
+      phone: null
+    });
+
+    anonymousPhoneBooking = await createPhase8aBooking({
+      arrivalDate: "2035-01-22",
+      departureDate: "2035-01-24",
+      identity: null,
+      name: "Phone Snapshot Anonymous Guest",
+      email: null,
+      phone: "+919810000099"
+    });
+  });
+
+  it("[8A-01] authenticated checkout creates exactly one immutable guest ownership link", async () => {
+    const userId = await phase8aUserId(guestOne);
+
+    const links = await db
+      .selectFrom("guest_reservation_links")
+      .selectAll()
+      .where("reservation_id", "=", guestOneBookingA.reservationId)
+      .execute();
+
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatchObject({
+      reservation_id: guestOneBookingA.reservationId,
+      user_id: userId,
+      link_source: "AUTHENTICATED_CHECKOUT"
+    });
+  });
+
+  it("[8A-02] anonymous checkout remains supported and creates no ownership link", async () => {
+    const link = await db
+      .selectFrom("guest_reservation_links")
+      .selectAll()
+      .where("reservation_id", "=", anonymousEmailBooking.reservationId)
+      .executeTakeFirst();
+
+    expect(link).toBeUndefined();
+
+    const reservation = await db
+      .selectFrom("reservations")
+      .select(["id", "source", "created_by_user_id"])
+      .where("id", "=", anonymousEmailBooking.reservationId)
+      .executeTakeFirstOrThrow();
+
+    expect(reservation).toEqual({
+      id: anonymousEmailBooking.reservationId,
+      source: "public-api",
+      created_by_user_id: null
+    });
+  });
+
+  it("[8A-03] invalid supplied bearer token returns 401 without checkout side effects", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2035-02-01", "2035-02-03");
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        authorization: "Bearer phase8a-invalid-token",
+        "idempotency-key": `phase8a-invalid-auth-${randomUUID()}`
+      },
+      payload: {
+        leadGuest: {
+          name: "Invalid Auth Guest",
+          email: "invalid.auth@example.invalid",
+          phone: null
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(401);
+
+    const reservationCount = await db
+      .selectFrom("reservations")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("quote_id", "=", quote.id)
+      .executeTakeFirstOrThrow();
+
+    expect(Number(reservationCount.count)).toBe(0);
+  });
+
+  it("[8A-04] role-less authenticated user can complete public checkout", async () => {
+    const userId = await phase8aUserId(guestOne);
+
+    const [platformRoles, memberships] = await Promise.all([
+      db
+        .selectFrom("platform_staff_roles")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("user_id", "=", userId)
+        .executeTakeFirstOrThrow(),
+      db
+        .selectFrom("organization_memberships")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("user_id", "=", userId)
+        .executeTakeFirstOrThrow()
+    ]);
+
+    expect(Number(platformRoles.count)).toBe(0);
+    expect(Number(memberships.count)).toBe(0);
+
+    const reservation = await db
+      .selectFrom("reservations")
+      .select(["id", "status"])
+      .where("id", "=", guestOneBookingA.reservationId)
+      .executeTakeFirstOrThrow();
+
+    expect(reservation.status).toBe("PAYMENT_PENDING");
+  });
+
+  it("[8A-05] idempotent authenticated checkout never duplicates or transfers ownership", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2035-02-04", "2035-02-06");
+
+    const key = `phase8a-replay-${randomUUID()}`;
+    const payload = {
+      leadGuest: {
+        name: "Replay Guest",
+        email: guestOne.email,
+        phone: "+919810000003"
+      }
+    };
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        authorization: `Bearer ${guestOne.token}`,
+        "idempotency-key": key
+      },
+      payload
+    });
+
+    expect(first.statusCode).toBe(201);
+
+    const firstBody = first.json() as Phase8aCheckoutBody;
+
+    const replay = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        authorization: `Bearer ${guestOne.token}`,
+        "idempotency-key": key
+      },
+      payload
+    });
+
+    expect(replay.statusCode).toBe(201);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+    expect((replay.json() as Phase8aCheckoutBody).reservation.id).toBe(firstBody.reservation.id);
+
+    const transferAttempt = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: {
+        authorization: `Bearer ${guestTwo.token}`,
+        "idempotency-key": key
+      },
+      payload
+    });
+
+    expect(transferAttempt.statusCode).toBe(409);
+
+    const userId = await phase8aUserId(guestOne);
+
+    const links = await db
+      .selectFrom("guest_reservation_links")
+      .select(["reservation_id", "user_id"])
+      .where("reservation_id", "=", firstBody.reservation.id)
+      .execute();
+
+    expect(links).toEqual([
+      {
+        reservation_id: firstBody.reservation.id,
+        user_id: userId
+      }
+    ]);
+  });
+
+  it("[8A-06] guest reservation list is ownership scoped with stable cursor pagination", async () => {
+    const full = await app.inject({
+      method: "GET",
+      url: "/v1/guest/reservations?limit=100",
+      headers: {
+        authorization: `Bearer ${guestOne.token}`
+      }
+    });
+
+    expect(full.statusCode).toBe(200);
+    expect(full.headers["cache-control"]).toBe("no-store, private");
+
+    const fullBody = full.json() as {
+      reservations: Array<{ id: string }>;
+      nextCursor: string | null;
+    };
+
+    const ownedIds = fullBody.reservations.map((item) => item.id);
+
+    expect(ownedIds).toContain(guestOneBookingA.reservationId);
+    expect(ownedIds).toContain(guestOneBookingB.reservationId);
+    expect(ownedIds).not.toContain(guestTwoBooking.reservationId);
+    expect(ownedIds).not.toContain(anonymousEmailBooking.reservationId);
+    expect(ownedIds).not.toContain(anonymousPhoneBooking.reservationId);
+
+    const guestOneUserId = await phase8aUserId(guestOne);
+
+    const returnedLinks = await db
+      .selectFrom("guest_reservation_links")
+      .select(["reservation_id", "user_id"])
+      .where("reservation_id", "in", ownedIds)
+      .execute();
+
+    expect(returnedLinks).toHaveLength(ownedIds.length);
+    expect(returnedLinks.every((link) => link.user_id === guestOneUserId)).toBe(true);
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/v1/guest/reservations?limit=1",
+      headers: {
+        authorization: `Bearer ${guestOne.token}`
+      }
+    });
+
+    expect(first.statusCode).toBe(200);
+
+    const firstBody = first.json() as {
+      reservations: Array<{ id: string }>;
+      nextCursor: string | null;
+    };
+
+    expect(firstBody.reservations).toHaveLength(1);
+    expect(firstBody.nextCursor).toEqual(expect.any(String));
+    expect(ownedIds).toContain(firstBody.reservations[0]?.id);
+
+    const second = await app.inject({
+      method: "GET",
+      url: `/v1/guest/reservations?limit=1&cursor=${encodeURIComponent(firstBody.nextCursor!)}`,
+      headers: {
+        authorization: `Bearer ${guestOne.token}`
+      }
+    });
+
+    expect(second.statusCode).toBe(200);
+
+    const secondBody = second.json() as {
+      reservations: Array<{ id: string }>;
+      nextCursor: string | null;
+    };
+
+    expect(secondBody.reservations).toHaveLength(1);
+    expect(ownedIds).toContain(secondBody.reservations[0]?.id);
+    expect(secondBody.reservations[0]?.id).not.toBe(firstBody.reservations[0]?.id);
+  });
+  it("[8A-07] guest reservation detail returns a reservation linked to the current user", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/guest/reservations/${guestOneBookingA.reservationId}`,
+      headers: {
+        authorization: `Bearer ${guestOne.token}`
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store, private");
+
+    expect(response.json()).toMatchObject({
+      id: guestOneBookingA.reservationId,
+      reservationReference: guestOneBookingA.reservationReference
+    });
+  });
+
+  it("[8A-08] second authenticated guest receives 404 for another guest reservation", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/guest/reservations/${guestOneBookingA.reservationId}`,
+      headers: {
+        authorization: `Bearer ${guestTwo.token}`
+      }
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("[8A-09] matching lead-guest email without ownership link grants no access", async () => {
+    const detail = await app.inject({
+      method: "GET",
+      url: `/v1/guest/reservations/${anonymousEmailBooking.reservationId}`,
+      headers: {
+        authorization: `Bearer ${emailMatchGuest.token}`
+      }
+    });
+
+    expect(detail.statusCode).toBe(404);
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/v1/guest/reservations",
+      headers: {
+        authorization: `Bearer ${emailMatchGuest.token}`
+      }
+    });
+
+    expect(list.statusCode).toBe(200);
+
+    const body = list.json() as {
+      reservations: Array<{ id: string }>;
+    };
+
+    expect(body.reservations.map((item) => item.id)).not.toContain(
+      anonymousEmailBooking.reservationId
+    );
+  });
+
+  it("[8A-10] lead-guest phone snapshot without ownership link grants no access", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/guest/reservations/${anonymousPhoneBooking.reservationId}`,
+      headers: {
+        authorization: `Bearer ${phoneOnlyGuest.token}`
+      }
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("[8A-11] direct ownership-link update is rejected by database immutability", async () => {
+    const guestTwoUserId = await phase8aUserId(guestTwo);
+
+    await expect(
+      db
+        .updateTable("guest_reservation_links")
+        .set({
+          user_id: guestTwoUserId
+        })
+        .where("reservation_id", "=", guestOneBookingA.reservationId)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    const owner = await db
+      .selectFrom("guest_reservation_links")
+      .select("user_id")
+      .where("reservation_id", "=", guestOneBookingA.reservationId)
+      .executeTakeFirstOrThrow();
+
+    expect(owner.user_id).toBe(await phase8aUserId(guestOne));
+  });
+
+  it("[8A-12] direct ownership-link delete is rejected by database immutability", async () => {
+    await expect(
+      db
+        .deleteFrom("guest_reservation_links")
+        .where("reservation_id", "=", guestOneBookingA.reservationId)
+        .execute()
+    ).rejects.toThrow(/immutable/i);
+
+    const existing = await db
+      .selectFrom("guest_reservation_links")
+      .select("reservation_id")
+      .where("reservation_id", "=", guestOneBookingA.reservationId)
+      .executeTakeFirst();
+
+    expect(existing?.reservation_id).toBe(guestOneBookingA.reservationId);
+  });
+
+  it("[8A-13] one reservation cannot be linked to two different users", async () => {
+    const guestTwoUserId = await phase8aUserId(guestTwo);
+
+    await expect(
+      db
+        .insertInto("guest_reservation_links")
+        .values({
+          reservation_id: guestOneBookingA.reservationId,
+          user_id: guestTwoUserId,
+          link_source: "AUTHENTICATED_CHECKOUT"
+        })
+        .execute()
+    ).rejects.toThrow();
+
+    const links = await db
+      .selectFrom("guest_reservation_links")
+      .select(["reservation_id", "user_id"])
+      .where("reservation_id", "=", guestOneBookingA.reservationId)
+      .execute();
+
+    expect(links).toHaveLength(1);
+    expect(links[0]?.user_id).toBe(await phase8aUserId(guestOne));
+  });
+
+  it("[8A-14] GUEST_RESERVATION_LINKED audit action is written exactly once", async () => {
+    const userId = await phase8aUserId(guestOne);
+
+    const audits = await db
+      .selectFrom("audit_events")
+      .select(["action", "actor_type", "actor_user_id", "actor_role", "entity_type", "entity_id"])
+      .where("action", "=", "GUEST_RESERVATION_LINKED")
+      .where("entity_id", "=", guestOneBookingA.reservationId)
+      .execute();
+
+    expect(audits).toHaveLength(1);
+
+    expect(audits[0]).toEqual({
+      action: "GUEST_RESERVATION_LINKED",
+      actor_type: "USER",
+      actor_user_id: userId,
+      actor_role: null,
+      entity_type: "GUEST_RESERVATION_LINK",
+      entity_id: guestOneBookingA.reservationId
+    });
+  });
+
+  it("[8A-15] guest routes require authentication but no permission or role", async () => {
+    const unauthenticated = await app.inject({
+      method: "GET",
+      url: "/v1/guest/reservations"
+    });
+
+    expect(unauthenticated.statusCode).toBe(401);
+
+    const authenticated = await app.inject({
+      method: "GET",
+      url: "/v1/guest/reservations",
+      headers: {
+        authorization: `Bearer ${guestOne.token}`
+      }
+    });
+
+    expect(authenticated.statusCode).toBe(200);
+
+    const userId = await phase8aUserId(guestOne);
+
+    const roleCount = await db
+      .selectFrom("platform_staff_roles")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("user_id", "=", userId)
+      .executeTakeFirstOrThrow();
+
+    expect(Number(roleCount.count)).toBe(0);
+  });
+
+  it("[8A-16] existing session endpoint works for a user with zero roles and memberships", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/session",
+      headers: {
+        authorization: `Bearer ${guestOne.token}`
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    expect(response.json()).toMatchObject({
+      user: {
+        email: guestOne.email
+      },
+      platformRoles: [],
+      organizations: [],
+      propertyGrants: []
+    });
+  });
+
+  it("[8A-17] existing anonymous marketplace routes remain anonymous", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/public/destinations"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toContain("public");
+  });
+
+  it("[8A-18] OpenAPI exposes both authenticated guest reservation read endpoints", async () => {
+    const document = app.swagger() as {
+      paths?: Record<
+        string,
+        {
+          get?: {
+            security?: Array<Record<string, unknown>>;
+          };
+        }
+      >;
+    };
+
+    const listRoute = document.paths?.["/v1/guest/reservations"]?.get;
+    const detailRoute = document.paths?.["/v1/guest/reservations/{reservationId}"]?.get;
+
+    expect(listRoute).toBeDefined();
+    expect(detailRoute).toBeDefined();
+
+    expect(listRoute?.security).toEqual([
+      {
+        bearerAuth: []
+      }
+    ]);
+
+    expect(detailRoute?.security).toEqual([
+      {
+        bearerAuth: []
+      }
+    ]);
   });
 });

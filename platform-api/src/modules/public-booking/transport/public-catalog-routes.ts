@@ -1,7 +1,11 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
-import { ValidationError } from "../../../shared/errors/app-error.js";
+import { AuthenticationError, ValidationError } from "../../../shared/errors/app-error.js";
+import {
+  authenticateIfPresent,
+  type AuthenticationDependencies
+} from "../../../shared/http/authenticate.js";
 import { requestMetadata } from "../../../shared/http/request-metadata.js";
 import { IdempotencyService } from "../../../shared/idempotency/idempotency-service.js";
 import type { RazorpayOrderGateway } from "../../payments/application/razorpay-order-service.js";
@@ -16,6 +20,7 @@ import type { PublicCheckoutStatusRequest } from "../domain/public-checkout-stat
 import type { PublicQuoteRequest } from "../domain/public-quote.js";
 export interface PublicCatalogRouteDependencies {
   db: Kysely<Database>;
+  authentication?: AuthenticationDependencies;
   razorpayOrderGateway?: RazorpayOrderGateway | null;
 }
 
@@ -876,6 +881,15 @@ export async function registerPublicCatalogRoutes(
     deps.razorpayOrderGateway ?? null
   );
   const idempotency = new IdempotencyService(deps.db);
+  const optionalAuthentication = deps.authentication
+    ? authenticateIfPresent(deps.authentication)
+    : async function rejectUnconfiguredAuthentication(request: FastifyRequest): Promise<void> {
+        if (request.headers.authorization !== undefined) {
+          throw new AuthenticationError(
+            "Authentication is not configured for this public route registrar"
+          );
+        }
+      };
 
   app.get(
     "/v1/public/destinations",
@@ -1193,8 +1207,10 @@ export async function registerPublicCatalogRoutes(
   app.post<{ Params: PublicQuoteParams; Body: PublicCheckoutRequest }>(
     "/v1/public/properties/:publicSlug/quotes/:quoteId/checkout",
     {
+      preHandler: optionalAuthentication,
       schema: {
         tags: ["Public Booking"],
+        security: [{}, { bearerAuth: [] }],
         summary: "Create a public reservation and prepare Razorpay checkout",
         description:
           "Creates the canonical HELD reservation and provider-neutral payment intent atomically from the active public quote hold, then prepares the Razorpay order only after that database transaction commits. Browser callbacks never confirm the reservation.",
@@ -1232,13 +1248,17 @@ export async function registerPublicCatalogRoutes(
           phone: request.body.leadGuest.phone ?? null
         }
       };
+      const idempotencyRequestBody = {
+        ...body,
+        guestAccountUserId: request.actor?.userId ?? null
+      };
 
       const result = await idempotency.execute(
         {
           scopeKey:
             `public.checkout:${request.params.publicSlug.toLowerCase()}:` + request.params.quoteId,
           key,
-          requestBody: body
+          requestBody: idempotencyRequestBody
         },
         async (trx) => ({
           statusCode: 201,
@@ -1247,7 +1267,8 @@ export async function registerPublicCatalogRoutes(
             request.params.publicSlug,
             request.params.quoteId,
             body,
-            metadata
+            metadata,
+            request.actor
           )
         })
       );
