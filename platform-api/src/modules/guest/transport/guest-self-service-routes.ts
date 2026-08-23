@@ -2,10 +2,16 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import { AuthenticationError, ValidationError } from "../../../shared/errors/app-error.js";
+import { requestMetadata } from "../../../shared/http/request-metadata.js";
+import { IdempotencyService } from "../../../shared/idempotency/idempotency-service.js";
 import {
   requireAuthentication,
   type AuthenticationDependencies
 } from "../../../shared/http/authenticate.js";
+import {
+  GuestCancellationService,
+  type GuestCancellationResult
+} from "../application/guest-cancellation-service.js";
 import { GuestSelfService } from "../application/guest-self-service.js";
 import type { GuestReservationListCursor } from "../domain/guest-self-service.js";
 
@@ -21,6 +27,78 @@ interface GuestReservationsQuery {
 interface GuestReservationParams {
   reservationId: string;
 }
+
+const guestCancellationHeadersSchema = {
+  type: "object",
+  required: ["idempotency-key"],
+  properties: {
+    "idempotency-key": {
+      type: "string"
+    }
+  }
+} as const;
+
+const guestCancellationResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "reservationId",
+    "status",
+    "cancelledAt",
+    "arrivalAt",
+    "minutesBeforeArrival",
+    "penaltyType",
+    "penaltyMinor",
+    "paidMinor",
+    "refundDueMinor",
+    "currencyCode",
+    "refundRequired"
+  ],
+  properties: {
+    reservationId: {
+      type: "string",
+      format: "uuid"
+    },
+    status: {
+      type: "string",
+      enum: ["CANCELLED"]
+    },
+    cancelledAt: {
+      type: "string",
+      format: "date-time"
+    },
+    arrivalAt: {
+      type: "string",
+      format: "date-time"
+    },
+    minutesBeforeArrival: {
+      type: "integer",
+      minimum: 0
+    },
+    penaltyType: {
+      type: "string",
+      enum: ["PERCENTAGE_OF_STAY", "FIXED_AMOUNT", "NIGHTS"]
+    },
+    penaltyMinor: {
+      type: "integer",
+      minimum: 0
+    },
+    paidMinor: {
+      type: "integer",
+      minimum: 0
+    },
+    refundDueMinor: {
+      type: "integer",
+      minimum: 0
+    },
+    currencyCode: {
+      type: "string"
+    },
+    refundRequired: {
+      type: "boolean"
+    }
+  }
+} as const;
 
 const nullableString = {
   anyOf: [{ type: "string" }, { type: "null" }]
@@ -109,6 +187,32 @@ function requireActorUserId(request: FastifyRequest): string {
   return request.actor.userId;
 }
 
+function requireIdempotencyKey(headers: Record<string, unknown>): string {
+  const key = headers["idempotency-key"];
+
+  if (typeof key !== "string") {
+    throw new ValidationError("Idempotency-Key header is required");
+  }
+
+  return key;
+}
+
+function guestCancellationHttpResponse(result: GuestCancellationResult) {
+  return {
+    reservationId: result.reservationId,
+    status: result.status,
+    cancelledAt: result.cancelledAt,
+    arrivalAt: result.arrivalAt,
+    minutesBeforeArrival: result.minutesBeforeArrival,
+    penaltyType: result.penaltyType,
+    penaltyMinor: result.penaltyMinor,
+    paidMinor: result.paidMinor,
+    refundDueMinor: result.refundDueMinor,
+    currencyCode: result.currencyCode,
+    refundRequired: result.refundRequired
+  };
+}
+
 function encodeCursor(cursor: GuestReservationListCursor): string {
   return Buffer.from(
     JSON.stringify({
@@ -173,6 +277,8 @@ export async function registerGuestSelfServiceRoutes(
 ): Promise<void> {
   const authenticate = requireAuthentication(deps);
   const service = new GuestSelfService(deps.db);
+  const cancellationService = new GuestCancellationService();
+  const idempotency = new IdempotencyService(deps.db);
 
   app.get<{ Querystring: GuestReservationsQuery }>(
     "/v1/guest/reservations",
@@ -259,6 +365,74 @@ export async function registerGuestSelfServiceRoutes(
       setGuestNoStore(reply);
 
       return service.getReservation(requireActorUserId(request), request.params.reservationId);
+    }
+  );
+
+  app.post<{ Params: GuestReservationParams }>(
+    "/v1/guest/reservations/:reservationId/cancel",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Guest Self-Service"],
+        summary: "Cancel one reservation owned by the authenticated guest",
+        security: [{ bearerAuth: [] }],
+        headers: guestCancellationHeadersSchema,
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["reservationId"],
+          properties: {
+            reservationId: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        },
+        response: {
+          200: guestCancellationResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setGuestNoStore(reply);
+
+      if (!request.actor) {
+        throw new AuthenticationError();
+      }
+
+      const actor = request.actor;
+      const key = requireIdempotencyKey(request.headers);
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `guest.reservation.cancel:user:${actor.userId}`,
+          key,
+          requestBody: {
+            reservationId: request.params.reservationId
+          }
+        },
+        async (trx) => {
+          const cancellation = await cancellationService.cancel(
+            trx,
+            actor,
+            {
+              reservationId: request.params.reservationId
+            },
+            requestMetadata(request, "guest.reservation.cancel")
+          );
+
+          return {
+            body: guestCancellationHttpResponse(cancellation),
+            statusCode: 200
+          };
+        }
+      );
+
+      if (result.replayed) {
+        void reply.header("idempotency-replayed", "true");
+      }
+
+      return reply.code(result.statusCode).send(result.body);
     }
   );
 }
