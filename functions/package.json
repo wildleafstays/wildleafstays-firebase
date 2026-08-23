@@ -1,5 +1,5 @@
 {
-  "name": "wildleafstays-firebase-functions",
+  "name": "wildleafstays-clean-functions",
   "version": "1.0.0",
   "private": true,
   "main": "index.js",
@@ -7,17 +7,13 @@
     "node": "20"
   },
   "scripts": {
-    "serve": "firebase emulators:start --only hosting,functions,firestore",
-    "deploy": "firebase deploy --only hosting,functions,firestore:rules,firestore:indexes"
+    "check": "node --check index.js && node --check src/*.js"
   },
   "dependencies": {
-    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "firebase-admin": "^13.0.0",
-    "firebase-functions": "^6.0.1",
-    "jsonwebtoken": "^9.0.2",
-    "razorpay": "^2.9.6"
+    "express": "^4.19.2",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1",
+    "razorpay": "^2.9.5"
   }
 }
-

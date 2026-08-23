@@ -1,0 +1,48 @@
+{
+  "name": "@wildleaf/platform-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "scripts": {
+    "dev": "tsx --env-file=.env watch src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/src/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run test/authorization-service.test.ts test/env.test.ts test/idempotency-hash.test.ts test/owner-operations-route-contract.test.ts test/property-asset-upload-service.test.ts test/property-upload-route-contract.test.ts test/razorpay-provider.test.ts test/razorpay-webhook-route.test.ts",
+    "test:integration": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run test/platform-core.integration.test.ts test/property-onboarding.integration.test.ts test/property-setup.integration.test.ts test/complete-property-onboarding.integration.test.ts test/inventory-foundation.integration.test.ts test/inventory-holds.integration.test.ts test/inventory-allocations.integration.test.ts test/rates-foundation.integration.test.ts test/quote-foundation.integration.test.ts test/commercial-rules-foundation.integration.test.ts test/commercial-rule-management.integration.test.ts test/commercial-quote.integration.test.ts test/promotion-rule-management.integration.test.ts test/promotion-quote.integration.test.ts test/quote-hold.integration.test.ts test/held-reservation.integration.test.ts test/payment-intent.integration.test.ts test/public-catalog.integration.test.ts test/public-availability.integration.test.ts test/public-quote-hold.integration.test.ts",
+    "test:watch": "vitest",
+    "migrate": "node --env-file-if-exists=.env --import tsx src/infrastructure/database/migrate.ts up",
+    "migrate:down": "node --env-file-if-exists=.env --import tsx src/infrastructure/database/migrate.ts down",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test",
+    "check:full": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:integration && npm run build",
+    "migrate:prod": "node dist/src/infrastructure/database/migrate.js up",
+    "migrate:prod:down": "node dist/src/infrastructure/database/migrate.js down"
+  },
+  "dependencies": {
+    "@fastify/helmet": "13.1.0",
+    "@fastify/multipart": "10.1.1",
+    "@fastify/swagger": "9.8.1",
+    "fastify": "5.11.0",
+    "firebase-admin": "14.2.0",
+    "kysely": "0.29.4",
+    "pg": "8.22.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "^22.0.0",
+    "@types/pg": "8.20.0",
+    "eslint": "10.0.1",
+    "prettier": "3.9.6",
+    "tsx": "4.23.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0",
+    "vitest": "4.1.10"
+  }
+}

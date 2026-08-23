@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Wildleaf Partner Portal</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body>
+    <main id="authView" class="auth-view">
+      <section class="auth-story" aria-labelledby="welcomeTitle">
+        <a
+          class="brand brand-light"
+          href="/customer/"
+          aria-label="Wildleaf Stays home"
+          ><span class="brand-mark">W</span><span>Wildleaf Stays</span></a
+        >
+        <p class="eyebrow">Partner network</p>
+        <h1 id="welcomeTitle">Bring your stay into the Wildleaf collection.</h1>
+        <p class="auth-copy">
+          Register your business, prepare your hotel profile and follow every
+          review step from one secure workspace.
+        </p>
+        <ol class="journey">
+          <li><span>1</span> Create your owner account</li>
+          <li><span>2</span> Register the business and property</li>
+          <li><span>3</span> Submit for Wildleaf verification</li>
+        </ol>
+      </section>
+
+      <section class="auth-panel">
+        <div class="auth-card">
+          <p class="eyebrow">Owner & management access</p>
+          <h2 id="authHeading">Welcome back</h2>
+          <p id="authIntro" class="muted">
+            Sign in to manage your Wildleaf properties.
+          </p>
+          <div class="auth-tabs" role="tablist" aria-label="Authentication">
+            <button id="signInTab" class="auth-tab active" type="button">
+              Sign in
+            </button>
+            <button id="registerTab" class="auth-tab" type="button">
+              Create account
+            </button>
+          </div>
+          <form id="signInForm" class="form-stack">
+            <label
+              >Email address<input
+                name="email"
+                type="email"
+                autocomplete="email"
+                required
+            /></label>
+            <label
+              >Password<input
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                minlength="6"
+                required
+            /></label>
+            <button type="submit">Sign in securely</button>
+          </form>
+          <form id="registerForm" class="form-stack hidden">
+            <label
+              >Your name<input
+                name="displayName"
+                autocomplete="name"
+                required
+                maxlength="100"
+            /></label>
+            <label
+              >Business email<input
+                name="email"
+                type="email"
+                autocomplete="email"
+                required
+            /></label>
+            <label
+              >Password<input
+                name="password"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                required
+            /></label>
+            <button type="submit">Create owner account</button>
+          </form>
+          <p id="authMessage" class="notice" role="status"></p>
+          <a class="customer-link" href="/customer/">Looking to book a stay?</a>
+        </div>
+      </section>
+    </main>
+
+    <div id="portal" class="portal hidden">
+      <aside class="sidebar">
+        <a class="brand brand-light" href="/customer/"
+          ><span class="brand-mark">W</span><span>Wildleaf</span></a
+        >
+        <p id="roleLabel" class="role-label"></p>
+        <nav aria-label="Portal navigation">
+          <button class="nav hidden" type="button" data-screen="dashboard">
+            Dashboard
+          </button>
+          <button class="nav hidden" type="button" data-screen="business">
+            Business setup
+          </button>
+          <button class="nav hidden" type="button" data-screen="properties">
+            My properties
+          </button>
+          <button class="nav hidden" type="button" data-screen="reservations">
+            Reservations
+          </button>
+          <button class="nav hidden" type="button" data-screen="calendar">
+            Rates & inventory
+          </button>
+          <button class="nav hidden" type="button" data-screen="control">
+            Operations control
+          </button>
+          <button class="nav hidden" type="button" data-screen="reviews">
+            Review queue
+          </button>
+        </nav>
+        <div class="sidebar-foot">
+          <a href="/customer/">View booking website</a>
+          <span id="accountEmail"></span>
+          <button id="logoutButton" class="button-quiet" type="button">
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="workspace-head">
+          <div>
+            <p id="screenEyebrow" class="eyebrow">Partner portal</p>
+            <h1 id="screenTitle">Your properties</h1>
+          </div>
+          <button id="refreshButton" class="button-secondary" type="button">
+            Refresh
+          </button>
+        </header>
+        <p id="portalMessage" class="notice hidden" role="status"></p>
+
+        <section id="dashboardScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Live operations</p>
+              <h2>Today at your property</h2>
+            </div>
+            <div class="inline-filters">
+              <label>Hotel<select id="dashboardPropertySelect"></select></label>
+              <label
+                >Business date<input id="dashboardDate" type="date"
+              /></label>
+            </div>
+          </div>
+          <div id="dashboardMetrics" class="metric-grid"></div>
+          <section class="card operations-card">
+            <div class="card-heading">
+              <div>
+                <h3>Reservations overlapping the next 30 days</h3>
+                <p class="muted">
+                  A secure operational view of the next guest movements.
+                </p>
+              </div>
+              <button
+                id="openReservationsButton"
+                class="button-secondary"
+                type="button"
+              >
+                Manage reservations
+              </button>
+            </div>
+            <div id="dashboardReservationList"></div>
+          </section>
+        </section>
+
+        <section id="reservationsScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Guest operations</p>
+              <h2>Reservations</h2>
+            </div>
+            <p>
+              Review guest stays and apply only valid check-in or check-out
+              transitions.
+            </p>
+          </div>
+          <form id="reservationFilters" class="card filter-grid">
+            <label
+              >Hotel<select
+                name="propertyId"
+                id="reservationPropertySelect"
+              ></select
+            ></label>
+            <label
+              >Status<select name="status">
+                <option value="">All statuses</option>
+                <option>HELD</option>
+                <option>PAYMENT_PENDING</option>
+                <option>CONFIRMED</option>
+                <option>CHECKED_IN</option>
+                <option>CHECKED_OUT</option>
+                <option>CANCELLED</option>
+                <option>EXPIRED</option>
+                <option>NO_SHOW</option>
+              </select></label
+            >
+            <label>Stays from<input name="startDate" type="date" /></label>
+            <label>Until<input name="endDate" type="date" /></label>
+            <button type="submit">Apply filters</button>
+          </form>
+          <div id="reservationList" class="card-list"></div>
+          <button
+            id="loadMoreReservations"
+            class="button-secondary hidden"
+            type="button"
+          >
+            Load more reservations
+          </button>
+        </section>
+
+        <section id="calendarScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Commercial operations</p>
+              <h2>Rates and inventory calendar</h2>
+            </div>
+            <p>
+              Inventory remains authoritative in the backend. Every dated rate
+              update uses optimistic version checks.
+            </p>
+          </div>
+          <form id="calendarFilters" class="card filter-grid">
+            <label
+              >Hotel<select
+                name="propertyId"
+                id="calendarPropertySelect"
+              ></select
+            ></label>
+            <label>From<input name="startDate" type="date" required /></label>
+            <label>Until<input name="endDate" type="date" required /></label>
+            <label
+              >Rate product<select
+                name="rateProductId"
+                id="calendarRateProduct"
+              ></select
+            ></label>
+            <button type="submit">Refresh calendar</button>
+          </form>
+
+          <div class="operations-grid">
+            <form id="ratePlanForm" class="card form-grid two-column">
+              <div class="span-two">
+                <h3>Create rate plan</h3>
+                <p class="muted">For example, flexible room-only or MAP.</p>
+              </div>
+              <label>Code<input name="code" required maxlength="30" /></label>
+              <label>Name<input name="name" required maxlength="120" /></label>
+              <label
+                >Meal plan<select name="mealPlanCode">
+                  <option>EP</option>
+                  <option>CP</option>
+                  <option>MAP</option>
+                  <option>AP</option>
+                  <option>CUSTOM</option>
+                </select></label
+              >
+              <button class="span-two" type="submit">Create rate plan</button>
+            </form>
+
+            <form id="rateProductForm" class="card form-grid two-column">
+              <div class="span-two">
+                <h3>Configure sellable product</h3>
+                <p class="muted">Amounts are entered in Indian rupees.</p>
+              </div>
+              <label
+                >Rate plan<select
+                  name="ratePlanId"
+                  id="productRatePlan"
+                  required
+                ></select
+              ></label>
+              <label
+                >Sell as<select name="productType" id="productType" required>
+                  <option value="ROOM_CATEGORY">Room category</option>
+                  <option value="FULL_PROPERTY">Full property</option>
+                </select></label
+              >
+              <label id="productRoomCategoryLabel"
+                >Room category<select
+                  name="roomCategoryId"
+                  id="productRoomCategory"
+                  required
+                ></select
+              ></label>
+              <label
+                >Base rate ₹<input
+                  name="baseRate"
+                  type="number"
+                  min="0"
+                  required
+              /></label>
+              <label
+                >Floor rate ₹<input
+                  name="floorRate"
+                  type="number"
+                  min="0"
+                  required
+              /></label>
+              <label
+                >Ceiling rate ₹<input
+                  name="ceilingRate"
+                  type="number"
+                  min="0"
+                  required
+              /></label>
+              <label
+                >Included adults<input
+                  name="includedAdults"
+                  type="number"
+                  min="1"
+                  value="2"
+                  required
+              /></label>
+              <label
+                >Maximum adults<input
+                  name="maxAdults"
+                  type="number"
+                  min="1"
+                  value="2"
+                  required
+              /></label>
+              <label
+                >Maximum children<input
+                  name="maxChildren"
+                  type="number"
+                  min="0"
+                  value="0"
+                  required
+              /></label>
+              <label
+                >Maximum occupancy<input
+                  name="maxOccupancy"
+                  type="number"
+                  min="1"
+                  value="2"
+                  required
+              /></label>
+              <label
+                >Extra adult ₹<input
+                  name="extraAdult"
+                  type="number"
+                  min="0"
+                  value="0"
+                  required
+              /></label>
+              <label
+                >Extra child ₹<input
+                  name="extraChild"
+                  type="number"
+                  min="0"
+                  value="0"
+                  required
+              /></label>
+              <button class="span-two" type="submit">Configure product</button>
+            </form>
+          </div>
+
+          <form id="inventoryControlForm" class="card filter-grid">
+            <div>
+              <h3>Inventory control</h3>
+              <p class="muted">Set stop-sell and overbooking for this range.</p>
+            </div>
+            <label
+              >Inventory for<select
+                name="bucketType"
+                id="controlBucketType"
+                required
+              >
+                <option value="ROOM_CATEGORY">Room category</option>
+                <option value="FULL_PROPERTY">Full property</option>
+              </select></label
+            >
+            <label id="controlRoomCategoryLabel"
+              >Room category<select
+                name="roomCategoryId"
+                id="controlRoomCategory"
+                required
+              ></select
+            ></label>
+            <label class="check-control"
+              ><input name="stopSell" type="checkbox" /> Stop sell</label
+            >
+            <label
+              >Overbooking limit<input
+                name="overbookingLimit"
+                type="number"
+                min="0"
+                value="0"
+                required
+            /></label>
+            <button type="submit">Apply inventory control</button>
+          </form>
+
+          <section class="card calendar-card">
+            <div class="card-heading">
+              <div>
+                <h3>Nightly calendar</h3>
+                <p id="calendarContext" class="muted"></p>
+              </div>
+              <button id="saveRateCalendar" type="button">
+                Save nightly rates
+              </button>
+            </div>
+            <div id="calendarGrid" class="calendar-scroll"></div>
+          </section>
+        </section>
+
+        <section id="controlScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Wildleaf management</p>
+              <h2>Cross-property operations</h2>
+            </div>
+            <label
+              >Business date<input id="controlCenterDate" type="date"
+            /></label>
+          </div>
+          <div id="controlCenterMetrics" class="metric-grid"></div>
+          <form
+            id="controlCenterFilters"
+            class="card filter-grid compact-filters"
+          >
+            <label
+              >Status<select name="status">
+                <option value="">All statuses</option>
+                <option>HELD</option>
+                <option>PAYMENT_PENDING</option>
+                <option>CONFIRMED</option>
+                <option>CHECKED_IN</option>
+                <option>CHECKED_OUT</option>
+                <option>CANCELLED</option>
+                <option>EXPIRED</option>
+                <option>NO_SHOW</option>
+              </select></label
+            >
+            <label>Stays from<input name="startDate" type="date" /></label>
+            <label>Until<input name="endDate" type="date" /></label>
+            <button type="submit">Apply filters</button>
+          </form>
+          <div id="controlCenterReservationList" class="card-list"></div>
+          <button
+            id="loadMoreControlCenterReservations"
+            class="button-secondary hidden"
+            type="button"
+          >
+            Load more reservations
+          </button>
+        </section>
+
+        <section id="businessScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Step 1 of 3</p>
+              <h2>Tell us about your business</h2>
+            </div>
+            <p>
+              One business account can manage multiple hotels. You will be its
+              first owner.
+            </p>
+          </div>
+          <form id="businessForm" class="card form-grid two-column">
+            <label
+              >Legal business name<input
+                name="legalName"
+                required
+                minlength="2"
+                maxlength="200"
+            /></label>
+            <label
+              >Trading name <span class="optional">optional</span
+              ><input name="tradingName" maxlength="200"
+            /></label>
+            <label
+              >Business type<select name="organizationType" required>
+                <option value="PROPRIETORSHIP">Proprietorship</option>
+                <option value="PARTNERSHIP">Partnership</option>
+                <option value="LLP">LLP</option>
+                <option value="PRIVATE_LIMITED">Private limited</option>
+                <option value="PUBLIC_LIMITED">Public limited</option>
+                <option value="TRUST">Trust</option>
+                <option value="OTHER">Other</option>
+              </select></label
+            >
+            <label
+              >Country<input
+                name="countryCode"
+                value="IN"
+                pattern="[A-Z]{2}"
+                maxlength="2"
+                required
+            /></label>
+            <button class="span-two" type="submit">
+              Create business workspace
+            </button>
+          </form>
+        </section>
+
+        <section id="propertiesScreen" class="screen hidden">
+          <div class="toolbar card">
+            <label
+              >Business workspace<select
+                id="organizationSelect"
+              ></select></label
+            ><button id="showPropertyFormButton" type="button">
+              Register a hotel
+            </button>
+          </div>
+          <form
+            id="createPropertyForm"
+            class="card form-grid three-column hidden"
+          >
+            <div class="span-three">
+              <p class="eyebrow">New hotel</p>
+              <h2>Create a property draft</h2>
+            </div>
+            <label class="span-two"
+              >Property name<input
+                name="name"
+                required
+                minlength="2"
+                maxlength="200"
+            /></label>
+            <label
+              >Timezone<input name="timezone" value="Asia/Kolkata" required
+            /></label>
+            <button class="span-three" type="submit">
+              Create draft and continue
+            </button>
+          </form>
+          <div id="propertyList" class="card-list"></div>
+        </section>
+
+        <section id="editorScreen" class="screen hidden">
+          <button id="backToProperties" class="text-button" type="button">
+            ← Back to properties
+          </button>
+          <div class="editor-heading">
+            <div>
+              <p class="eyebrow">Hotel registration</p>
+              <h2 id="editorPropertyName"></h2>
+            </div>
+            <span id="editorStatus" class="status-pill"></span>
+          </div>
+          <div class="editor-grid">
+            <form id="profileForm" class="card form-grid two-column">
+              <div class="span-two">
+                <h3>Property profile</h3>
+                <p class="muted">Core details guests and reviewers need.</p>
+              </div>
+              <label class="span-two"
+                >Property name<input name="name" required maxlength="200"
+              /></label>
+              <label
+                >Property type<select name="propertyType">
+                  <option value="">Select</option>
+                  <option>HOTEL</option>
+                  <option>RESORT</option>
+                  <option>VILLA</option>
+                  <option>HOMESTAY</option>
+                  <option>COTTAGE_CLUSTER</option>
+                  <option>APARTMENT</option>
+                  <option>HOSTEL</option>
+                  <option>OTHER</option>
+                </select></label
+              >
+              <label
+                >How it is sold<select name="saleMode">
+                  <option value="">Select</option>
+                  <option value="ROOMS_ONLY">Rooms only</option>
+                  <option value="FULL_PROPERTY_ONLY">Full property only</option>
+                  <option value="BOTH">Rooms and full property</option>
+                </select></label
+              >
+              <label class="span-two"
+                >Short description<textarea
+                  name="shortDescription"
+                  maxlength="500"
+                ></textarea>
+              </label>
+              <label class="span-two"
+                >Full description<textarea
+                  name="description"
+                  maxlength="10000"
+                ></textarea>
+              </label>
+              <label class="span-two"
+                >Address<input name="addressLine1" maxlength="250"
+              /></label>
+              <label>Locality<input name="locality" maxlength="150" /></label
+              ><label>City<input name="city" maxlength="150" /></label>
+              <label
+                >State / region<input
+                  name="stateRegion"
+                  maxlength="150" /></label
+              ><label
+                >Postal code<input name="postalCode" maxlength="20"
+              /></label>
+              <label
+                >Country code<input
+                  name="countryCode"
+                  maxlength="2"
+                  value="IN" /></label
+              ><label
+                >Timezone<input name="timezone" value="Asia/Kolkata" required
+              /></label>
+              <label
+                >Check-in time<input name="checkInTime" type="time" /></label
+              ><label
+                >Check-out time<input name="checkOutTime" type="time"
+              /></label>
+              <label
+                >Contact phone<input
+                  name="contactPhone"
+                  type="tel"
+                  maxlength="40" /></label
+              ><label
+                >Contact email<input
+                  name="contactEmail"
+                  type="email"
+                  maxlength="320"
+              /></label>
+              <button id="saveProfileButton" class="span-two" type="submit">
+                Save profile
+              </button>
+            </form>
+
+            <aside class="card checklist-card">
+              <p class="eyebrow">Submission readiness</p>
+              <h3>Review checklist</h3>
+              <div id="checklist"></div>
+              <button id="submitPropertyButton" class="hidden" type="button">
+                Submit to Wildleaf
+              </button>
+              <p class="security-note">
+                Images and legal PDFs are streamed through the authorized API.
+                Wildleaf selects every storage key and verifies the file digest
+                before registration.
+              </p>
+            </aside>
+
+            <section class="card span-editor">
+              <div class="card-heading">
+                <div>
+                  <h3>Accommodation setup</h3>
+                  <p class="muted">
+                    Add the room types guests can book, then register each
+                    physical room, cottage, hut or villa.
+                  </p>
+                </div>
+              </div>
+              <div class="setup-grid">
+                <form id="roomCategoryForm" class="form-grid two-column">
+                  <h4 class="span-two">Add room category</h4>
+                  <label
+                    >Code<input
+                      name="code"
+                      placeholder="DELUXE"
+                      maxlength="50"
+                      required
+                  /></label>
+                  <label
+                    >Name<input
+                      name="name"
+                      placeholder="Deluxe Room"
+                      maxlength="150"
+                      required
+                  /></label>
+                  <label
+                    >Type<select name="accommodationType" required>
+                      <option>ROOM</option>
+                      <option>SUITE</option>
+                      <option>COTTAGE</option>
+                      <option>HUT</option>
+                      <option>VILLA</option>
+                      <option>APARTMENT</option>
+                      <option>DORM</option>
+                      <option>TENT</option>
+                      <option>OTHER</option>
+                    </select></label
+                  >
+                  <label
+                    >Base occupancy<input
+                      name="baseOccupancy"
+                      type="number"
+                      min="1"
+                      max="50"
+                      value="2"
+                      required
+                  /></label>
+                  <label
+                    >Maximum adults<input
+                      name="maxAdults"
+                      type="number"
+                      min="1"
+                      max="50"
+                      value="2"
+                      required
+                  /></label>
+                  <label
+                    >Maximum children<input
+                      name="maxChildren"
+                      type="number"
+                      min="0"
+                      max="50"
+                      value="0"
+                      required
+                  /></label>
+                  <label
+                    >Maximum occupancy<input
+                      name="maxOccupancy"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value="2"
+                      required
+                  /></label>
+                  <label
+                    >Bed configuration<input
+                      name="bedConfiguration"
+                      placeholder="1 king bed"
+                      maxlength="500"
+                  /></label>
+                  <button class="span-two" type="submit">
+                    Add room category
+                  </button>
+                </form>
+
+                <form id="physicalUnitForm" class="form-grid two-column">
+                  <h4 class="span-two">Add physical unit</h4>
+                  <label class="span-two"
+                    >Room category<select
+                      id="unitRoomCategory"
+                      name="roomCategoryId"
+                      required
+                    ></select
+                  ></label>
+                  <label
+                    >Unit code<input
+                      name="unitCode"
+                      placeholder="101"
+                      maxlength="80"
+                      required
+                  /></label>
+                  <label
+                    >Display name<input
+                      name="displayName"
+                      placeholder="Forest View 101"
+                      maxlength="150"
+                  /></label>
+                  <label class="check-control span-two"
+                    ><input name="hasView" type="checkbox" /> This unit has a
+                    named view</label
+                  >
+                  <label class="span-two"
+                    >View label<input
+                      name="viewLabel"
+                      placeholder="Mountain view"
+                      maxlength="150"
+                  /></label>
+                  <button class="span-two" type="submit">Add unit</button>
+                </form>
+              </div>
+              <div id="accommodationList" class="compact-list"></div>
+            </section>
+
+            <form id="policiesForm" class="card form-grid two-column">
+              <div class="span-two"><h3>Policies</h3></div>
+              <label
+                >Children<select name="childrenPolicy">
+                  <option>ALLOWED</option>
+                  <option>NOT_ALLOWED</option>
+                  <option>RESTRICTIONS_APPLY</option>
+                </select></label
+              >
+              <label
+                >Pets<select name="petsPolicy">
+                  <option>NOT_ALLOWED</option>
+                  <option>ALLOWED</option>
+                  <option>ON_REQUEST</option>
+                </select></label
+              >
+              <label
+                >Smoking<select name="smokingPolicy">
+                  <option>NON_SMOKING</option>
+                  <option>DESIGNATED_AREAS</option>
+                  <option>SMOKING_ALLOWED</option>
+                </select></label
+              >
+              <label
+                >Parties / events<select name="partiesEventsPolicy">
+                  <option>NOT_ALLOWED</option>
+                  <option>ALLOWED</option>
+                  <option>ON_REQUEST</option>
+                </select></label
+              >
+              <label
+                >Minimum check-in age<input
+                  name="minimumCheckinAge"
+                  type="number"
+                  min="0"
+                  max="100"
+              /></label>
+              <label class="span-two"
+                >House rules<textarea
+                  name="houseRules"
+                  maxlength="5000"
+                ></textarea>
+              </label>
+              <button id="savePoliciesButton" class="span-two" type="submit">
+                Save policies
+              </button>
+            </form>
+
+            <form id="amenitiesForm" class="card form-grid">
+              <div>
+                <h3>Amenities</h3>
+                <p class="muted">
+                  Use catalog codes separated by commas, for example WIFI,
+                  PARKING, GARDEN.
+                </p>
+              </div>
+              <label
+                >Amenity codes<input
+                  name="codes"
+                  placeholder="WIFI, PARKING, GARDEN"
+              /></label>
+              <button id="saveAmenitiesButton" type="submit">
+                Save amenities
+              </button>
+            </form>
+
+            <section class="card span-editor">
+              <div class="card-heading">
+                <div>
+                  <h3>Images and verification documents</h3>
+                  <p class="muted">
+                    Images: JPEG, PNG, WebP or AVIF up to 8 MB. Documents: PDF
+                    up to 12 MB.
+                  </p>
+                </div>
+              </div>
+              <div class="setup-grid">
+                <form id="imageUploadForm" class="form-grid">
+                  <h4>Upload property image</h4>
+                  <label
+                    >Image<input
+                      name="file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/avif"
+                      required
+                  /></label>
+                  <label
+                    >Alt text<input name="altText" maxlength="500"
+                  /></label>
+                  <label
+                    >Caption<input name="caption" maxlength="1000"
+                  /></label>
+                  <label class="check-control"
+                    ><input name="isCover" type="checkbox" /> Use as the cover
+                    image</label
+                  >
+                  <button type="submit">Upload image</button>
+                </form>
+
+                <form id="documentUploadForm" class="form-grid">
+                  <h4>Upload compliance document</h4>
+                  <label
+                    >Document type<select name="documentType" required>
+                      <option>OWNERSHIP_PROOF</option>
+                      <option>LEASE_AGREEMENT</option>
+                      <option>PROPERTY_LICENSE</option>
+                      <option>LOCAL_REGISTRATION</option>
+                      <option>GST_CERTIFICATE</option>
+                      <option>PAN</option>
+                      <option>FSSAI</option>
+                      <option>FIRE_NOC</option>
+                      <option>ID_PROOF</option>
+                      <option>OTHER</option>
+                    </select></label
+                  >
+                  <label
+                    >PDF file<input
+                      name="file"
+                      type="file"
+                      accept="application/pdf"
+                      required
+                  /></label>
+                  <label>Issued on<input name="issuedOn" type="date" /></label>
+                  <label
+                    >Expires on<input name="expiresOn" type="date"
+                  /></label>
+                  <button type="submit">Upload private PDF</button>
+                </form>
+              </div>
+              <div class="asset-columns">
+                <div>
+                  <h4>Property images</h4>
+                  <div id="mediaList"></div>
+                </div>
+                <div>
+                  <h4>Compliance documents</h4>
+                  <div id="documentList"></div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="reviewsScreen" class="screen hidden">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Wildleaf management</p>
+              <h2>Property review queue</h2>
+            </div>
+            <label
+              >Status<select id="reviewStatus">
+                <option value="">All active reviews</option>
+                <option>SUBMITTED</option>
+                <option>UNDER_REVIEW</option>
+                <option>CHANGES_REQUIRED</option>
+                <option>APPROVED</option>
+              </select></label
+            >
+          </div>
+          <div class="review-layout">
+            <div>
+              <div id="reviewList" class="card-list"></div>
+              <button
+                id="loadMoreReviews"
+                class="button-secondary hidden"
+                type="button"
+              >
+                Load more
+              </button>
+            </div>
+            <aside id="reviewDetail" class="card review-detail">
+              <p class="empty-state">
+                Select a property to review its onboarding record.
+              </p>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="/__/firebase/init.js"></script>
+    <script src="/admin/config.js"></script>
+    <script type="module" src="/admin/admin.js"></script>
+  </body>
+</html>

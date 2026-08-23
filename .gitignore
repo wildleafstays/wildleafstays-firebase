@@ -1,10 +1,12 @@
 node_modules/
-backend/uploads/
+functions/node_modules/
 .firebase/
-.runtimeconfig.json
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
-*.local
 .env
 .env.*
+.admin-setup-key.local
+.admin-login.local
+.razorpay-key-id.local
+.razorpay-key-secret.local

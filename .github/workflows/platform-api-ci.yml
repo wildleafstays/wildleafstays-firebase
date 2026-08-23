@@ -1,0 +1,80 @@
+name: Platform API CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "platform-api/**"
+      - ".github/workflows/platform-api-ci.yml"
+  push:
+    branches:
+      - booking-engine-v2-foundation
+      - "phase-*"
+    paths:
+      - "platform-api/**"
+      - ".github/workflows/platform-api-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-api-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: wildleaf_test
+          POSTGRES_USER: wildleaf
+          POSTGRES_PASSWORD: wildleaf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wildleaf -d wildleaf_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://wildleaf:wildleaf@localhost:5432/wildleaf_test
+      FIREBASE_PROJECT_ID: wildleaf-test
+      DB_MAX_CONNECTIONS: 5
+
+    defaults:
+      run:
+        working-directory: platform-api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: platform-api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --omit=optional
+
+      - name: Apply migrations
+        run: npm run migrate
+
+      - name: Full quality gate
+        run: npm run check:full
+
+      - name: Migration rollback smoke test
+        run: |
+          npm run migrate:down
+          npm run migrate
