@@ -377,12 +377,23 @@ export class RazorpayRefundWebhookService {
       return { submission: existingAttempt, recovered: false };
     }
 
+    const reconciliationCaseId = refund.reconciliation_case_id;
+    if (refund.refund_source !== "RECONCILIATION" || reconciliationCaseId === null) {
+      throw new ConflictError(
+        "Current Razorpay refund webhook recovery requires a reconciliation-backed refund request",
+        {
+          refundRequestId: refund.id,
+          refundSource: refund.refund_source
+        }
+      );
+    }
+
     let submission = await this.submissions.create(trx, {
       refundRequestId: refund.id,
       attemptSequence,
       paymentIntentId: refund.payment_intent_id,
       paymentEvidenceId: refund.payment_evidence_id,
-      reconciliationCaseId: refund.reconciliation_case_id,
+      reconciliationCaseId,
       organizationId: refund.organization_id,
       propertyId: refund.property_id,
       reservationId: refund.reservation_id,

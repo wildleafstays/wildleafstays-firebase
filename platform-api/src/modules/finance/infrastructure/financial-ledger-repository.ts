@@ -89,6 +89,24 @@ export class FinancialLedgerRepository {
       .executeTakeFirst();
   }
 
+  async findRecognizedRevenueForReservationForUpdate(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    reservationId: string
+  ): Promise<FinancialLedgerJournalRecord[]> {
+    return trx
+      .selectFrom("financial_ledger_journals")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("reservation_id", "=", reservationId)
+      .where("journal_type", "=", "REVENUE_RECOGNIZED")
+      .orderBy("id", "asc")
+      .forUpdate()
+      .execute();
+  }
+
   async findEntries(
     trx: Transaction<Database>,
     journalId: string

@@ -2185,7 +2185,16 @@ async function phase5c2ReadyRefundRequest() {
     .where("reconciliation_case_id", "=", processing.reconciliationCaseId as string)
     .executeTakeFirstOrThrow();
 
-  return { ...ready, processing, refundRequest };
+  if (refundRequest.reconciliation_case_id === null) {
+    throw new Error("Expected reconciliation-backed refund request fixture");
+  }
+
+  const reconciliationRefundRequest = {
+    ...refundRequest,
+    reconciliation_case_id: refundRequest.reconciliation_case_id
+  };
+
+  return { ...ready, processing, refundRequest: reconciliationRefundRequest };
 }
 
 class FakeRazorpayRefundGateway implements RazorpayRefundGateway {

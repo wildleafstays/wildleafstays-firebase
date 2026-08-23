@@ -2,11 +2,20 @@ import type { JsonObject } from "../../../infrastructure/database/types.js";
 
 export type PaymentRefundProviderStatus = "PENDING" | "PROCESSED" | "FAILED";
 
+export const PaymentRefundSources = {
+  RECONCILIATION: "RECONCILIATION",
+  RESERVATION_CANCELLATION: "RESERVATION_CANCELLATION"
+} as const;
+
+export type PaymentRefundSource = (typeof PaymentRefundSources)[keyof typeof PaymentRefundSources];
+
 export interface PaymentRefundRequestView extends JsonObject {
   id: string;
   paymentIntentId: string;
   paymentEvidenceId: string;
-  reconciliationCaseId: string;
+  refundSource: PaymentRefundSource;
+  reconciliationCaseId: string | null;
+  cancellationDecisionId: string | null;
   organizationId: string;
   propertyId: string;
   reservationId: string;
