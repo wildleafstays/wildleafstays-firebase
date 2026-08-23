@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - "platform-api/**"
+      - "firebase.json"
       - ".github/workflows/platform-api-ci.yml"
   push:
     branches:
@@ -12,6 +13,7 @@ on:
       - "phase-*"
     paths:
       - "platform-api/**"
+      - "firebase.json"
       - ".github/workflows/platform-api-ci.yml"
 
 permissions:
@@ -61,6 +63,67 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: platform-api/package-lock.json
+
+      - name: Validate Firebase hosting routing contract
+        working-directory: .
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+
+          const config = JSON.parse(
+            fs.readFileSync("firebase.json", "utf8"),
+          );
+
+          const rewrites = config?.hosting?.rewrites;
+
+          if (!Array.isArray(rewrites)) {
+            throw new Error("firebase.json hosting.rewrites must be an array");
+          }
+
+          if (rewrites.length !== 3) {
+            throw new Error(
+              `Expected exactly 3 hosting rewrites; found ${rewrites.length}`,
+            );
+          }
+
+          const [api, v1, spa] = rewrites;
+
+          if (
+            api?.source !== "/api/**" ||
+            api?.function !== "api" ||
+            Object.keys(api).sort().join(",") !== "function,source"
+          ) {
+            throw new Error(
+              "Rewrite #1 must be exactly /api/** -> Firebase Function api",
+            );
+          }
+
+          if (
+            v1?.source !== "/v1/**" ||
+            v1?.run?.serviceId !== "wildleaf-platform-api" ||
+            v1?.run?.region !== "asia-south1" ||
+            Object.keys(v1).sort().join(",") !== "run,source" ||
+            Object.keys(v1.run).sort().join(",") !== "region,serviceId"
+          ) {
+            throw new Error(
+              "Rewrite #2 must be exactly /v1/** -> Cloud Run wildleaf-platform-api in asia-south1",
+            );
+          }
+
+          if (
+            spa?.source !== "**" ||
+            spa?.destination !== "/customer/index.html" ||
+            Object.keys(spa).sort().join(",") !== "destination,source"
+          ) {
+            throw new Error(
+              "Rewrite #3 must be exactly ** -> /customer/index.html",
+            );
+          }
+
+          console.log(
+            "Firebase hosting routing contract validated successfully",
+          );
+          NODE
 
       - name: Install dependencies
         run: npm ci
