@@ -23,6 +23,13 @@
         "function": "api"
       },
       {
+        "source": "/v1/**",
+        "run": {
+          "serviceId": "wildleaf-platform-api",
+          "region": "asia-south1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/customer/index.html"
       }
