@@ -16,6 +16,7 @@ import {
 
 const auth = firebase.auth();
 const pendingUploadKeys = new Map();
+const pendingPropertyCreateKeys = new Map();
 const state = {
   session: null,
   screen: null,
@@ -326,18 +327,33 @@ byId("organizationSelect").addEventListener("change", (event) => {
 
 byId("createPropertyForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const body = {
+    name: data.name.trim(),
+    timezone: data.timezone.trim(),
+  };
+  const fingerprint = [state.organizationId, body.name, body.timezone].join(
+    ":",
+  );
+  const key =
+    pendingPropertyCreateKeys.get(fingerprint) ||
+    newIdempotencyKey("property-create");
+  pendingPropertyCreateKeys.set(fingerprint, key);
   run(async () => {
-    const result = await idempotent(
+    const result = await api(
       `/v1/partner/organizations/${state.organizationId}/properties`,
-      "POST",
-      "property-create",
-      { name: data.name.trim(), timezone: data.timezone.trim() },
+      {
+        method: "POST",
+        body,
+        idempotencyKey: key,
+      },
     );
-    event.currentTarget.reset();
-    event.currentTarget.timezone.value = "Asia/Kolkata";
-    event.currentTarget.classList.add("hidden");
     await openProperty(state.organizationId, result.property.id);
+    pendingPropertyCreateKeys.delete(fingerprint);
+    form.reset();
+    form.elements.timezone.value = "Asia/Kolkata";
+    form.classList.add("hidden");
     showMessage(
       "Property draft created. Complete the profile and onboarding checklist.",
     );

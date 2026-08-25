@@ -116,3 +116,35 @@ test("the portal uses canonical v1 APIs and never restores the legacy admin or s
     /DATABASE_URL|FIREBASE_PRIVATE_KEY|RAZORPAY_KEY_SECRET/,
   );
 });
+
+test("property draft creation preserves exact-retry idempotency across UI failures", () => {
+  assert.match(source, /const pendingPropertyCreateKeys = new Map\(\);/);
+  assert.match(source, /const form = event\.currentTarget;/);
+  assert.match(source, /pendingPropertyCreateKeys\.get\(fingerprint\)/);
+  assert.match(source, /idempotencyKey: key/);
+  assert.match(source, /pendingPropertyCreateKeys\.delete\(fingerprint\)/);
+  assert.match(source, /form\.reset\(\)/);
+  const propertyCreateStart = source.indexOf(
+    'byId("createPropertyForm").addEventListener("submit"',
+  );
+  const propertyCreateEnd = source.indexOf(
+    "async function fetchOwnerProperties()",
+    propertyCreateStart,
+  );
+  const propertyCreateHandler = source.slice(
+    propertyCreateStart,
+    propertyCreateEnd,
+  );
+  assert.doesNotMatch(propertyCreateHandler, /event\.currentTarget\.reset\(\)/);
+});
+
+test("property name inputs disable browser autofill", () => {
+  assert.match(
+    html,
+    /id="createPropertyForm"[\s\S]*?Property name<input[\s\S]*?name="name"[\s\S]*?autocomplete="off"/,
+  );
+  assert.match(
+    html,
+    /id="profileForm"[\s\S]*?Property name<input[\s\S]*?name="name"[\s\S]*?autocomplete="off"/,
+  );
+});
