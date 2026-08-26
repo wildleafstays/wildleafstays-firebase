@@ -238,13 +238,39 @@ describe("Phase 3B atomic inventory holds", () => {
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
   });
 
-  it("supports full-property-only inventory without room categories", async () => {
+  it("fails closed when a full-property hold has no active physical rooms", async () => {
     const fixture = await createFixture("FULL_PROPERTY_ONLY", []);
+
+    await expect(createHold(fixture, [fullPropertyItem])).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
+  });
+
+  it("derives a full-property hold from every active physical-room category capacity", async () => {
+    const fixture = await createFixture("FULL_PROPERTY_ONLY", [2, 1]);
+    const firstCategoryId = fixture.roomCategoryIds[0] ?? "";
+    const secondCategoryId = fixture.roomCategoryIds[1] ?? "";
+
     const hold = await createHold(fixture, [fullPropertyItem]);
 
     expect(hold.hold.status).toBe("ACTIVE");
-    expect(hold.hold.items).toHaveLength(1);
-    expect(hold.hold.items[0]?.bucketType).toBe("FULL_PROPERTY");
+    expect(hold.hold.items).toHaveLength(2);
+    expect(hold.hold.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          bucketType: "ROOM_CATEGORY",
+          roomCategoryId: firstCategoryId,
+          quantity: 2
+        }),
+        expect.objectContaining({
+          bucketType: "ROOM_CATEGORY",
+          roomCategoryId: secondCategoryId,
+          quantity: 1
+        })
+      ])
+    );
+    expect(hold.hold.items.some((item) => item.bucketType === "FULL_PROPERTY")).toBe(false);
   });
 
   it("prevents a full-property hold after an underlying room is held in BOTH mode", async () => {

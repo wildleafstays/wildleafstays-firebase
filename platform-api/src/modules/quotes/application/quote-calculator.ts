@@ -1,3 +1,4 @@
+import { calculateFullPropertyExtraGuestCharge } from "../../rates/application/derived-full-property-source.js";
 import { ConflictError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { ResolvedGuestAgePolicy } from "../../commercial/domain/commercial-quote-resolution.js";
 import type { InventoryAvailabilityResult } from "../../inventory/domain/inventory.js";
@@ -311,8 +312,33 @@ export function calculateQuote(
     }
 
     const accommodation = day.rateMinor * quantity;
-    const extraAdult = day.extraAdultMinor * extraAdults;
-    const extraChild = day.extraChildMinor * extraChildren;
+
+    let extraAdult: number;
+    let extraChild: number;
+
+    if (calendar.rateProduct.productType === "FULL_PROPERTY") {
+      if (!day.fullPropertyCategoryRates) {
+        throw new ConflictError(
+          "Derived full-property category rates are missing from the quoted night",
+          {
+            stayDate: day.stayDate
+          }
+        );
+      }
+
+      const charge = calculateFullPropertyExtraGuestCharge(
+        day.fullPropertyCategoryRates,
+        extraAdults,
+        extraChildren
+      );
+
+      extraAdult = charge.extraAdultMinor;
+      extraChild = charge.extraChildMinor;
+    } else {
+      extraAdult = day.extraAdultMinor * extraAdults;
+      extraChild = day.extraChildMinor * extraChildren;
+    }
+
     const extras = extraAdult + extraChild;
     const nightTotal = accommodation + extras;
 

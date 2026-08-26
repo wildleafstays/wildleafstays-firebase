@@ -56,6 +56,10 @@ export interface CreateRoomCategoryInput {
   accommodationType: AccommodationType;
   description: string | null;
   baseOccupancy: number;
+  baseAdults?: number | null;
+  baseChildren?: number | null;
+  defaultExtraAdultMinor?: number | null;
+  defaultExtraChildMinor?: number | null;
   maxAdults: number;
   maxChildren: number;
   maxOccupancy: number;

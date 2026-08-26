@@ -516,3 +516,131 @@ describe("Phase 3D rate plan and nightly rate foundation", () => {
     ).rejects.toMatchObject({ code: "ACCESS_DENIED", statusCode: 403 });
   });
 });
+
+describe("simple owner room-category base rate", () => {
+  it("creates a room-only product from category occupancy and extra-guest defaults without floor or ceiling guardrails", async () => {
+    const fixture = await createFixture("ROOMS_ONLY");
+
+    if (!fixture.roomCategoryId) {
+      throw new Error("fixture room category is required");
+    }
+
+    await db
+      .updateTable("room_categories")
+      .set({
+        base_occupancy: 2,
+        base_adults: 2,
+        base_children: 0,
+        max_adults: 3,
+        max_children: 2,
+        max_occupancy: 4,
+        default_extra_adult_minor: 120_000,
+        default_extra_child_minor: 50_000
+      })
+      .where("id", "=", fixture.roomCategoryId)
+      .execute();
+
+    const service = new RateService();
+
+    const configured = await db.transaction().execute((trx) =>
+      service.configureOwnerRoomCategoryBaseRate(
+        trx,
+        fixture.actor,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          roomCategoryId: fixture.roomCategoryId!,
+          baseRateMinor: 500_000,
+          expectedVersion: null
+        },
+        metadata()
+      )
+    );
+
+    expect(configured.rateProduct).toMatchObject({
+      productType: "ROOM_CATEGORY",
+      roomCategoryId: fixture.roomCategoryId,
+      baseRateMinor: 500_000,
+      floorRateMinor: null,
+      ceilingRateMinor: null,
+      includedAdults: 2,
+      includedChildren: 0,
+      maxAdults: 3,
+      maxChildren: 2,
+      maxOccupancy: 4,
+      extraAdultMinor: 120_000,
+      extraChildMinor: 50_000,
+      version: 1
+    });
+
+    await db.transaction().execute((trx) =>
+      service.setCalendarDays(
+        trx,
+        fixture.actor,
+        fixture.organizationId,
+        fixture.propertyId,
+        configured.rateProduct.id,
+        [
+          {
+            stayDate: "2033-07-01",
+            rateMinor: 9_500_000,
+            extraAdultMinor: null,
+            extraChildMinor: null,
+            minimumStay: 1,
+            maximumStay: null,
+            closedToArrival: false,
+            closedToDeparture: false,
+            stopSell: false,
+            source: "MANUAL",
+            expectedVersion: null
+          }
+        ],
+        metadata()
+      )
+    );
+
+    const calendar = await db
+      .transaction()
+      .execute((trx) =>
+        service.getCalendar(
+          trx,
+          fixture.actor,
+          fixture.organizationId,
+          fixture.propertyId,
+          configured.rateProduct.id,
+          "2033-07-01",
+          "2033-07-02"
+        )
+      );
+
+    expect(calendar.days[0]).toMatchObject({
+      rateMinor: 9_500_000,
+      extraAdultMinor: 120_000,
+      extraChildMinor: 50_000
+    });
+
+    const updated = await db.transaction().execute((trx) =>
+      service.configureOwnerRoomCategoryBaseRate(
+        trx,
+        fixture.actor,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          roomCategoryId: fixture.roomCategoryId!,
+          baseRateMinor: 550_000,
+          expectedVersion: configured.rateProduct.version
+        },
+        metadata()
+      )
+    );
+
+    expect(updated.rateProduct.id).toBe(configured.rateProduct.id);
+
+    expect(updated.rateProduct).toMatchObject({
+      baseRateMinor: 550_000,
+      floorRateMinor: null,
+      ceilingRateMinor: null,
+      version: 2
+    });
+  });
+});

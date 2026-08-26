@@ -406,18 +406,19 @@ describe("Phase 4A immutable quote engine foundation", () => {
     ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
   });
 
-  it("supports full-property-only quotes without room categories", async () => {
+  it("rejects full-property quotes without active physical-room category sources", async () => {
     const fixture = await createFixture("FULL_PROPERTY_ONLY", 0, "FULL_PROPERTY");
-    const result = await createQuote(fixture, {
-      arrivalDate: "2034-05-01",
-      departureDate: "2034-05-03",
-      units: [{ adults: 4, childAges: [7, 10] }]
-    });
 
-    expect(result.quote.productType).toBe("FULL_PROPERTY");
-    expect(result.quote.roomCategoryId).toBeNull();
-    expect(result.quote.quantity).toBe(1);
-    expect(result.quote.nights.every((night) => night.sellableQuantitySnapshot === 1)).toBe(true);
+    await expect(
+      createQuote(fixture, {
+        arrivalDate: "2034-05-01",
+        departureDate: "2034-05-03",
+        units: [{ adults: 4, childAges: [7, 10] }]
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
   });
 
   it("writes quote event, audit and outbox while protecting the snapshot", async () => {

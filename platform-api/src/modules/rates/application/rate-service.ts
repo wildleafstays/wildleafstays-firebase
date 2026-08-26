@@ -1,3 +1,7 @@
+import {
+  deriveFullPropertySource,
+  type FullPropertyCategoryRateSource
+} from "./derived-full-property-source.js";
 import type { Transaction } from "kysely";
 import type { Database, JsonObject } from "../../../infrastructure/database/types.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
@@ -114,12 +118,20 @@ function rateProductView(product: RateProductRecord): RateProductView {
 
 function validateProductNumbers(input: ConfigureRateProductInput): void {
   money(input.baseRateMinor, "baseRateMinor");
-  money(input.floorRateMinor, "floorRateMinor");
-  money(input.ceilingRateMinor, "ceilingRateMinor");
+  if (input.floorRateMinor !== null) {
+    money(input.floorRateMinor, "floorRateMinor");
+  }
+
+  if (input.ceilingRateMinor !== null) {
+    money(input.ceilingRateMinor, "ceilingRateMinor");
+  }
   money(input.extraAdultMinor, "extraAdultMinor");
   money(input.extraChildMinor, "extraChildMinor");
 
-  if (input.floorRateMinor > input.baseRateMinor || input.baseRateMinor > input.ceilingRateMinor) {
+  if (
+    (input.floorRateMinor !== null && input.floorRateMinor > input.baseRateMinor) ||
+    (input.ceilingRateMinor !== null && input.baseRateMinor > input.ceilingRateMinor)
+  ) {
     throw new ValidationError("Rate guardrails must satisfy floor <= base <= ceiling");
   }
 
@@ -154,7 +166,10 @@ function validateProductNumbers(input: ConfigureRateProductInput): void {
 function validateCalendarEntry(entry: SetRateCalendarDayInput, product: RateProductRecord): void {
   parseDate(entry.stayDate);
   money(entry.rateMinor, "rateMinor");
-  if (entry.rateMinor < product.floor_rate_minor || entry.rateMinor > product.ceiling_rate_minor) {
+  if (
+    (product.floor_rate_minor !== null && entry.rateMinor < product.floor_rate_minor) ||
+    (product.ceiling_rate_minor !== null && entry.rateMinor > product.ceiling_rate_minor)
+  ) {
     throw new ValidationError("Daily rate is outside the product floor/ceiling guardrails", {
       stayDate: entry.stayDate,
       floorRateMinor: product.floor_rate_minor,
@@ -321,6 +336,195 @@ export class RateService {
     await this.property(trx, actor, organizationId, propertyId, Permissions.RATES_READ);
     const products = await this.rates.listProducts(trx, organizationId, propertyId);
     return { rateProducts: products.map(rateProductView) };
+  }
+
+  async configureOwnerRoomCategoryBaseRate(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      roomCategoryId: string;
+      baseRateMinor: number;
+      expectedVersion: number | null;
+    },
+    request: RequestMetadata
+  ): Promise<{ rateProduct: RateProductView }> {
+    await this.property(
+      trx,
+      actor,
+      input.organizationId,
+      input.propertyId,
+      Permissions.RATES_MANAGE
+    );
+
+    money(input.baseRateMinor, "baseRateMinor");
+
+    await this.rates.lockOwnerRateSetup(trx, input.propertyId);
+
+    const category = await this.rates.findRoomCategory(
+      trx,
+      input.organizationId,
+      input.propertyId,
+      input.roomCategoryId
+    );
+
+    if (!category || category.status !== "ACTIVE") {
+      throw new NotFoundError("Active room category not found");
+    }
+
+    if (
+      category.base_adults === null ||
+      category.base_children === null ||
+      category.default_extra_adult_minor === null ||
+      category.default_extra_child_minor === null
+    ) {
+      throw new ConflictError(
+        "Complete the room category guest and extra-charge defaults before setting its base rate"
+      );
+    }
+
+    const plans = await this.rates.listPlans(trx, input.organizationId, input.propertyId);
+
+    const products = await this.rates.listProducts(trx, input.organizationId, input.propertyId);
+
+    const planById = new Map(plans.map((plan) => [plan.id, plan]));
+
+    const activeEpProducts = products.filter((product) => {
+      const plan = planById.get(product.rate_plan_id);
+
+      return (
+        product.product_type === "ROOM_CATEGORY" &&
+        product.room_category_id === input.roomCategoryId &&
+        product.status === "ACTIVE" &&
+        plan?.status === "ACTIVE" &&
+        plan.meal_plan_code === "EP"
+      );
+    });
+
+    if (activeEpProducts.length > 1) {
+      throw new ConflictError(
+        "More than one active EP rate product exists for this room category; review the existing rate setup before continuing"
+      );
+    }
+
+    let ratePlanId: string;
+    let existingProduct = activeEpProducts[0];
+
+    if (existingProduct) {
+      const plan = planById.get(existingProduct.rate_plan_id);
+
+      if (!plan || plan.status !== "ACTIVE" || plan.meal_plan_code !== "EP") {
+        throw new ConflictError(
+          "The existing room-category rate product is not attached to an active EP plan"
+        );
+      }
+
+      ratePlanId = plan.id;
+    } else {
+      const ownerPlans = plans.filter((plan) => plan.code === "OWNER_EP");
+
+      if (ownerPlans.length > 1) {
+        throw new ConflictError(
+          "Multiple OWNER_EP rate plans exist; review the rate setup before continuing"
+        );
+      }
+
+      const ownerPlan = ownerPlans[0];
+
+      if (ownerPlan) {
+        if (ownerPlan.status !== "ACTIVE" || ownerPlan.meal_plan_code !== "EP") {
+          throw new ConflictError("The existing OWNER_EP plan is not an active room-only plan");
+        }
+
+        ratePlanId = ownerPlan.id;
+      } else {
+        const activeEpPlans = plans.filter(
+          (plan) => plan.status === "ACTIVE" && plan.meal_plan_code === "EP"
+        );
+
+        if (activeEpPlans.length === 1) {
+          const activeEpPlan = activeEpPlans[0];
+
+          if (!activeEpPlan) {
+            throw new ConflictError(
+              "The active EP rate plan disappeared while configuring the category"
+            );
+          }
+
+          ratePlanId = activeEpPlan.id;
+        } else {
+          const created = await this.createRatePlan(
+            trx,
+            actor,
+            {
+              organizationId: input.organizationId,
+              propertyId: input.propertyId,
+              code: "OWNER_EP",
+              name: "Room Only",
+              description: "System-managed room-only plan for the simple owner rates calendar",
+              mealPlanCode: "EP"
+            },
+            request
+          );
+
+          ratePlanId = created.ratePlan.id;
+        }
+      }
+
+      const keyedProduct = products.find(
+        (product) =>
+          product.rate_plan_id === ratePlanId &&
+          product.product_type === "ROOM_CATEGORY" &&
+          product.room_category_id === input.roomCategoryId
+      );
+
+      if (keyedProduct) {
+        if (keyedProduct.status !== "ACTIVE") {
+          throw new ConflictError(
+            "An inactive EP rate product already exists for this room category; review it before continuing"
+          );
+        }
+
+        existingProduct = keyedProduct;
+      }
+    }
+
+    if (existingProduct && input.expectedVersion !== existingProduct.version) {
+      throw new ConflictError("Rate product has changed; refresh before updating", {
+        currentVersion: existingProduct.version
+      });
+    }
+
+    if (!existingProduct && input.expectedVersion !== null) {
+      throw new ConflictError(
+        "The rate product no longer matches the version shown on screen; refresh before continuing"
+      );
+    }
+
+    return this.configureRateProduct(
+      trx,
+      actor,
+      {
+        organizationId: input.organizationId,
+        propertyId: input.propertyId,
+        ratePlanId,
+        productType: "ROOM_CATEGORY",
+        roomCategoryId: input.roomCategoryId,
+        baseRateMinor: input.baseRateMinor,
+        floorRateMinor: null,
+        ceilingRateMinor: null,
+        includedAdults: category.base_adults,
+        includedChildren: category.base_children,
+        maxAdults: category.max_adults,
+        maxChildren: category.max_children,
+        maxOccupancy: category.max_occupancy,
+        extraAdultMinor: category.default_extra_adult_minor,
+        extraChildMinor: category.default_extra_child_minor,
+        expectedVersion: existingProduct?.version ?? null
+      },
+      request
+    );
   }
 
   async configureRateProduct(
@@ -630,6 +834,195 @@ export class RateService {
     return { updated };
   }
 
+  private async getUniversalFullPropertyCalendarCore(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    rateProductId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<RateCalendarView> {
+    const dates = dateRange(startDate, endDate);
+
+    const shellProduct = await this.rates.findProduct(
+      trx,
+      organizationId,
+      propertyId,
+      rateProductId
+    );
+
+    if (!shellProduct) {
+      throw new NotFoundError("Rate product not found");
+    }
+
+    if (shellProduct.product_type !== "FULL_PROPERTY" || shellProduct.status !== "ACTIVE") {
+      throw new ConflictError(
+        "Universal full-property pricing requires an active full-property rate identity"
+      );
+    }
+
+    const shellPlan = await this.rates.findPlan(
+      trx,
+      organizationId,
+      propertyId,
+      shellProduct.rate_plan_id
+    );
+
+    if (!shellPlan || shellPlan.status !== "ACTIVE" || shellPlan.meal_plan_code !== "EP") {
+      throw new ConflictError(
+        "Universal full-property pricing currently requires an active room-only rate plan"
+      );
+    }
+
+    const [categories, plans, products] = await Promise.all([
+      this.rates.listActiveRoomCategoryPricingSources(trx, organizationId, propertyId),
+      this.rates.listPlans(trx, organizationId, propertyId),
+      this.rates.listProducts(trx, organizationId, propertyId)
+    ]);
+
+    const planById = new Map(plans.map((plan) => [plan.id, plan]));
+
+    const categorySources: FullPropertyCategoryRateSource[] = [];
+
+    for (const category of categories) {
+      if (category.physical_capacity <= 0) {
+        continue;
+      }
+
+      if (
+        category.base_adults === null ||
+        category.base_children === null ||
+        category.default_extra_adult_minor === null ||
+        category.default_extra_child_minor === null
+      ) {
+        throw new ConflictError(
+          "Every active physical-room category must have guest and extra-charge defaults before full-property pricing can be derived",
+          {
+            roomCategoryId: category.room_category_id
+          }
+        );
+      }
+
+      const candidates = products.filter((product) => {
+        const plan = planById.get(product.rate_plan_id);
+
+        return (
+          product.product_type === "ROOM_CATEGORY" &&
+          product.room_category_id === category.room_category_id &&
+          product.status === "ACTIVE" &&
+          plan?.status === "ACTIVE" &&
+          plan.meal_plan_code === "EP"
+        );
+      });
+
+      if (candidates.length !== 1) {
+        throw new ConflictError(
+          candidates.length === 0
+            ? "An active physical-room category is missing its single active EP rate product"
+            : "An active physical-room category has more than one active EP rate product",
+          {
+            roomCategoryId: category.room_category_id,
+            candidateCount: candidates.length
+          }
+        );
+      }
+
+      const product = candidates[0]!;
+
+      const overrides = await this.rates.listCalendarDays(trx, product.id, startDate, endDate);
+
+      const overrideByDate = new Map(overrides.map((row) => [row.stay_date, row]));
+
+      const defaultExtraAdultMinor = category.default_extra_adult_minor;
+      const defaultExtraChildMinor = category.default_extra_child_minor;
+
+      categorySources.push({
+        roomCategoryId: category.room_category_id,
+        physicalCapacity: category.physical_capacity,
+        includedAdults: category.base_adults,
+        includedChildren: category.base_children,
+        maxAdults: category.max_adults,
+        maxChildren: category.max_children,
+        maxOccupancy: category.max_occupancy,
+        days: dates.map((stayDate) => {
+          const row = overrideByDate.get(stayDate);
+
+          if (!row) {
+            return {
+              stayDate,
+              rateMinor: product.base_rate_minor,
+              extraAdultMinor: defaultExtraAdultMinor,
+              extraChildMinor: defaultExtraChildMinor,
+              minimumStay: 1,
+              maximumStay: null,
+              closedToArrival: false,
+              closedToDeparture: false,
+              stopSell: false
+            };
+          }
+
+          return {
+            stayDate,
+            rateMinor: row.rate_minor,
+            extraAdultMinor: row.extra_adult_minor ?? defaultExtraAdultMinor,
+            extraChildMinor: row.extra_child_minor ?? defaultExtraChildMinor,
+            minimumStay: row.minimum_stay,
+            maximumStay: row.maximum_stay,
+            closedToArrival: row.closed_to_arrival,
+            closedToDeparture: row.closed_to_departure,
+            stopSell: row.stop_sell
+          };
+        })
+      });
+    }
+
+    const derived = deriveFullPropertySource(dates, categorySources);
+
+    const firstDerivedDay = derived.days[0];
+
+    if (!firstDerivedDay) {
+      throw new ConflictError("Universal full-property calendar contains no derived date");
+    }
+
+    const shellView = rateProductView(shellProduct);
+
+    return {
+      ratePlan: ratePlanView(shellPlan),
+      rateProduct: {
+        ...shellView,
+        baseRateMinor: firstDerivedDay.rateMinor,
+        floorRateMinor: null,
+        ceilingRateMinor: null,
+        includedAdults: derived.includedAdults,
+        includedChildren: derived.includedChildren,
+        maxAdults: derived.maxAdults,
+        maxChildren: derived.maxChildren,
+        maxOccupancy: derived.maxOccupancy,
+        extraAdultMinor: 0,
+        extraChildMinor: 0
+      },
+      currencyCode: shellPlan.currency_code,
+      startDate,
+      endDate,
+      days: derived.days.map((day) => ({
+        stayDate: day.stayDate,
+        rateMinor: day.rateMinor,
+        extraAdultMinor: 0,
+        extraChildMinor: 0,
+        minimumStay: day.minimumStay,
+        maximumStay: day.maximumStay,
+        closedToArrival: day.closedToArrival,
+        closedToDeparture: day.closedToDeparture,
+        stopSell: day.stopSell,
+        source: "SYSTEM",
+        overrideVersion: null,
+        fullPropertyCategoryRates: day.categoryRates.map((categoryRate) => ({
+          ...categoryRate
+        }))
+      }))
+    };
+  }
+
   private async getCalendarCore(
     trx: Transaction<Database>,
     organizationId: string,
@@ -692,6 +1085,63 @@ export class RateService {
       endDate,
       days
     };
+  }
+
+  async getQuoteCalendar(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    rateProductId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<RateCalendarView> {
+    await this.property(trx, actor, organizationId, propertyId, Permissions.RATES_READ);
+
+    const product = await this.rates.findProduct(trx, organizationId, propertyId, rateProductId);
+
+    if (!product) {
+      throw new NotFoundError("Rate product not found");
+    }
+
+    return product.product_type === "FULL_PROPERTY"
+      ? this.getUniversalFullPropertyCalendarCore(
+          trx,
+          organizationId,
+          propertyId,
+          rateProductId,
+          startDate,
+          endDate
+        )
+      : this.getCalendarCore(trx, organizationId, propertyId, rateProductId, startDate, endDate);
+  }
+
+  async getQuoteCalendarSystem(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    rateProductId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<RateCalendarView> {
+    await this.propertyContext(trx, organizationId, propertyId);
+
+    const product = await this.rates.findProduct(trx, organizationId, propertyId, rateProductId);
+
+    if (!product) {
+      throw new NotFoundError("Rate product not found");
+    }
+
+    return product.product_type === "FULL_PROPERTY"
+      ? this.getUniversalFullPropertyCalendarCore(
+          trx,
+          organizationId,
+          propertyId,
+          rateProductId,
+          startDate,
+          endDate
+        )
+      : this.getCalendarCore(trx, organizationId, propertyId, rateProductId, startDate, endDate);
   }
 
   async getCalendar(

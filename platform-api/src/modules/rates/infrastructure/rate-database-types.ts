@@ -24,8 +24,8 @@ export interface RatePlanProductsTable {
   product_type: string;
   room_category_id: string | null;
   base_rate_minor: number;
-  floor_rate_minor: number;
-  ceiling_rate_minor: number;
+  floor_rate_minor: number | null;
+  ceiling_rate_minor: number | null;
   included_adults: number;
   included_children: number;
   max_adults: number;

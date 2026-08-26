@@ -223,7 +223,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     db: deps.db,
     identityVerifier: deps.identityVerifier,
     userRepository,
-    accessRepository
+    accessRepository,
+    propertyAssetStorage: deps.propertyAssetStorage ?? new UnavailablePropertyAssetStorage()
   });
 
   await registerPropertyOnboardingRoutes(app, {

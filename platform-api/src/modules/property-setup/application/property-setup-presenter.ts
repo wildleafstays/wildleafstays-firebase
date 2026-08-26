@@ -38,6 +38,10 @@ export interface RoomCategoryView extends JsonObject {
   accommodationType: string;
   description: string | null;
   baseOccupancy: number;
+  baseAdults: number | null;
+  baseChildren: number | null;
+  defaultExtraAdultMinor: number | null;
+  defaultExtraChildMinor: number | null;
   maxAdults: number;
   maxChildren: number;
   maxOccupancy: number;
@@ -106,6 +110,10 @@ export function presentRoomCategory(row: RoomCategoryRecord): RoomCategoryView {
     accommodationType: row.accommodation_type,
     description: row.description,
     baseOccupancy: row.base_occupancy,
+    baseAdults: row.base_adults,
+    baseChildren: row.base_children,
+    defaultExtraAdultMinor: row.default_extra_adult_minor,
+    defaultExtraChildMinor: row.default_extra_child_minor,
     maxAdults: row.max_adults,
     maxChildren: row.max_children,
     maxOccupancy: row.max_occupancy,

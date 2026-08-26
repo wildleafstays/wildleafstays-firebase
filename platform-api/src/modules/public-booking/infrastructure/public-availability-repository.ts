@@ -16,6 +16,13 @@ export interface PublicAvailabilityCategoryRecord {
   code: string;
   name: string;
   capacity: number;
+  base_adults: number | null;
+  base_children: number | null;
+  max_adults: number;
+  max_children: number;
+  max_occupancy: number;
+  default_extra_adult_minor: number | null;
+  default_extra_child_minor: number | null;
 }
 
 export interface PublicAvailabilityBucketRecord {
@@ -107,12 +114,30 @@ export class PublicAvailabilityRepository {
         "rc.id as id",
         "rc.code as code",
         "rc.name as name",
+        "rc.base_adults as base_adults",
+        "rc.base_children as base_children",
+        "rc.max_adults as max_adults",
+        "rc.max_children as max_children",
+        "rc.max_occupancy as max_occupancy",
+        "rc.default_extra_adult_minor as default_extra_adult_minor",
+        "rc.default_extra_child_minor as default_extra_child_minor",
         sql<number>`count(pu.id)::int`.as("capacity")
       ])
       .where("rc.organization_id", "=", organizationId)
       .where("rc.property_id", "=", propertyId)
       .where("rc.status", "=", "ACTIVE")
-      .groupBy(["rc.id", "rc.code", "rc.name"])
+      .groupBy([
+        "rc.id",
+        "rc.code",
+        "rc.name",
+        "rc.base_adults",
+        "rc.base_children",
+        "rc.max_adults",
+        "rc.max_children",
+        "rc.max_occupancy",
+        "rc.default_extra_adult_minor",
+        "rc.default_extra_child_minor"
+      ])
       .orderBy("rc.sort_order")
       .orderBy("rc.name")
       .execute();

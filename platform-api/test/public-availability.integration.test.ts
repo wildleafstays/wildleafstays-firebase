@@ -132,9 +132,13 @@ async function createFixture(): Promise<Fixture> {
         accommodationType: "ROOM",
         description: "Phase 6B public room",
         baseOccupancy: 2,
+        baseAdults: 2,
+        baseChildren: 0,
         maxAdults: 3,
         maxChildren: 2,
         maxOccupancy: 4,
+        defaultExtraAdultMinor: 100_000,
+        defaultExtraChildMinor: 50_000,
         sizeSqm: 30,
         bedConfiguration: "1 King Bed",
         extraBedAllowed: true,
@@ -495,9 +499,9 @@ describe("Phase 6B public availability and rate preview", () => {
       productType: "FULL_PROPERTY",
       available: true,
       unavailableReasons: [],
-      accommodationMinor: 2_400_000,
-      extraGuestMinor: 0,
-      estimatedTotalMinor: 2_400_000
+      accommodationMinor: 2_100_000,
+      extraGuestMinor: 100_000,
+      estimatedTotalMinor: 2_200_000
     });
 
     const after = await sideEffectState(startDate, endDate);
@@ -572,7 +576,7 @@ describe("Phase 6B public availability and rate preview", () => {
     const holdId = await createRoomHold(startDate, endDate, "PAST");
     const before = await sideEffectState(startDate, endDate, holdId);
 
-    expect(before.buckets).toHaveLength(4);
+    expect(before.buckets).toHaveLength(2);
     expect(before.buckets.filter((row) => row.held_quantity === 1)).toHaveLength(2);
     expect(before.hold?.status).toBe("ACTIVE");
 

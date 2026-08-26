@@ -252,6 +252,18 @@ export interface RoomCategoriesTable {
   accommodation_type: string;
   description: string | null;
   base_occupancy: Generated<number>;
+  base_adults: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  base_children: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  default_extra_adult_minor: ColumnType<
+    number | null,
+    number | null | undefined,
+    number | null | undefined
+  >;
+  default_extra_child_minor: ColumnType<
+    number | null,
+    number | null | undefined,
+    number | null | undefined
+  >;
   max_adults: Generated<number>;
   max_children: Generated<number>;
   max_occupancy: Generated<number>;
@@ -303,6 +315,41 @@ export interface PropertyAmenitiesTable {
   property_id: string;
   amenity_code: string;
   details: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface RoomAmenityCatalogTable {
+  code: string;
+  name: string;
+  category: string;
+  active: Generated<boolean>;
+  sort_order: Generated<number>;
+  created_at: Generated<Date>;
+}
+
+export interface RoomCategoryAmenitiesTable {
+  organization_id: string;
+  property_id: string;
+  room_category_id: string;
+  amenity_code: string;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface RoomCategoryMediaTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  room_category_id: string;
+  storage_provider: string;
+  storage_key: string;
+  mime_type: string | null;
+  alt_text: string | null;
+  caption: string | null;
+  sort_order: Generated<number>;
+  status: Generated<string>;
+  created_by_user_id: string | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
@@ -440,6 +487,9 @@ export interface Database {
   physical_units: PhysicalUnitsTable;
   amenity_catalog: AmenityCatalogTable;
   property_amenities: PropertyAmenitiesTable;
+  room_amenity_catalog: RoomAmenityCatalogTable;
+  room_category_amenities: RoomCategoryAmenitiesTable;
+  room_category_media: RoomCategoryMediaTable;
   property_policies: PropertyPoliciesTable;
   property_media: PropertyMediaTable;
   property_documents: PropertyDocumentsTable;

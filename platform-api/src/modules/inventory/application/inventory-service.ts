@@ -171,9 +171,10 @@ export class InventoryService {
     saleMode: SaleMode,
     dates: string[]
   ): Promise<RoomCategoryCapacity[]> {
-    const categories = includesRooms(saleMode)
-      ? await this.repository.listRoomCategoryCapacities(db, organizationId, propertyId)
-      : [];
+    const categories =
+      includesRooms(saleMode) || includesFullProperty(saleMode)
+        ? await this.repository.listRoomCategoryCapacities(db, organizationId, propertyId)
+        : [];
 
     const seeds: BucketSeed[] = [];
 
@@ -186,17 +187,6 @@ export class InventoryService {
           roomCategoryId: category.id,
           stayDate: date,
           capacity: category.capacity
-        });
-      }
-
-      if (includesFullProperty(saleMode)) {
-        seeds.push({
-          organizationId,
-          propertyId,
-          bucketType: InventoryBucketTypes.FULL_PROPERTY,
-          roomCategoryId: null,
-          stayDate: date,
-          capacity: 1
         });
       }
     }
@@ -325,9 +315,6 @@ export class InventoryService {
 
     let roomCategory: RoomCategoryCapacity | undefined;
     if (input.bucketType === InventoryBucketTypes.ROOM_CATEGORY) {
-      if (!includesRooms(saleMode)) {
-        throw new ValidationError("This property is not configured for individual room sales");
-      }
       if (!input.roomCategoryId) {
         throw new ValidationError("roomCategoryId is required for room-category controls");
       }
@@ -341,15 +328,9 @@ export class InventoryService {
         throw new NotFoundError("Room category not found");
       }
     } else {
-      if (!includesFullProperty(saleMode)) {
-        throw new ValidationError("This property is not configured for full-property sales");
-      }
-      if (input.roomCategoryId) {
-        throw new ValidationError("roomCategoryId is not valid for full-property controls");
-      }
-      if (input.overbookingLimit !== null && input.overbookingLimit !== 0) {
-        throw new ValidationError("Full-property inventory cannot be overbooked");
-      }
+      throw new ValidationError(
+        "Full-property inventory is derived from room-category inventory and cannot be controlled separately"
+      );
     }
 
     await this.materialize(trx, input.organizationId, input.propertyId, saleMode, dates);

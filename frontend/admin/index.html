@@ -225,196 +225,149 @@
         <section id="calendarScreen" class="screen hidden">
           <div class="section-intro">
             <div>
-              <p class="eyebrow">Commercial operations</p>
-              <h2>Rates and inventory calendar</h2>
+              <p class="eyebrow">Rates & inventory</p>
+              <h2>Room rates and availability</h2>
             </div>
             <p>
-              Inventory remains authoritative in the backend. Every dated rate
-              update uses optimistic version checks.
+              Manage each room category across the selected dates. Entire-villa
+              availability is derived automatically from the same room
+              inventory.
             </p>
           </div>
-          <form id="calendarFilters" class="card filter-grid">
-            <label
-              >Hotel<select
-                name="propertyId"
-                id="calendarPropertySelect"
-              ></select
-            ></label>
-            <label>From<input name="startDate" type="date" required /></label>
-            <label>Until<input name="endDate" type="date" required /></label>
-            <label
-              >Rate product<select
-                name="rateProductId"
-                id="calendarRateProduct"
-              ></select
-            ></label>
-            <button type="submit">Refresh calendar</button>
-          </form>
 
-          <div class="operations-grid">
-            <form id="ratePlanForm" class="card form-grid two-column">
-              <div class="span-two">
-                <h3>Create rate plan</h3>
-                <p class="muted">For example, flexible room-only or MAP.</p>
-              </div>
-              <label>Code<input name="code" required maxlength="30" /></label>
-              <label>Name<input name="name" required maxlength="120" /></label>
-              <label
-                >Meal plan<select name="mealPlanCode">
-                  <option>EP</option>
-                  <option>CP</option>
-                  <option>MAP</option>
-                  <option>AP</option>
-                  <option>CUSTOM</option>
-                </select></label
-              >
-              <button class="span-two" type="submit">Create rate plan</button>
-            </form>
+          <form
+            id="calendarFilters"
+            class="card filter-grid owner-rate-filters"
+          >
+            <label>
+              Hotel
+              <select name="propertyId" id="calendarPropertySelect"></select>
+            </label>
 
-            <form id="rateProductForm" class="card form-grid two-column">
-              <div class="span-two">
-                <h3>Configure sellable product</h3>
-                <p class="muted">Amounts are entered in Indian rupees.</p>
-              </div>
-              <label
-                >Rate plan<select
-                  name="ratePlanId"
-                  id="productRatePlan"
-                  required
-                ></select
-              ></label>
-              <label
-                >Sell as<select name="productType" id="productType" required>
-                  <option value="ROOM_CATEGORY">Room category</option>
-                  <option value="FULL_PROPERTY">Full property</option>
-                </select></label
-              >
-              <label id="productRoomCategoryLabel"
-                >Room category<select
-                  name="roomCategoryId"
-                  id="productRoomCategory"
-                  required
-                ></select
-              ></label>
-              <label
-                >Base rate ₹<input
-                  name="baseRate"
-                  type="number"
-                  min="0"
-                  required
-              /></label>
-              <label
-                >Floor rate ₹<input
-                  name="floorRate"
-                  type="number"
-                  min="0"
-                  required
-              /></label>
-              <label
-                >Ceiling rate ₹<input
-                  name="ceilingRate"
-                  type="number"
-                  min="0"
-                  required
-              /></label>
-              <label
-                >Included adults<input
-                  name="includedAdults"
-                  type="number"
-                  min="1"
-                  value="2"
-                  required
-              /></label>
-              <label
-                >Maximum adults<input
-                  name="maxAdults"
-                  type="number"
-                  min="1"
-                  value="2"
-                  required
-              /></label>
-              <label
-                >Maximum children<input
-                  name="maxChildren"
-                  type="number"
-                  min="0"
-                  value="0"
-                  required
-              /></label>
-              <label
-                >Maximum occupancy<input
-                  name="maxOccupancy"
-                  type="number"
-                  min="1"
-                  value="2"
-                  required
-              /></label>
-              <label
-                >Extra adult ₹<input
-                  name="extraAdult"
-                  type="number"
-                  min="0"
-                  value="0"
-                  required
-              /></label>
-              <label
-                >Extra child ₹<input
-                  name="extraChild"
-                  type="number"
-                  min="0"
-                  value="0"
-                  required
-              /></label>
-              <button class="span-two" type="submit">Configure product</button>
-            </form>
-          </div>
+            <label>
+              From
+              <input name="startDate" type="date" required />
+            </label>
 
-          <form id="inventoryControlForm" class="card filter-grid">
-            <div>
-              <h3>Inventory control</h3>
-              <p class="muted">Set stop-sell and overbooking for this range.</p>
-            </div>
-            <label
-              >Inventory for<select
-                name="bucketType"
-                id="controlBucketType"
-                required
-              >
-                <option value="ROOM_CATEGORY">Room category</option>
-                <option value="FULL_PROPERTY">Full property</option>
-              </select></label
+            <label>
+              Until
+              <input name="endDate" type="date" required />
+            </label>
+
+            <div
+              class="owner-calendar-view"
+              role="group"
+              aria-label="Calendar view"
             >
-            <label id="controlRoomCategoryLabel"
-              >Room category<select
-                name="roomCategoryId"
-                id="controlRoomCategory"
-                required
-              ></select
-            ></label>
-            <label class="check-control"
-              ><input name="stopSell" type="checkbox" /> Stop sell</label
-            >
-            <label
-              >Overbooking limit<input
-                name="overbookingLimit"
-                type="number"
-                min="0"
-                value="0"
-                required
-            /></label>
-            <button type="submit">Apply inventory control</button>
-          </form>
-
-          <section class="card calendar-card">
-            <div class="card-heading">
-              <div>
-                <h3>Nightly calendar</h3>
-                <p id="calendarContext" class="muted"></p>
-              </div>
-              <button id="saveRateCalendar" type="button">
-                Save nightly rates
+              <span class="owner-calendar-view-label">View</span>
+              <button
+                type="button"
+                class="button-secondary owner-calendar-view-button"
+                data-calendar-view-days="7"
+              >
+                7 days
+              </button>
+              <button
+                type="button"
+                class="button-secondary owner-calendar-view-button active"
+                data-calendar-view-days="14"
+              >
+                14 days
+              </button>
+              <button
+                type="button"
+                class="button-secondary owner-calendar-view-button"
+                data-calendar-view-days="30"
+              >
+                30 days
               </button>
             </div>
+
+            <button type="submit">Refresh</button>
+          </form>
+
+          <form id="ownerRateBulkForm" class="card owner-rate-bulk-form">
+            <div class="owner-rate-bulk-heading">
+              <h3>Bulk update rates</h3>
+              <p class="muted">
+                Update EP or extra guest charges across several dates at once.
+                Inventory remains controlled separately.
+              </p>
+            </div>
+
+            <label>
+              Room category
+              <select name="roomCategoryId" id="ownerRateBulkCategory">
+                <option value="ALL">All room categories</option>
+              </select>
+            </label>
+
+            <label>
+              From
+              <input name="startDate" type="date" required />
+            </label>
+
+            <label>
+              Through
+              <input name="endDate" type="date" required />
+            </label>
+
+            <label>
+              Update
+              <select name="rateField" required>
+                <option value="base">EP rate</option>
+                <option value="adult">Extra adult</option>
+                <option value="child">Extra child</option>
+              </select>
+            </label>
+
+            <label>
+              Amount (₹)
+              <input name="amount" type="number" min="0" step="0.01" required />
+            </label>
+
+            <button type="submit">Apply &amp; save</button>
+          </form>
+
+          <form
+            id="ownerInventoryControlForm"
+            class="card filter-grid owner-inventory-control"
+          >
+            <div>
+              <h3>Availability control</h3>
+              <p class="muted">
+                Inventory quantity comes from your active physical rooms. Use
+                Stop sell only when you want to temporarily close a category.
+              </p>
+            </div>
+
+            <label>
+              Room category
+              <select
+                name="roomCategoryId"
+                id="ownerInventoryCategory"
+                required
+              ></select>
+            </label>
+
+            <label class="check-control">
+              <input name="stopSell" type="checkbox" />
+              Stop sell for selected dates
+            </label>
+
+            <button type="submit">Apply availability</button>
+          </form>
+
+          <section class="card calendar-card owner-rate-calendar-card">
+            <div class="card-heading">
+              <div>
+                <h3>Rates & inventory</h3>
+                <p id="calendarContext" class="muted">
+                  Inventory, room-only rate and extra guest charges.
+                </p>
+              </div>
+            </div>
+
             <div id="calendarGrid" class="calendar-scroll"></div>
           </section>
         </section>
@@ -669,114 +622,442 @@
               </div>
               <div class="setup-grid">
                 <form id="roomCategoryForm" class="form-grid two-column">
-                  <h4 class="span-two">Add room category</h4>
-                  <label
-                    >Code<input
-                      name="code"
-                      placeholder="DELUXE"
-                      maxlength="50"
-                      required
-                  /></label>
-                  <label
-                    >Name<input
+                  <div class="span-two">
+                    <p class="step-kicker">Step 2</p>
+                    <h3>Add a room category</h3>
+                    <p class="field-help">
+                      Create the types of rooms you sell, such as Deluxe Room,
+                      Luxury Balcony Room or Family Suite.
+                    </p>
+                  </div>
+
+                  <label class="span-two">
+                    Room category name
+                    <input
                       name="name"
-                      placeholder="Deluxe Room"
+                      placeholder="Luxury Balcony Room"
                       maxlength="150"
+                      autocomplete="off"
                       required
-                  /></label>
-                  <label
-                    >Type<select name="accommodationType" required>
-                      <option>ROOM</option>
-                      <option>SUITE</option>
-                      <option>COTTAGE</option>
-                      <option>HUT</option>
-                      <option>VILLA</option>
-                      <option>APARTMENT</option>
-                      <option>DORM</option>
-                      <option>TENT</option>
-                      <option>OTHER</option>
-                    </select></label
-                  >
-                  <label
-                    >Base occupancy<input
-                      name="baseOccupancy"
+                    />
+                  </label>
+
+                  <label>
+                    What kind of accommodation is it?
+                    <select name="accommodationType" required>
+                      <option value="ROOM">Room</option>
+                      <option value="SUITE">Suite</option>
+                      <option value="COTTAGE">Cottage</option>
+                      <option value="HUT">Hut</option>
+                      <option value="VILLA">Villa</option>
+                      <option value="APARTMENT">Apartment</option>
+                      <option value="DORM">Dorm</option>
+                      <option value="TENT">Tent</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Room size in square metres
+                    <input
+                      name="sizeSqm"
+                      type="number"
+                      min="1"
+                      max="10000"
+                      step="0.01"
+                      placeholder="28"
+                    />
+                  </label>
+
+                  <label class="span-two">
+                    Describe this room category
+                    <textarea
+                      name="description"
+                      maxlength="3000"
+                      placeholder="Tell guests what makes this room special."
+                    ></textarea>
+                  </label>
+
+                  <label>
+                    Base adults included in room price
+                    <input
+                      name="baseAdults"
                       type="number"
                       min="1"
                       max="50"
                       value="2"
                       required
-                  /></label>
-                  <label
-                    >Maximum adults<input
+                    />
+                  </label>
+
+                  <label>
+                    Base children included in room price
+                    <input
+                      name="baseChildren"
+                      type="number"
+                      min="0"
+                      max="50"
+                      value="0"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Default extra adult ?
+                    <input
+                      name="defaultExtraAdult"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value="0"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Default extra child ?
+                    <input
+                      name="defaultExtraChild"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value="0"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    How many adults can stay?
+                    <input
                       name="maxAdults"
                       type="number"
                       min="1"
                       max="50"
                       value="2"
                       required
-                  /></label>
-                  <label
-                    >Maximum children<input
+                    />
+                  </label>
+
+                  <label>
+                    How many children can stay?
+                    <input
                       name="maxChildren"
                       type="number"
                       min="0"
                       max="50"
                       value="0"
                       required
-                  /></label>
-                  <label
-                    >Maximum occupancy<input
+                    />
+                  </label>
+
+                  <label>
+                    How many guests can stay in total?
+                    <input
                       name="maxOccupancy"
                       type="number"
                       min="1"
                       max="100"
                       value="2"
                       required
-                  /></label>
-                  <label
-                    >Bed configuration<input
+                    />
+                  </label>
+
+                  <label class="span-two">
+                    Bed setup
+                    <input
                       name="bedConfiguration"
                       placeholder="1 king bed"
                       maxlength="500"
-                  /></label>
+                    />
+                  </label>
+
+                  <label class="span-two">
+                    Usual view from this room category
+                    <select name="defaultViewLabel">
+                      <option value="">No specific view</option>
+                      <option value="Mountain view">Mountain view</option>
+                      <option value="Valley view">Valley view</option>
+                      <option value="Forest view">Forest view</option>
+                      <option value="Garden view">Garden view</option>
+                      <option value="Pool view">Pool view</option>
+                      <option value="City view">City view</option>
+                      <option value="Lake view">Lake view</option>
+                      <option value="River view">River view</option>
+                      <option value="Sea view">Sea view</option>
+                    </select>
+                  </label>
+
+                  <label class="check-control span-two">
+                    <input name="extraBedAllowed" type="checkbox" />
+                    An extra bed can be added to this room category
+                  </label>
+
+                  <div class="span-two room-category-amenities">
+                    <h4>What does this room include?</h4>
+                    <p class="field-help">
+                      Tick all amenities available in this room category.
+                    </p>
+                    <div
+                      id="roomCategoryAmenityOptions"
+                      class="amenity-groups"
+                      aria-label="Room category amenities"
+                    ></div>
+                  </div>
+
                   <button class="span-two" type="submit">
                     Add room category
                   </button>
                 </form>
 
+                <form
+                  id="roomCategoryImageUploadForm"
+                  class="form-grid two-column room-category-photo-form"
+                >
+                  <div class="span-two">
+                    <h4>Room category photos</h4>
+                    <p class="field-help">
+                      Upload photographs that belong specifically to one room
+                      category. These stay separate from your overall property
+                      photographs.
+                    </p>
+                  </div>
+
+                  <label class="span-two">
+                    Which room category are these photos for?
+                    <select
+                      id="roomCategoryImageCategory"
+                      name="roomCategoryId"
+                      required
+                    ></select>
+                  </label>
+
+                  <label class="span-two">
+                    Choose photo
+                    <input
+                      name="file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/avif"
+                      required
+                    />
+                    <small>JPEG, PNG, WebP or AVIF. Maximum 8 MB.</small>
+                  </label>
+
+                  <label>
+                    Photo description
+                    <input
+                      name="altText"
+                      maxlength="500"
+                      placeholder="Luxury Balcony Room with valley view"
+                    />
+                  </label>
+
+                  <label>
+                    Caption
+                    <input
+                      name="caption"
+                      maxlength="1000"
+                      placeholder="Optional caption for guests"
+                    />
+                  </label>
+
+                  <button class="span-two" type="submit">
+                    Upload category photo
+                  </button>
+
+                  <div
+                    id="roomCategoryMediaList"
+                    class="compact-list span-two room-category-media-list"
+                  ></div>
+                </form>
+
+                <details class="span-two room-location-details">
+                  <summary>Set up buildings &amp; floors (optional)</summary>
+
+                  <p class="field-help">
+                    Use this only when you want to record which building, block,
+                    wing or floor a room belongs to.
+                  </p>
+
+                  <form
+                    id="structureForm"
+                    class="form-grid two-column room-location-form"
+                  >
+                    <div class="span-two">
+                      <h4>Add a building / area</h4>
+                    </div>
+
+                    <label>
+                      Building / area name
+                      <input
+                        name="name"
+                        maxlength="150"
+                        placeholder="Main Building or Cottage Block"
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      What is it?
+                      <select name="structureType" required>
+                        <option value="BUILDING">Building</option>
+                        <option value="WING">Wing</option>
+                        <option value="BLOCK">Block</option>
+                        <option value="TOWER">Tower</option>
+                        <option value="CLUSTER">Cluster</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </label>
+
+                    <label class="check-control">
+                      <input name="hasLift" type="checkbox" />
+                      Has lift access
+                    </label>
+
+                    <label class="check-control">
+                      <input name="wheelchairAccessible" type="checkbox" />
+                      Wheelchair accessible
+                    </label>
+
+                    <button class="span-two" type="submit">
+                      Add building / area
+                    </button>
+                  </form>
+
+                  <form
+                    id="floorForm"
+                    class="form-grid two-column room-location-form"
+                  >
+                    <div class="span-two">
+                      <h4>Add a floor</h4>
+                    </div>
+
+                    <label>
+                      Building / area
+                      <select
+                        id="floorStructure"
+                        name="structureId"
+                        required
+                      ></select>
+                    </label>
+
+                    <label>
+                      Floor name
+                      <input
+                        name="name"
+                        maxlength="150"
+                        placeholder="Ground Floor"
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Floor number
+                      <input
+                        name="floorNumber"
+                        type="number"
+                        min="-20"
+                        max="200"
+                        step="1"
+                        placeholder="0"
+                      />
+                      <small>
+                        Optional. Ground floor can be 0 and basement can be -1.
+                      </small>
+                    </label>
+
+                    <div></div>
+
+                    <label class="check-control">
+                      <input name="liftAccessible" type="checkbox" />
+                      Accessible by lift
+                    </label>
+
+                    <label class="check-control">
+                      <input name="wheelchairAccessible" type="checkbox" />
+                      Wheelchair accessible
+                    </label>
+
+                    <button class="span-two" type="submit">Add floor</button>
+                  </form>
+                </details>
+
                 <form id="physicalUnitForm" class="form-grid two-column">
-                  <h4 class="span-two">Add physical unit</h4>
-                  <label class="span-two"
-                    >Room category<select
+                  <div class="span-two">
+                    <div class="step-kicker">Step 3</div>
+                    <h4>Actual rooms</h4>
+                    <p class="field-help">
+                      Add each actual room, hut, cottage or unit that a guest
+                      can stay in.
+                    </p>
+                  </div>
+
+                  <label class="span-two">
+                    Room Name / Number
+                    <input
+                      name="roomName"
+                      placeholder="101 or King's Life"
+                      maxlength="150"
+                      required
+                    />
+                    <small>
+                      Enter the name or number actually displayed on the room
+                      door &mdash; e.g. 101, 202, King's Life, Pine View.
+                    </small>
+                  </label>
+
+                  <label class="span-two">
+                    Room Category
+                    <select
                       id="unitRoomCategory"
                       name="roomCategoryId"
                       required
-                    ></select
-                  ></label>
-                  <label
-                    >Unit code<input
-                      name="unitCode"
-                      placeholder="101"
-                      maxlength="80"
-                      required
-                  /></label>
-                  <label
-                    >Display name<input
-                      name="displayName"
-                      placeholder="Forest View 101"
-                      maxlength="150"
-                  /></label>
-                  <label class="check-control span-two"
-                    ><input name="hasView" type="checkbox" /> This unit has a
-                    named view</label
-                  >
-                  <label class="span-two"
-                    >View label<input
-                      name="viewLabel"
-                      placeholder="Mountain view"
-                      maxlength="150"
-                  /></label>
-                  <button class="span-two" type="submit">Add unit</button>
+                    ></select>
+                    <small> Which category does this room belong to? </small>
+                  </label>
+
+                  <label class="span-two">
+                    Floor
+                    <select id="unitFloor" name="floorId"></select>
+                    <small>
+                      Which floor is this room on? Leave it not set for a
+                      standalone hut, cottage or room where floor does not
+                      apply.
+                    </small>
+                  </label>
+
+                  <label class="span-two">
+                    View from this room
+                    <select name="viewLabel">
+                      <option value="">No special view</option>
+                      <option value="Mountain view">Mountain view</option>
+                      <option value="Valley view">Valley view</option>
+                      <option value="Forest view">Forest view</option>
+                      <option value="Garden view">Garden view</option>
+                      <option value="Pool view">Pool view</option>
+                      <option value="Courtyard view">Courtyard view</option>
+                      <option value="City view">City view</option>
+                      <option value="Lake view">Lake view</option>
+                      <option value="River view">River view</option>
+                      <option value="Sea view">Sea view</option>
+                    </select>
+                  </label>
+
+                  <label class="check-control span-two">
+                    <input name="liftAccessible" type="checkbox" />
+                    Is this room accessible by lift?
+                  </label>
+
+                  <label class="check-control span-two">
+                    <input name="wheelchairAccessible" type="checkbox" />
+                    Wheelchair friendly?
+                  </label>
+
+                  <label class="check-control span-two">
+                    <input name="stepFreeAccessible" type="checkbox" />
+                    Can the guest reach this room without using stairs?
+                  </label>
+
+                  <button class="span-two" type="submit">Add room</button>
                 </form>
               </div>
               <div id="accommodationList" class="compact-list"></div>
@@ -830,19 +1111,18 @@
               </button>
             </form>
 
-            <form id="amenitiesForm" class="card form-grid">
+            <form id="amenitiesForm" class="card form-grid span-editor">
               <div>
-                <h3>Amenities</h3>
+                <h3>Property amenities</h3>
                 <p class="muted">
-                  Use catalog codes separated by commas, for example WIFI,
-                  PARKING, GARDEN.
+                  Simply tick what your property provides. No typing required.
                 </p>
               </div>
-              <label
-                >Amenity codes<input
-                  name="codes"
-                  placeholder="WIFI, PARKING, GARDEN"
-              /></label>
+              <div
+                id="propertyAmenityOptions"
+                class="amenity-groups"
+                aria-label="Property amenities"
+              ></div>
               <button id="saveAmenitiesButton" type="submit">
                 Save amenities
               </button>
@@ -903,10 +1183,6 @@
                       type="file"
                       accept="application/pdf"
                       required
-                  /></label>
-                  <label>Issued on<input name="issuedOn" type="date" /></label>
-                  <label
-                    >Expires on<input name="expiresOn" type="date"
                   /></label>
                   <button type="submit">Upload private PDF</button>
                 </form>

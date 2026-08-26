@@ -5,7 +5,8 @@ import type {
   PhysicalUnitsTable,
   PropertyFloorsTable,
   PropertyStructuresTable,
-  RoomCategoriesTable
+  RoomCategoriesTable,
+  RoomCategoryMediaTable
 } from "../../../infrastructure/database/types.js";
 import type {
   CreateFloorInput,
@@ -20,6 +21,7 @@ export type StructureRecord = Selectable<PropertyStructuresTable>;
 export type FloorRecord = Selectable<PropertyFloorsTable>;
 export type RoomCategoryRecord = Selectable<RoomCategoriesTable>;
 export type PhysicalUnitRecord = Selectable<PhysicalUnitsTable>;
+export type RoomCategoryMediaRecord = Selectable<RoomCategoryMediaTable>;
 
 export class PropertySetupRepository {
   async getPropertyStatus(
@@ -90,6 +92,10 @@ export class PropertySetupRepository {
         accommodation_type: input.accommodationType,
         description: input.description,
         base_occupancy: input.baseOccupancy,
+        base_adults: input.baseAdults ?? null,
+        base_children: input.baseChildren ?? null,
+        default_extra_adult_minor: input.defaultExtraAdultMinor ?? null,
+        default_extra_child_minor: input.defaultExtraChildMinor ?? null,
         max_adults: input.maxAdults,
         max_children: input.maxChildren,
         max_occupancy: input.maxOccupancy,
@@ -228,6 +234,151 @@ export class PropertySetupRepository {
       .where("status", "<>", "RETIRED")
       .orderBy("sort_order")
       .orderBy("unit_code")
+      .execute();
+  }
+
+  async addRoomCategoryMedia(
+    db: DbExecutor,
+    actorUserId: string,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      roomCategoryId: string;
+      storageProvider: string;
+      storageKey: string;
+      mimeType: string | null;
+      altText: string | null;
+      caption: string | null;
+      sortOrder: number;
+    }
+  ): Promise<RoomCategoryMediaRecord> {
+    return db
+      .insertInto("room_category_media")
+      .values({
+        id: randomUUID(),
+        organization_id: input.organizationId,
+        property_id: input.propertyId,
+        room_category_id: input.roomCategoryId,
+        storage_provider: input.storageProvider,
+        storage_key: input.storageKey,
+        mime_type: input.mimeType,
+        alt_text: input.altText,
+        caption: input.caption,
+        sort_order: input.sortOrder,
+        status: "ACTIVE",
+        created_by_user_id: actorUserId
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  }
+
+  async findRoomCategoryMedia(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string,
+    mediaId: string
+  ): Promise<RoomCategoryMediaRecord | undefined> {
+    return db
+      .selectFrom("room_category_media")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("room_category_id", "=", roomCategoryId)
+      .where("id", "=", mediaId)
+      .where("status", "=", "ACTIVE")
+      .executeTakeFirst();
+  }
+
+  async archiveRoomCategoryMedia(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string,
+    mediaId: string
+  ): Promise<RoomCategoryMediaRecord | undefined> {
+    return db
+      .updateTable("room_category_media")
+      .set({
+        status: "ARCHIVED",
+        updated_at: new Date()
+      })
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("room_category_id", "=", roomCategoryId)
+      .where("id", "=", mediaId)
+      .where("status", "=", "ACTIVE")
+      .returningAll()
+      .executeTakeFirst();
+  }
+
+  async listRoomCategoryMedia(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string
+  ): Promise<RoomCategoryMediaRecord[]> {
+    return db
+      .selectFrom("room_category_media")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("status", "=", "ACTIVE")
+      .orderBy("room_category_id")
+      .orderBy("sort_order")
+      .orderBy("created_at")
+      .execute();
+  }
+
+  async listRoomCategoryAmenities(db: DbExecutor, organizationId: string, propertyId: string) {
+    return db
+      .selectFrom("room_category_amenities")
+      .select(["room_category_id", "amenity_code"])
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .orderBy("room_category_id")
+      .orderBy("amenity_code")
+      .execute();
+  }
+
+  async activeRoomAmenityCodes(db: DbExecutor, amenityCodes: string[]): Promise<string[]> {
+    if (!amenityCodes.length) return [];
+
+    const rows = await db
+      .selectFrom("room_amenity_catalog")
+      .select(["code"])
+      .where("active", "=", true)
+      .where("code", "in", amenityCodes)
+      .execute();
+
+    return rows.map((row) => row.code);
+  }
+
+  async replaceRoomCategoryAmenities(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string,
+    amenityCodes: string[]
+  ): Promise<void> {
+    await db
+      .deleteFrom("room_category_amenities")
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("room_category_id", "=", roomCategoryId)
+      .execute();
+
+    if (!amenityCodes.length) return;
+
+    await db
+      .insertInto("room_category_amenities")
+      .values(
+        amenityCodes.map((amenityCode) => ({
+          organization_id: organizationId,
+          property_id: propertyId,
+          room_category_id: roomCategoryId,
+          amenity_code: amenityCode
+        }))
+      )
       .execute();
   }
 }

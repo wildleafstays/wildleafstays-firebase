@@ -51,6 +51,11 @@ interface ConfigureProductBody extends JsonObject {
   expectedVersion?: number | null;
 }
 
+interface ConfigureOwnerBaseRateBody extends JsonObject {
+  baseRateMinor: number;
+  expectedVersion?: number | null;
+}
+
 interface CalendarQuery {
   startDate: string;
   endDate: string;
@@ -228,6 +233,89 @@ export async function registerRateRoutes(
         );
       void reply.header("cache-control", "no-store, private");
       return result;
+    }
+  );
+
+  app.put<{
+    Params: PropertyParams & { roomCategoryId: string };
+    Body: ConfigureOwnerBaseRateBody;
+  }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/rates/room-categories/:roomCategoryId/base-rate",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Rates"],
+        summary: "Create or synchronize the simple owner EP base rate for a room category",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["organizationId", "propertyId", "roomCategoryId"],
+          properties: {
+            organizationId: {
+              type: "string",
+              format: "uuid"
+            },
+            propertyId: {
+              type: "string",
+              format: "uuid"
+            },
+            roomCategoryId: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        },
+        headers: idempotencyHeaders,
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["baseRateMinor"],
+          properties: {
+            baseRateMinor: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100000000
+            },
+            expectedVersion: nullableVersion
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      const key = requireIdempotencyKey(request.headers);
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `rates.owner-base-rate:${request.params.propertyId}:${request.params.roomCategoryId}:user:${actor.userId}`,
+          key,
+          requestBody: request.body
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await service.configureOwnerRoomCategoryBaseRate(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              roomCategoryId: request.params.roomCategoryId,
+              baseRateMinor: request.body.baseRateMinor,
+              expectedVersion: request.body.expectedVersion ?? null
+            },
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+
+      if (result.replayed) {
+        void reply.header("idempotency-replayed", "true");
+      }
+
+      return reply.status(result.statusCode).send(result.body);
     }
   );
 

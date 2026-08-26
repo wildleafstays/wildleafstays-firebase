@@ -15,6 +15,14 @@ export type RateCalendarDayRecord = Selectable<RateCalendarDaysTable>;
 export type RateEventRecord = Selectable<RateEventsTable>;
 
 export class RateRepository {
+  async lockOwnerRateSetup(trx: Transaction<Database>, propertyId: string): Promise<void> {
+    await sql`
+      select pg_advisory_xact_lock(
+        hashtext(${`owner-rate:${propertyId}`})::bigint
+      )
+    `.execute(trx);
+  }
+
   async findPropertyContext(
     trx: Transaction<Database>,
     organizationId: string,
@@ -180,8 +188,8 @@ export class RateRepository {
     expectedVersion: number,
     input: {
       baseRateMinor: number;
-      floorRateMinor: number;
-      ceilingRateMinor: number;
+      floorRateMinor: number | null;
+      ceilingRateMinor: number | null;
       includedAdults: number;
       includedChildren: number;
       maxAdults: number;
@@ -213,6 +221,39 @@ export class RateRepository {
       .where("version", "=", expectedVersion)
       .returningAll()
       .executeTakeFirst();
+  }
+
+  async listActiveRoomCategoryPricingSources(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string
+  ) {
+    return trx
+      .selectFrom("room_categories as rc")
+      .select([
+        "rc.id as room_category_id",
+        "rc.base_adults as base_adults",
+        "rc.base_children as base_children",
+        "rc.max_adults as max_adults",
+        "rc.max_children as max_children",
+        "rc.max_occupancy as max_occupancy",
+        "rc.default_extra_adult_minor as default_extra_adult_minor",
+        "rc.default_extra_child_minor as default_extra_child_minor",
+        sql<number>`(
+          select count(*)::int
+          from physical_units as pu
+          where pu.organization_id = rc.organization_id
+            and pu.property_id = rc.property_id
+            and pu.room_category_id = rc.id
+            and pu.status = 'ACTIVE'
+        )`.as("physical_capacity")
+      ])
+      .where("rc.organization_id", "=", organizationId)
+      .where("rc.property_id", "=", propertyId)
+      .where("rc.status", "=", "ACTIVE")
+      .orderBy("rc.sort_order")
+      .orderBy("rc.name")
+      .execute();
   }
 
   async findCalendarDayForUpdate(

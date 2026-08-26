@@ -86,27 +86,6 @@ function missingRoomBucket(
   };
 }
 
-function missingFullBucket(
-  mode: MissingInventoryBucketMode,
-  stayDate: string
-): AvailabilityBucketInput {
-  if (mode === "ERROR") {
-    throw new ConflictError("Full-property inventory bucket materialization failed", {
-      date: stayDate
-    });
-  }
-
-  return {
-    bucketType: InventoryBucketTypes.FULL_PROPERTY,
-    roomCategoryId: null,
-    stayDate,
-    heldQuantity: 0,
-    confirmedQuantity: 0,
-    overbookingLimit: 0,
-    stopSell: false
-  };
-}
-
 export function calculateInventoryAvailability(
   input: CalculateInventoryAvailabilityInput
 ): InventoryAvailabilityResult {
@@ -121,16 +100,6 @@ export function calculateInventoryAvailability(
     const dayBlocks = input.blocks.filter((block) => blockAppliesOn(block, date));
     const propertyClosed = dayBlocks.some(
       (block) => block.scopeType === InventoryBlockScopes.PROPERTY
-    );
-
-    const fullBucket =
-      bucketMap.get(bucketKey(InventoryBucketTypes.FULL_PROPERTY, null, date)) ??
-      (includesFullProperty(input.saleMode)
-        ? missingFullBucket(input.missingBucketMode, date)
-        : undefined);
-
-    const fullCommitted = Boolean(
-      fullBucket && (fullBucket.heldQuantity > 0 || fullBucket.confirmedQuantity > 0)
     );
 
     const roomCategories = input.categories.map((category) => {
@@ -158,7 +127,7 @@ export function calculateInventoryAvailability(
       const blockedQuantity =
         categoryBlocks.reduce((sum, block) => sum + block.quantity, 0) + unitBlocks.size;
 
-      const unavailable = propertyClosed || fullCommitted || bucket.stopSell;
+      const unavailable = propertyClosed || bucket.stopSell;
       const rawSellable =
         category.capacity +
         bucket.overbookingLimit -
@@ -183,34 +152,30 @@ export function calculateInventoryAvailability(
 
     let fullProperty: FullPropertyAvailability | null = null;
     if (includesFullProperty(input.saleMode)) {
-      if (!fullBucket) {
-        throw new ConflictError("Full-property inventory bucket materialization failed", {
-          date
-        });
-      }
+      const activeRoomCategories = roomCategories.filter((room) => room.physicalCapacity > 0);
+
+      const fullPropertyHeld = activeRoomCategories.some((room) => room.heldQuantity > 0);
+      const fullPropertyConfirmed = activeRoomCategories.some((room) => room.confirmedQuantity > 0);
+      const fullPropertyStopSell = activeRoomCategories.some((room) => room.stopSell);
 
       const roomInventoryConflict =
-        input.saleMode === "BOTH" &&
-        (roomCategories.length === 0 ||
-          roomCategories.some(
-            (room) =>
-              room.physicalCapacity <= 0 ||
-              room.heldQuantity > 0 ||
-              room.confirmedQuantity > 0 ||
-              room.blockedQuantity > 0
-          ));
-
-      const unavailable = propertyClosed || fullBucket.stopSell || roomInventoryConflict;
-      const rawSellable = 1 - fullBucket.heldQuantity - fullBucket.confirmedQuantity;
+        activeRoomCategories.length === 0 ||
+        activeRoomCategories.some(
+          (room) =>
+            room.heldQuantity > 0 ||
+            room.confirmedQuantity > 0 ||
+            room.blockedQuantity > 0 ||
+            room.stopSell
+        );
 
       fullProperty = {
         date,
         capacity: 1,
-        heldQuantity: fullBucket.heldQuantity,
-        confirmedQuantity: fullBucket.confirmedQuantity,
-        stopSell: fullBucket.stopSell,
+        heldQuantity: fullPropertyHeld ? 1 : 0,
+        confirmedQuantity: fullPropertyConfirmed ? 1 : 0,
+        stopSell: fullPropertyStopSell,
         roomInventoryConflict,
-        sellableQuantity: unavailable ? 0 : Math.max(0, rawSellable)
+        sellableQuantity: propertyClosed || roomInventoryConflict ? 0 : 1
       };
     }
 

@@ -342,7 +342,8 @@ describe("Phase 3C confirmed inventory allocations", () => {
     await confirmHold(fixture, hold.hold.id);
 
     const result = await availability(fixture);
-    expect(result.days[0]?.fullProperty?.confirmedQuantity).toBe(1);
+    expect(result.days[0]?.roomCategories[0]?.confirmedQuantity).toBe(2);
+    expect(result.days[0]?.fullProperty?.roomInventoryConflict).toBe(true);
     expect(result.days[0]?.roomCategories[0]?.sellableQuantity).toBe(0);
 
     await expect(createHold(fixture, [roomItem(categoryId)])).rejects.toMatchObject({
@@ -385,14 +386,13 @@ describe("Phase 3C confirmed inventory allocations", () => {
       }
     ]);
   });
-  it("supports full-property-only confirmation without room inventory", async () => {
+  it("refuses full-property confirmation when no physical-room inventory exists", async () => {
     const fixture = await createFixture("FULL_PROPERTY_ONLY", []);
-    const hold = await createHold(fixture, [fullPropertyItem]);
 
-    const allocation = await confirmHold(fixture, hold.hold.id, "RES-VILLA-ONLY");
-
-    expect(allocation.allocation.status).toBe("CONFIRMED");
-    expect(allocation.allocation.items[0]?.bucketType).toBe("FULL_PROPERTY");
+    await expect(createHold(fixture, [fullPropertyItem])).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409
+    });
   });
 
   it("releases confirmed allocation exactly once and restores sellable inventory", async () => {

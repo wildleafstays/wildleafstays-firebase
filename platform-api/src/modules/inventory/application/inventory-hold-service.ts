@@ -232,9 +232,10 @@ export class InventoryHoldService {
     mode: SaleMode,
     dates: string[]
   ): Promise<RoomCategoryCapacity[]> {
-    const categories = includesRooms(mode)
-      ? await this.inventory.listRoomCategoryCapacities(trx, organizationId, propertyId)
-      : [];
+    const categories =
+      includesRooms(mode) || includesFullProperty(mode)
+        ? await this.inventory.listRoomCategoryCapacities(trx, organizationId, propertyId)
+        : [];
 
     const seeds: BucketSeed[] = [];
     for (const date of dates) {
@@ -246,17 +247,6 @@ export class InventoryHoldService {
           roomCategoryId: category.id,
           stayDate: date,
           capacity: category.capacity
-        });
-      }
-
-      if (includesFullProperty(mode)) {
-        seeds.push({
-          organizationId,
-          propertyId,
-          bucketType: InventoryBucketTypes.FULL_PROPERTY,
-          roomCategoryId: null,
-          stayDate: date,
-          capacity: 1
         });
       }
     }
@@ -420,17 +410,26 @@ export class InventoryHoldService {
     );
     const categoryMap = new Map(categories.map((category) => [category.id, category]));
 
-    if (
-      mode === "BOTH" &&
-      input.items.some((item) => item.bucketType === InventoryBucketTypes.FULL_PROPERTY) &&
-      categories.length === 0
-    ) {
+    const fullPropertyRequested =
+      input.items.length === 1 && input.items[0]?.bucketType === InventoryBucketTypes.FULL_PROPERTY;
+
+    const activeRoomCategories = categories.filter((category) => category.capacity > 0);
+
+    if (fullPropertyRequested && activeRoomCategories.length === 0) {
       throw new ConflictError(
-        "The full property cannot be held until room inventory is configured"
+        "The full property cannot be held until active physical-room inventory is configured"
       );
     }
 
-    for (const item of input.items) {
+    const effectiveItems: InventoryHoldItemInput[] = fullPropertyRequested
+      ? activeRoomCategories.map((category) => ({
+          bucketType: InventoryBucketTypes.ROOM_CATEGORY,
+          roomCategoryId: category.id,
+          quantity: category.capacity
+        }))
+      : input.items;
+
+    for (const item of effectiveItems) {
       if (
         item.bucketType === InventoryBucketTypes.ROOM_CATEGORY &&
         (!item.roomCategoryId || !categoryMap.has(item.roomCategoryId))
@@ -474,7 +473,7 @@ export class InventoryHoldService {
         });
       }
 
-      for (const item of input.items) {
+      for (const item of effectiveItems) {
         if (item.bucketType === InventoryBucketTypes.ROOM_CATEGORY) {
           const bucket = bucketMap.get(
             bucketKey(InventoryBucketTypes.ROOM_CATEGORY, item.roomCategoryId, date)
@@ -520,7 +519,7 @@ export class InventoryHoldService {
 
           const sellable =
             bucket.capacity +
-            bucket.overbooking_limit -
+            (fullPropertyRequested ? 0 : bucket.overbooking_limit) -
             bucket.held_quantity -
             bucket.confirmed_quantity -
             categoryBlocks -
@@ -606,7 +605,7 @@ export class InventoryHoldService {
     });
 
     const createdItems: InventoryHoldItemRecord[] = [];
-    for (const item of input.items) {
+    for (const item of effectiveItems) {
       const createdItem = await this.holds.createItem(trx, {
         organizationId: input.organizationId,
         propertyId: input.propertyId,

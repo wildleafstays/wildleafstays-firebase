@@ -73,7 +73,7 @@ export class QuoteService {
     }
 
     const calendar = actor
-      ? await this.rates.getCalendar(
+      ? await this.rates.getQuoteCalendar(
           trx,
           actor,
           input.organizationId,
@@ -82,7 +82,7 @@ export class QuoteService {
           input.arrivalDate,
           addDays(input.departureDate, 1)
         )
-      : await this.rates.getCalendarSystem(
+      : await this.rates.getQuoteCalendarSystem(
           trx,
           input.organizationId,
           input.propertyId,

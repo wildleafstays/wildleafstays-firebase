@@ -362,6 +362,41 @@ async function createFinalQuote(
   );
 }
 
+async function configureLegacyCategoryDefaultsForDerivedFullProperty(
+  fixture: Fixture
+): Promise<void> {
+  const products = await db
+    .selectFrom("rate_plan_products")
+    .select(["included_adults", "included_children", "extra_adult_minor", "extra_child_minor"])
+    .where("organization_id", "=", fixture.organizationId)
+    .where("property_id", "=", fixture.propertyId)
+    .where("room_category_id", "=", fixture.roomCategoryId)
+    .where("product_type", "=", "ROOM_CATEGORY")
+    .where("status", "=", "ACTIVE")
+    .execute();
+
+  if (products.length !== 1) {
+    throw new Error(
+      `Expected exactly one active ROOM_CATEGORY rate product for legacy fixture repair, found ${products.length}`
+    );
+  }
+
+  const product = products[0]!;
+
+  await db
+    .updateTable("room_categories")
+    .set({
+      base_adults: product.included_adults,
+      base_children: product.included_children,
+      default_extra_adult_minor: product.extra_adult_minor,
+      default_extra_child_minor: product.extra_child_minor
+    })
+    .where("organization_id", "=", fixture.organizationId)
+    .where("property_id", "=", fixture.propertyId)
+    .where("id", "=", fixture.roomCategoryId)
+    .executeTakeFirstOrThrow();
+}
+
 async function createFullPropertyRateProduct(fixture: Fixture): Promise<string> {
   await db
     .updateTable("properties")
@@ -593,23 +628,38 @@ describe("Phase 4C quote to inventory hold", () => {
     expect(link).toBeUndefined();
   });
 
-  it("maps a final full-property quote to the canonical FULL_PROPERTY inventory bucket", async () => {
+  it("maps a final full-property quote onto canonical room-category inventory", async () => {
     const fixture = await createFixture();
+    await configureLegacyCategoryDefaultsForDerivedFullProperty(fixture);
     const fullProductId = await createFullPropertyRateProduct(fixture);
     await configureCommercialCore(fixture);
     await setPromotionMode(fixture, "NO_PROMOTIONS");
-    const quoted = await createFinalQuote(fixture, { rateProductId: fullProductId });
+    const quoted = await createFinalQuote(fixture, {
+      rateProductId: fullProductId
+    });
 
     expect(quoted.quote.productType).toBe("FULL_PROPERTY");
+
     const result = await createQuoteHold(fixture, quoted.quote.id);
 
-    expect(result.quoteHold.hold.items).toEqual([
-      expect.objectContaining({
-        bucketType: "FULL_PROPERTY",
-        roomCategoryId: null,
-        quantity: 1
-      })
-    ]);
+    expect(result.quoteHold.hold.items.length).toBeGreaterThan(0);
+    expect(result.quoteHold.hold.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          bucketType: "ROOM_CATEGORY",
+          roomCategoryId: fixture.roomCategoryId
+        })
+      ])
+    );
+    expect(
+      result.quoteHold.hold.items.every(
+        (item) =>
+          item.bucketType === "ROOM_CATEGORY" && item.roomCategoryId !== null && item.quantity > 0
+      )
+    ).toBe(true);
+    expect(result.quoteHold.hold.items.some((item) => item.bucketType === "FULL_PROPERTY")).toBe(
+      false
+    );
   });
 
   it("keeps the quote-to-hold linkage immutable", async () => {

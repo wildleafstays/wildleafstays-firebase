@@ -211,15 +211,18 @@ describe("Phase 3A inventory foundation", () => {
     expect(result.days[0]?.roomCategories[0]?.sellableQuantity).toBe(3);
   });
 
-  it("supports FULL_PROPERTY_ONLY without forcing room inventory", async () => {
+  it("keeps FULL_PROPERTY_ONLY unavailable until physical room inventory is configured", async () => {
     const fixture = await createInventoryFixture("FULL_PROPERTY_ONLY", 0);
     const result = await availability(fixture, "2030-02-01", "2030-02-03");
 
     expect(result.saleMode).toBe("FULL_PROPERTY_ONLY");
     expect(result.days).toHaveLength(2);
     expect(result.days[0]?.roomCategories).toHaveLength(0);
-    expect(result.days[0]?.fullProperty?.capacity).toBe(1);
-    expect(result.days[0]?.fullProperty?.sellableQuantity).toBe(1);
+    expect(result.days[0]?.fullProperty).toMatchObject({
+      capacity: 1,
+      roomInventoryConflict: true,
+      sellableQuantity: 0
+    });
   });
 
   it("makes the full property unavailable when one underlying room is blocked in BOTH mode", async () => {
@@ -347,7 +350,7 @@ describe("Phase 3A inventory foundation", () => {
     expect(stopped.days[0]?.roomCategories[0]?.sellableQuantity).toBe(0);
   });
 
-  it("keeps room and full-property stop-sell controls commercially independent in BOTH mode", async () => {
+  it("uses room-category stop-sell as the universal source for full-property availability", async () => {
     const fixture = await createInventoryFixture("BOTH", 2);
     const service = new InventoryService();
 
@@ -369,9 +372,12 @@ describe("Phase 3A inventory foundation", () => {
       )
     );
 
-    const roomsStopped = await availability(fixture, "2030-05-10", "2030-05-11");
-    expect(roomsStopped.days[0]?.roomCategories[0]?.sellableQuantity).toBe(0);
-    expect(roomsStopped.days[0]?.fullProperty?.sellableQuantity).toBe(1);
+    const stopped = await availability(fixture, "2030-05-10", "2030-05-11");
+    expect(stopped.days[0]?.roomCategories[0]?.sellableQuantity).toBe(0);
+    expect(stopped.days[0]?.fullProperty).toMatchObject({
+      roomInventoryConflict: true,
+      sellableQuantity: 0
+    });
 
     await db.transaction().execute((trx) =>
       service.setControls(
@@ -391,27 +397,32 @@ describe("Phase 3A inventory foundation", () => {
       )
     );
 
-    await db.transaction().execute((trx) =>
-      service.setControls(
-        trx,
-        fixture.actor,
-        {
-          organizationId: fixture.organizationId,
-          propertyId: fixture.propertyId,
-          bucketType: "FULL_PROPERTY",
-          roomCategoryId: null,
-          startDate: "2030-05-10",
-          endDate: "2030-05-11",
-          stopSell: true,
-          overbookingLimit: null
-        },
-        requestMetadata()
-      )
-    );
+    const reopened = await availability(fixture, "2030-05-10", "2030-05-11");
+    expect(reopened.days[0]?.roomCategories[0]?.sellableQuantity).toBe(2);
+    expect(reopened.days[0]?.fullProperty?.sellableQuantity).toBe(1);
 
-    const villaStopped = await availability(fixture, "2030-05-10", "2030-05-11");
-    expect(villaStopped.days[0]?.roomCategories[0]?.sellableQuantity).toBe(2);
-    expect(villaStopped.days[0]?.fullProperty?.sellableQuantity).toBe(0);
+    await expect(
+      db.transaction().execute((trx) =>
+        service.setControls(
+          trx,
+          fixture.actor,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            bucketType: "FULL_PROPERTY",
+            roomCategoryId: null,
+            startDate: "2030-05-10",
+            endDate: "2030-05-11",
+            stopSell: true,
+            overbookingLimit: null
+          },
+          requestMetadata()
+        )
+      )
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      statusCode: 400
+    });
   });
 
   it("never allows overbooking on a full-property product", async () => {

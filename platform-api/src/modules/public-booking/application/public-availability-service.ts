@@ -1,6 +1,14 @@
+import {
+  calculateFullPropertyExtraGuestCharge,
+  deriveFullPropertySource,
+  type DerivedFullPropertyCategoryRate,
+  type DerivedFullPropertySource,
+  type FullPropertyCategoryRateDay,
+  type FullPropertyCategoryRateSource
+} from "../../rates/application/derived-full-property-source.js";
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
-import { NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import {
   calculateInventoryAvailability,
   type AvailabilityBlockInput,
@@ -16,6 +24,7 @@ import type {
 } from "../domain/public-availability.js";
 import {
   PublicAvailabilityRepository,
+  type PublicAvailabilityCategoryRecord,
   type PublicRateCalendarRecord,
   type PublicRateOfferRecord
 } from "../infrastructure/public-availability-repository.js";
@@ -34,6 +43,7 @@ interface CalendarDay {
   closedToArrival: boolean;
   closedToDeparture: boolean;
   stopSell: boolean;
+  fullPropertyCategoryRates?: DerivedFullPropertyCategoryRate[];
 }
 
 function parseDate(value: string): Date {
@@ -158,6 +168,118 @@ function calendarDay(
   };
 }
 
+function fullPropertyCategoryDay(
+  offer: PublicRateOfferRecord,
+  category: PublicAvailabilityCategoryRecord,
+  override: PublicRateCalendarRecord | undefined,
+  stayDate: string
+): FullPropertyCategoryRateDay {
+  if (category.default_extra_adult_minor === null || category.default_extra_child_minor === null) {
+    throw new ConflictError(
+      "Room-category extra-guest defaults are required for full-property pricing",
+      {
+        roomCategoryId: category.id
+      }
+    );
+  }
+
+  if (!override) {
+    return {
+      stayDate,
+      rateMinor: offer.base_rate_minor,
+      extraAdultMinor: category.default_extra_adult_minor,
+      extraChildMinor: category.default_extra_child_minor,
+      minimumStay: 1,
+      maximumStay: null,
+      closedToArrival: false,
+      closedToDeparture: false,
+      stopSell: false
+    };
+  }
+
+  return {
+    stayDate,
+    rateMinor: override.rate_minor,
+    extraAdultMinor: override.extra_adult_minor ?? category.default_extra_adult_minor,
+    extraChildMinor: override.extra_child_minor ?? category.default_extra_child_minor,
+    minimumStay: override.minimum_stay,
+    maximumStay: override.maximum_stay,
+    closedToArrival: override.closed_to_arrival,
+    closedToDeparture: override.closed_to_departure,
+    stopSell: override.stop_sell
+  };
+}
+
+function buildPublicFullPropertySource(
+  categories: PublicAvailabilityCategoryRecord[],
+  offers: PublicRateOfferRecord[],
+  calendarRows: Map<string, PublicRateCalendarRecord>,
+  calendarDates: string[]
+): DerivedFullPropertySource {
+  const sources: FullPropertyCategoryRateSource[] = [];
+
+  for (const category of categories) {
+    if (category.capacity <= 0) {
+      continue;
+    }
+
+    if (
+      category.base_adults === null ||
+      category.base_children === null ||
+      category.default_extra_adult_minor === null ||
+      category.default_extra_child_minor === null
+    ) {
+      throw new ConflictError(
+        "Every active physical-room category must have guest and extra-charge defaults before full-property availability can be derived",
+        {
+          roomCategoryId: category.id
+        }
+      );
+    }
+
+    const candidates = offers.filter(
+      (offer) =>
+        offer.product_type === "ROOM_CATEGORY" &&
+        offer.room_category_id === category.id &&
+        offer.meal_plan_code === "EP"
+    );
+
+    if (candidates.length !== 1) {
+      throw new ConflictError(
+        candidates.length === 0
+          ? "An active physical-room category is missing its single active EP rate product"
+          : "An active physical-room category has more than one active EP rate product",
+        {
+          roomCategoryId: category.id,
+          candidateCount: candidates.length
+        }
+      );
+    }
+
+    const offer = candidates[0]!;
+
+    sources.push({
+      roomCategoryId: category.id,
+      physicalCapacity: category.capacity,
+      includedAdults: category.base_adults,
+      includedChildren: category.base_children,
+      maxAdults: category.max_adults,
+      maxChildren: category.max_children,
+      maxOccupancy: category.max_occupancy,
+      days: calendarDates.map((stayDate) =>
+        fullPropertyCategoryDay(
+          offer,
+          category,
+          calendarRows.get(`${offer.rate_product_id}:${stayDate}`),
+          stayDate
+        )
+      )
+    });
+  }
+
+  return deriveFullPropertySource(calendarDates, sources);
+}
+
 function pushReason(reasons: PublicAvailabilityReason[], reason: PublicAvailabilityReason): void {
   if (!reasons.includes(reason)) {
     reasons.push(reason);
@@ -170,7 +292,8 @@ function optionForOffer(
   input: PublicAvailabilityRequest,
   dates: string[],
   calendarRows: Map<string, PublicRateCalendarRecord>,
-  inventory: ReturnType<typeof calculateInventoryAvailability>
+  inventory: ReturnType<typeof calculateInventoryAvailability>,
+  derivedFullProperty: DerivedFullPropertySource | null
 ): PublicAvailabilityOptionView | null {
   if (!offerMatchesSaleMode(offer, mode)) {
     return null;
@@ -187,27 +310,72 @@ function optionForOffer(
     return null;
   }
 
+  if (offer.product_type === "FULL_PROPERTY" && offer.meal_plan_code !== "EP") {
+    return null;
+  }
+
+  if (offer.product_type === "FULL_PROPERTY" && !derivedFullProperty) {
+    return null;
+  }
+
   const reasons: PublicAvailabilityReason[] = [];
+
   const requestedUnits = offer.product_type === "FULL_PROPERTY" ? 1 : input.units.length;
 
   if (offer.product_type === "FULL_PROPERTY" && input.units.length !== 1) {
     pushReason(reasons, "FULL_PROPERTY_SINGLE_UNIT_ONLY");
   }
 
+  const includedAdults =
+    offer.product_type === "FULL_PROPERTY"
+      ? derivedFullProperty!.includedAdults
+      : offer.included_adults;
+
+  const includedChildren =
+    offer.product_type === "FULL_PROPERTY"
+      ? derivedFullProperty!.includedChildren
+      : offer.included_children;
+
+  const maxAdults =
+    offer.product_type === "FULL_PROPERTY" ? derivedFullProperty!.maxAdults : offer.max_adults;
+
+  const maxChildren =
+    offer.product_type === "FULL_PROPERTY" ? derivedFullProperty!.maxChildren : offer.max_children;
+
+  const maxOccupancy =
+    offer.product_type === "FULL_PROPERTY"
+      ? derivedFullProperty!.maxOccupancy
+      : offer.max_occupancy;
+
   for (const unit of input.units) {
     if (
-      unit.adults > offer.max_adults ||
-      unit.children > offer.max_children ||
-      unit.adults + unit.children > offer.max_occupancy
+      unit.adults > maxAdults ||
+      unit.children > maxChildren ||
+      unit.adults + unit.children > maxOccupancy
     ) {
       pushReason(reasons, "OCCUPANCY_EXCEEDED");
     }
   }
 
   const calendarDates = [...dates, input.departureDate];
-  const calendar = calendarDates.map((stayDate) =>
-    calendarDay(offer, calendarRows.get(`${offer.rate_product_id}:${stayDate}`), stayDate)
-  );
+
+  const calendar: CalendarDay[] =
+    offer.product_type === "FULL_PROPERTY"
+      ? derivedFullProperty!.days.map((day) => ({
+          stayDate: day.stayDate,
+          rateMinor: day.rateMinor,
+          extraAdultMinor: 0,
+          extraChildMinor: 0,
+          minimumStay: day.minimumStay,
+          maximumStay: day.maximumStay,
+          closedToArrival: day.closedToArrival,
+          closedToDeparture: day.closedToDeparture,
+          stopSell: day.stopSell,
+          fullPropertyCategoryRates: day.categoryRates
+        }))
+      : calendarDates.map((stayDate) =>
+          calendarDay(offer, calendarRows.get(`${offer.rate_product_id}:${stayDate}`), stayDate)
+        );
 
   const arrivalDay = calendar[0]!;
   const departureDay = calendar[calendar.length - 1]!;
@@ -236,6 +404,7 @@ function optionForOffer(
 
   for (const stayDate of dates) {
     const day = inventory.days.find((item) => item.date === stayDate);
+
     if (!day) {
       pushReason(reasons, "INVENTORY_UNAVAILABLE");
       continue;
@@ -253,11 +422,12 @@ function optionForOffer(
   }
 
   const extraAdults = input.units.reduce(
-    (sum, unit) => sum + Math.max(0, unit.adults - offer.included_adults),
+    (sum, unit) => sum + Math.max(0, unit.adults - includedAdults),
     0
   );
+
   const extraChildren = input.units.reduce(
-    (sum, unit) => sum + Math.max(0, unit.children - offer.included_children),
+    (sum, unit) => sum + Math.max(0, unit.children - includedChildren),
     0
   );
 
@@ -265,10 +435,31 @@ function optionForOffer(
     (sum, day) => sum + day.rateMinor * requestedUnits,
     0
   );
-  const extraGuestMinor = stayCalendar.reduce(
-    (sum, day) => sum + day.extraAdultMinor * extraAdults + day.extraChildMinor * extraChildren,
-    0
-  );
+
+  const extraGuestMinor = stayCalendar.reduce((sum, day) => {
+    if (offer.product_type === "FULL_PROPERTY") {
+      if (!day.fullPropertyCategoryRates) {
+        throw new ConflictError(
+          "Derived full-property category rates are missing from public availability",
+          {
+            stayDate: day.stayDate
+          }
+        );
+      }
+
+      return (
+        sum +
+        calculateFullPropertyExtraGuestCharge(
+          day.fullPropertyCategoryRates,
+          extraAdults,
+          extraChildren
+        ).totalMinor
+      );
+    }
+
+    return sum + day.extraAdultMinor * extraAdults + day.extraChildMinor * extraChildren;
+  }, 0);
+
   const nightlyFromMinor = Math.min(...stayCalendar.map((day) => day.rateMinor));
 
   return {
@@ -305,6 +496,7 @@ export class PublicAvailabilityService {
     input: PublicAvailabilityRequest
   ): Promise<PublicAvailabilityView> {
     validateUnits(input);
+
     const dates = stayDates(input.arrivalDate, input.departureDate);
 
     const property = await this.repository.findLivePropertyBySlug(db, publicSlug.toLowerCase());
@@ -344,7 +536,10 @@ export class PublicAvailabilityService {
       this.repository.listActiveRateOffers(db, organizationId, propertyId)
     ]);
 
-    const rateProductIds = offers.map((offer) => offer.rate_product_id);
+    const rateProductIds = offers
+      .filter((offer) => offer.product_type === "ROOM_CATEGORY")
+      .map((offer) => offer.rate_product_id);
+
     const calendarRows = await this.repository.listCalendarDays(
       db,
       rateProductIds,
@@ -401,16 +596,34 @@ export class PublicAvailabilityService {
       calendarRows.map((row) => [`${row.rate_product_id}:${row.stay_date}`, row])
     );
 
+    const needsFullProperty = offers.some(
+      (offer) =>
+        offer.product_type === "FULL_PROPERTY" &&
+        offer.meal_plan_code === "EP" &&
+        offerMatchesSaleMode(offer, mode)
+    );
+
+    const derivedFullProperty = needsFullProperty
+      ? buildPublicFullPropertySource(categories, offers, calendarMap, [
+          ...dates,
+          input.departureDate
+        ])
+      : null;
+
     const options = offers
-      .map((offer) => optionForOffer(offer, mode, input, dates, calendarMap, inventory))
+      .map((offer) =>
+        optionForOffer(offer, mode, input, dates, calendarMap, inventory, derivedFullProperty)
+      )
       .filter((option): option is PublicAvailabilityOptionView => option !== null)
       .sort((left, right) => {
         if (left.available !== right.available) {
           return left.available ? -1 : 1;
         }
+
         if (left.estimatedTotalMinor !== right.estimatedTotalMinor) {
           return left.estimatedTotalMinor - right.estimatedTotalMinor;
         }
+
         return left.rateProductId.localeCompare(right.rateProductId);
       });
 
@@ -424,7 +637,9 @@ export class PublicAvailabilityService {
         arrivalDate: input.arrivalDate,
         departureDate: input.departureDate,
         nights: dates.length,
-        units: input.units.map((unit) => ({ ...unit }))
+        units: input.units.map((unit) => ({
+          ...unit
+        }))
       },
       pricingScope: "BASE_RATE_AND_EXTRA_GUEST_ONLY",
       exactCommercialPriceIncluded: false,

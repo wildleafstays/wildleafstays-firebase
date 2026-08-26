@@ -33,8 +33,8 @@ export interface ConfigureRateProductInput {
   productType: RateProductType;
   roomCategoryId: string | null;
   baseRateMinor: number;
-  floorRateMinor: number;
-  ceilingRateMinor: number;
+  floorRateMinor: number | null;
+  ceilingRateMinor: number | null;
   includedAdults: number;
   includedChildren: number;
   maxAdults: number;
@@ -77,8 +77,8 @@ export interface RateProductView extends JsonObject {
   productType: RateProductType;
   roomCategoryId: string | null;
   baseRateMinor: number;
-  floorRateMinor: number;
-  ceilingRateMinor: number;
+  floorRateMinor: number | null;
+  ceilingRateMinor: number | null;
   includedAdults: number;
   includedChildren: number;
   maxAdults: number;
@@ -88,6 +88,19 @@ export interface RateProductView extends JsonObject {
   extraChildMinor: number;
   status: "ACTIVE" | "INACTIVE";
   version: number;
+}
+
+export interface FullPropertyCategoryRateView extends JsonObject {
+  roomCategoryId: string;
+  physicalCapacity: number;
+  unitRateMinor: number;
+  extraAdultMinor: number;
+  extraChildMinor: number;
+  includedAdults: number;
+  includedChildren: number;
+  maxAdults: number;
+  maxChildren: number;
+  maxOccupancy: number;
 }
 
 export interface RateCalendarDayView extends JsonObject {
@@ -102,6 +115,7 @@ export interface RateCalendarDayView extends JsonObject {
   stopSell: boolean;
   source: "BASE" | "MANUAL" | "REVENUE" | "SYSTEM";
   overrideVersion: number | null;
+  fullPropertyCategoryRates?: FullPropertyCategoryRateView[] | null;
 }
 
 export interface RateCalendarView extends JsonObject {

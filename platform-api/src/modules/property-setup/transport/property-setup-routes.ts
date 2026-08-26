@@ -2,6 +2,11 @@ import type { FastifyInstance } from "fastify";
 import type { Kysely } from "kysely";
 import type { Database, JsonObject } from "../../../infrastructure/database/types.js";
 import type { IdentityVerifier } from "../../../infrastructure/identity/identity-verifier.js";
+import type { PropertyAssetStorage } from "../../../infrastructure/storage/property-asset-storage.js";
+import {
+  MAX_PROPERTY_IMAGE_BYTES,
+  PropertyAssetUploadService
+} from "../../property-onboarding/application/property-asset-upload-service.js";
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import type { AccommodationType, StructureType } from "../domain/property-setup.js";
@@ -16,6 +21,7 @@ export interface PropertySetupRouteDependencies {
   identityVerifier: IdentityVerifier;
   userRepository: UserRepository;
   accessRepository: AccessRepository;
+  propertyAssetStorage: PropertyAssetStorage;
 }
 
 interface PropertyParams {
@@ -25,6 +31,25 @@ interface PropertyParams {
 
 interface StructureParams extends PropertyParams {
   structureId: string;
+}
+
+interface RoomCategoryParams extends PropertyParams {
+  roomCategoryId: string;
+}
+
+interface RoomCategoryMediaParams extends RoomCategoryParams {
+  mediaId: string;
+}
+
+interface UploadRoomCategoryImageQuery {
+  altText?: string;
+  caption?: string;
+  sortOrder?: number;
+}
+
+interface ManagedUploadHeaders {
+  "idempotency-key": string;
+  "x-content-sha256": string;
 }
 
 interface CreateStructureBody extends JsonObject {
@@ -51,6 +76,10 @@ interface CreateRoomCategoryBody extends JsonObject {
   accommodationType: AccommodationType;
   description?: string;
   baseOccupancy?: number;
+  baseAdults?: number;
+  baseChildren?: number;
+  defaultExtraAdultMinor?: number;
+  defaultExtraChildMinor?: number;
   maxAdults?: number;
   maxChildren?: number;
   maxOccupancy?: number;
@@ -59,6 +88,10 @@ interface CreateRoomCategoryBody extends JsonObject {
   extraBedAllowed?: boolean;
   defaultViewLabel?: string;
   sortOrder?: number;
+}
+
+interface ReplaceRoomCategoryAmenitiesBody extends JsonObject {
+  amenityCodes: string[];
 }
 
 interface CreatePhysicalUnitBody extends JsonObject {
@@ -98,6 +131,29 @@ const structureParamsSchema = {
   }
 } as const;
 
+const roomCategoryParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["organizationId", "propertyId", "roomCategoryId"],
+  properties: {
+    organizationId: { type: "string", format: "uuid" },
+    propertyId: { type: "string", format: "uuid" },
+    roomCategoryId: { type: "string", format: "uuid" }
+  }
+} as const;
+
+const roomCategoryMediaParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["organizationId", "propertyId", "roomCategoryId", "mediaId"],
+  properties: {
+    organizationId: { type: "string", format: "uuid" },
+    propertyId: { type: "string", format: "uuid" },
+    roomCategoryId: { type: "string", format: "uuid" },
+    mediaId: { type: "string", format: "uuid" }
+  }
+} as const;
+
 const idempotencyHeaders = {
   type: "object",
   required: ["idempotency-key"],
@@ -107,6 +163,18 @@ const idempotencyHeaders = {
       minLength: 8,
       maxLength: 200,
       pattern: "^[A-Za-z0-9._:-]+$"
+    }
+  }
+} as const;
+
+const managedUploadHeaders = {
+  type: "object",
+  required: ["idempotency-key", "x-content-sha256"],
+  properties: {
+    ...idempotencyHeaders.properties,
+    "x-content-sha256": {
+      type: "string",
+      pattern: "^[a-f0-9]{64}$"
     }
   }
 } as const;
@@ -126,6 +194,7 @@ export async function registerPropertySetupRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new PropertySetupService();
+  const uploads = new PropertyAssetUploadService(deps.propertyAssetStorage);
 
   app.get<{ Params: PropertyParams }>(
     "/v1/partner/organizations/:organizationId/properties/:propertyId/layout",
@@ -313,7 +382,32 @@ export async function registerPropertySetupRoutes(
               ]
             },
             description: { type: "string", maxLength: 3000 },
-            baseOccupancy: { type: "integer", minimum: 1, maximum: 50, default: 2 },
+            baseOccupancy: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 2
+            },
+            baseAdults: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100
+            },
+            baseChildren: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100
+            },
+            defaultExtraAdultMinor: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100000000
+            },
+            defaultExtraChildMinor: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100000000
+            },
             maxAdults: { type: "integer", minimum: 1, maximum: 50, default: 2 },
             maxChildren: { type: "integer", minimum: 0, maximum: 50, default: 0 },
             maxOccupancy: { type: "integer", minimum: 1, maximum: 100, default: 2 },
@@ -350,7 +444,14 @@ export async function registerPropertySetupRoutes(
               name: request.body.name.trim(),
               accommodationType: request.body.accommodationType,
               description: request.body.description?.trim() || null,
-              baseOccupancy: request.body.baseOccupancy ?? 2,
+              baseOccupancy:
+                request.body.baseAdults !== undefined && request.body.baseChildren !== undefined
+                  ? request.body.baseAdults + request.body.baseChildren
+                  : (request.body.baseOccupancy ?? 2),
+              baseAdults: request.body.baseAdults ?? null,
+              baseChildren: request.body.baseChildren ?? null,
+              defaultExtraAdultMinor: request.body.defaultExtraAdultMinor ?? null,
+              defaultExtraChildMinor: request.body.defaultExtraChildMinor ?? null,
               maxAdults: request.body.maxAdults ?? 2,
               maxChildren: request.body.maxChildren ?? 0,
               maxOccupancy: request.body.maxOccupancy ?? 2,
@@ -367,6 +468,241 @@ export async function registerPropertySetupRoutes(
       if (result.replayed) {
         void reply.header("idempotency-replayed", "true");
       }
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{
+    Params: RoomCategoryParams;
+    Querystring: UploadRoomCategoryImageQuery;
+    Headers: ManagedUploadHeaders;
+  }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/room-categories/:roomCategoryId/uploads/images",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Property Setup"],
+        summary: "Upload a photo for a room category",
+        security: [{ bearerAuth: [] }],
+        params: roomCategoryParamsSchema,
+        headers: managedUploadHeaders,
+        consumes: ["multipart/form-data"],
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            altText: { type: "string", maxLength: 500 },
+            caption: { type: "string", maxLength: 1000 },
+            sortOrder: {
+              type: "integer",
+              minimum: 0,
+              default: 0
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+
+      if (!actor) {
+        throw new AuthenticationError();
+      }
+
+      await service.assertRoomCategoryEditable(
+        deps.db,
+        actor,
+        request.params.organizationId,
+        request.params.propertyId,
+        request.params.roomCategoryId
+      );
+
+      const key = requireIdempotencyKey(request.headers);
+      const part = await request.file();
+
+      if (!part || part.fieldname !== "file") {
+        throw new ValidationError("A single multipart file field named 'file' is required");
+      }
+
+      const contentSha256 = request.headers["x-content-sha256"];
+
+      const stored = await uploads.storeRoomCategoryImage({
+        actor,
+        organizationId: request.params.organizationId,
+        propertyId: request.params.propertyId,
+        roomCategoryId: request.params.roomCategoryId,
+        idempotencyKey: key,
+        contentType: part.mimetype,
+        contentSha256,
+        stream: part.file
+      });
+
+      if (part.file.truncated) {
+        throw new ValidationError("Uploaded image is too large", {
+          maxBytes: MAX_PROPERTY_IMAGE_BYTES
+        });
+      }
+
+      const fingerprint = {
+        roomCategoryId: request.params.roomCategoryId,
+        contentSha256,
+        contentType: part.mimetype,
+        altText: request.query.altText ?? null,
+        caption: request.query.caption ?? null,
+        sortOrder: request.query.sortOrder ?? 0
+      };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `property.room-category.media.upload:${request.params.roomCategoryId}:user:${actor.userId}`,
+          key,
+          requestBody: fingerprint
+        },
+        async (trx) => ({
+          statusCode: 201,
+          body: await service.addRoomCategoryMedia(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              roomCategoryId: request.params.roomCategoryId,
+              storageProvider: "GCS",
+              storageKey: stored.objectKey,
+              mimeType: stored.contentType,
+              altText: request.query.altText?.trim() || null,
+              caption: request.query.caption?.trim() || null,
+              sortOrder: request.query.sortOrder ?? 0
+            },
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+
+      if (result.replayed) {
+        void reply.header("idempotency-replayed", "true");
+      }
+
+      void reply.header("cache-control", "no-store");
+
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.delete<{ Params: RoomCategoryMediaParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/room-categories/:roomCategoryId/media/:mediaId",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Property Setup"],
+        summary: "Archive a room category photo",
+        security: [{ bearerAuth: [] }],
+        params: roomCategoryMediaParamsSchema,
+        headers: idempotencyHeaders
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+
+      if (!actor) {
+        throw new AuthenticationError();
+      }
+
+      const key = requireIdempotencyKey(request.headers);
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `property.room-category.media.archive:${request.params.mediaId}:user:${actor.userId}`,
+          key,
+          requestBody: {}
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await service.archiveRoomCategoryMedia(
+            trx,
+            actor,
+            request.params.organizationId,
+            request.params.propertyId,
+            request.params.roomCategoryId,
+            request.params.mediaId,
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+
+      if (result.replayed) {
+        void reply.header("idempotency-replayed", "true");
+      }
+
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.put<{
+    Params: RoomCategoryParams;
+    Body: ReplaceRoomCategoryAmenitiesBody;
+  }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/room-categories/:roomCategoryId/amenities",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Property Setup"],
+        summary: "Select the amenities available in a room category",
+        security: [{ bearerAuth: [] }],
+        params: roomCategoryParamsSchema,
+        headers: idempotencyHeaders,
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["amenityCodes"],
+          properties: {
+            amenityCodes: {
+              type: "array",
+              maxItems: 100,
+              uniqueItems: true,
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 100,
+                pattern: "^[A-Za-z0-9_]+$"
+              }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) {
+        throw new AuthenticationError();
+      }
+
+      const key = requireIdempotencyKey(request.headers);
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `property.room-category.amenities:${request.params.roomCategoryId}:user:${actor.userId}`,
+          key,
+          requestBody: request.body
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await service.replaceRoomCategoryAmenities(
+            trx,
+            actor,
+            request.params.organizationId,
+            request.params.propertyId,
+            request.params.roomCategoryId,
+            request.body.amenityCodes,
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+
+      if (result.replayed) {
+        void reply.header("idempotency-replayed", "true");
+      }
+
       return reply.status(result.statusCode).send(result.body);
     }
   );

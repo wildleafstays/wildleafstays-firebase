@@ -13,7 +13,10 @@ import type {
   CreateRoomCategoryInput,
   CreateStructureInput
 } from "../domain/property-setup.js";
-import { PropertySetupRepository } from "../infrastructure/property-setup-repository.js";
+import {
+  PropertySetupRepository,
+  type RoomCategoryMediaRecord
+} from "../infrastructure/property-setup-repository.js";
 import {
   presentFloor,
   presentPhysicalUnit,
@@ -27,11 +30,44 @@ import {
 
 type DbExecutor = Kysely<Database> | Transaction<Database>;
 
+export interface RoomCategoryMediaView extends JsonObject {
+  id: string;
+  roomCategoryId: string;
+  storageProvider: string;
+  storageKey: string;
+  mimeType: string | null;
+  altText: string | null;
+  caption: string | null;
+  sortOrder: number;
+  status: string;
+}
+
+function presentRoomCategoryMedia(row: RoomCategoryMediaRecord): RoomCategoryMediaView {
+  return {
+    id: row.id,
+    roomCategoryId: row.room_category_id,
+    storageProvider: row.storage_provider,
+    storageKey: row.storage_key,
+    mimeType: row.mime_type,
+    altText: row.alt_text,
+    caption: row.caption,
+    sortOrder: row.sort_order,
+    status: row.status
+  };
+}
+
+export interface RoomCategoryAmenityView extends JsonObject {
+  roomCategoryId: string;
+  amenityCode: string;
+}
+
 export interface PropertyLayoutResult extends JsonObject {
   structures: StructureView[];
   floors: FloorView[];
   roomCategories: RoomCategoryView[];
   physicalUnits: PhysicalUnitView[];
+  roomCategoryAmenities: RoomCategoryAmenityView[];
+  roomCategoryMedia: RoomCategoryMediaView[];
 }
 
 export class PropertySetupService {
@@ -63,6 +99,28 @@ export class PropertySetupService {
       organizationId,
       propertyId
     });
+  }
+
+  async assertRoomCategoryEditable(
+    db: DbExecutor,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string
+  ): Promise<void> {
+    this.assertManage(actor, organizationId, propertyId);
+    await this.assertEditable(db, organizationId, propertyId);
+
+    const category = await this.repository.findRoomCategory(
+      db,
+      organizationId,
+      propertyId,
+      roomCategoryId
+    );
+
+    if (!category) {
+      throw new NotFoundError("Room category not found");
+    }
   }
 
   async createStructure(
@@ -274,6 +332,224 @@ export class PropertySetupService {
     return { physicalUnit: view };
   }
 
+  async addRoomCategoryMedia(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      roomCategoryId: string;
+      storageProvider: string;
+      storageKey: string;
+      mimeType: string | null;
+      altText: string | null;
+      caption: string | null;
+      sortOrder: number;
+    },
+    request: RequestMetadata
+  ): Promise<{ media: RoomCategoryMediaView }> {
+    await this.assertRoomCategoryEditable(
+      trx,
+      actor,
+      input.organizationId,
+      input.propertyId,
+      input.roomCategoryId
+    );
+
+    const media = await this.repository.addRoomCategoryMedia(trx, actor.userId, input);
+
+    const view = presentRoomCategoryMedia(media);
+
+    await new AuditService(trx).record({
+      actor,
+      organizationId: input.organizationId,
+      propertyId: input.propertyId,
+      action: "property.room_category.media.added",
+      entityType: "room_category_media",
+      entityId: media.id,
+      before: null,
+      after: view,
+      request
+    });
+
+    await new OutboxService(trx).enqueue({
+      aggregateType: "room_category",
+      aggregateId: input.roomCategoryId,
+      eventType: "property.room_category.media.added.v1",
+      payload: {
+        propertyId: input.propertyId,
+        roomCategoryId: input.roomCategoryId,
+        mediaId: media.id
+      }
+    });
+
+    return { media: view };
+  }
+
+  async archiveRoomCategoryMedia(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string,
+    mediaId: string,
+    request: RequestMetadata
+  ): Promise<{ media: RoomCategoryMediaView }> {
+    await this.assertRoomCategoryEditable(trx, actor, organizationId, propertyId, roomCategoryId);
+
+    const before = await this.repository.findRoomCategoryMedia(
+      trx,
+      organizationId,
+      propertyId,
+      roomCategoryId,
+      mediaId
+    );
+
+    if (!before) {
+      throw new NotFoundError("Room category image not found");
+    }
+
+    const archived = await this.repository.archiveRoomCategoryMedia(
+      trx,
+      organizationId,
+      propertyId,
+      roomCategoryId,
+      mediaId
+    );
+
+    if (!archived) {
+      throw new NotFoundError("Room category image not found");
+    }
+
+    const beforeView = presentRoomCategoryMedia(before);
+    const afterView = presentRoomCategoryMedia(archived);
+
+    await new AuditService(trx).record({
+      actor,
+      organizationId,
+      propertyId,
+      action: "property.room_category.media.archived",
+      entityType: "room_category_media",
+      entityId: mediaId,
+      before: beforeView,
+      after: afterView,
+      request
+    });
+
+    await new OutboxService(trx).enqueue({
+      aggregateType: "room_category",
+      aggregateId: roomCategoryId,
+      eventType: "property.room_category.media.archived.v1",
+      payload: {
+        propertyId,
+        roomCategoryId,
+        mediaId
+      }
+    });
+
+    return { media: afterView };
+  }
+
+  async replaceRoomCategoryAmenities(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string,
+    amenityCodes: string[],
+    request: RequestMetadata
+  ): Promise<{ amenities: RoomCategoryAmenityView[] }> {
+    this.assertManage(actor, organizationId, propertyId);
+    await this.assertEditable(trx, organizationId, propertyId);
+
+    const category = await this.repository.findRoomCategory(
+      trx,
+      organizationId,
+      propertyId,
+      roomCategoryId
+    );
+
+    if (!category) {
+      throw new NotFoundError("Room category not found");
+    }
+
+    const normalized = amenityCodes.map((code) => code.trim().toUpperCase());
+
+    const uniqueCodes = [...new Set(normalized)];
+
+    if (uniqueCodes.length !== normalized.length) {
+      throw new ValidationError("Room amenity codes must be unique");
+    }
+
+    const activeCodes = await this.repository.activeRoomAmenityCodes(trx, uniqueCodes);
+
+    const activeSet = new Set(activeCodes);
+    const invalid = uniqueCodes.filter((code) => !activeSet.has(code));
+
+    if (invalid.length) {
+      throw new ValidationError("One or more room amenity codes are invalid", { invalid });
+    }
+
+    const beforeRows = await this.repository.listRoomCategoryAmenities(
+      trx,
+      organizationId,
+      propertyId
+    );
+
+    const before = beforeRows
+      .filter((row) => row.room_category_id === roomCategoryId)
+      .map((row) => ({
+        roomCategoryId: row.room_category_id,
+        amenityCode: row.amenity_code
+      }));
+
+    await this.repository.replaceRoomCategoryAmenities(
+      trx,
+      organizationId,
+      propertyId,
+      roomCategoryId,
+      uniqueCodes
+    );
+
+    const afterRows = await this.repository.listRoomCategoryAmenities(
+      trx,
+      organizationId,
+      propertyId
+    );
+
+    const after = afterRows
+      .filter((row) => row.room_category_id === roomCategoryId)
+      .map((row) => ({
+        roomCategoryId: row.room_category_id,
+        amenityCode: row.amenity_code
+      }));
+
+    await new AuditService(trx).record({
+      actor,
+      organizationId,
+      propertyId,
+      action: "property.room_category.amenities.replaced",
+      entityType: "room_category",
+      entityId: roomCategoryId,
+      before: { amenities: before },
+      after: { amenities: after },
+      request
+    });
+
+    await new OutboxService(trx).enqueue({
+      aggregateType: "room_category",
+      aggregateId: roomCategoryId,
+      eventType: "property.room_category.amenities.replaced.v1",
+      payload: {
+        propertyId,
+        roomCategoryId,
+        amenityCodes: uniqueCodes
+      }
+    });
+
+    return { amenities: after };
+  }
+
   async getLayout(
     db: Kysely<Database>,
     actor: ActorContext,
@@ -287,22 +563,37 @@ export class PropertySetupService {
     });
 
     const propertyStatus = await this.repository.getPropertyStatus(db, organizationId, propertyId);
+
     if (!propertyStatus) {
       throw new NotFoundError("Property not found");
     }
 
-    const [structures, floors, roomCategories, physicalUnits] = await Promise.all([
+    const [
+      structures,
+      floors,
+      roomCategories,
+      physicalUnits,
+      roomCategoryAmenities,
+      roomCategoryMedia
+    ] = await Promise.all([
       this.repository.listStructures(db, organizationId, propertyId),
       this.repository.listFloors(db, organizationId, propertyId),
       this.repository.listRoomCategories(db, organizationId, propertyId),
-      this.repository.listPhysicalUnits(db, organizationId, propertyId)
+      this.repository.listPhysicalUnits(db, organizationId, propertyId),
+      this.repository.listRoomCategoryAmenities(db, organizationId, propertyId),
+      this.repository.listRoomCategoryMedia(db, organizationId, propertyId)
     ]);
 
     return {
       structures: structures.map(presentStructure),
       floors: floors.map(presentFloor),
       roomCategories: roomCategories.map(presentRoomCategory),
-      physicalUnits: physicalUnits.map(presentPhysicalUnit)
+      physicalUnits: physicalUnits.map(presentPhysicalUnit),
+      roomCategoryAmenities: roomCategoryAmenities.map((row) => ({
+        roomCategoryId: row.room_category_id,
+        amenityCode: row.amenity_code
+      })),
+      roomCategoryMedia: roomCategoryMedia.map(presentRoomCategoryMedia)
     };
   }
 }
