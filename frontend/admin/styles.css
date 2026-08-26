@@ -437,6 +437,257 @@ button:disabled {
   gap: 1rem;
   align-items: start;
 }
+.editor-workspace {
+  display: grid;
+  gap: 1rem;
+  max-width: 1180px;
+}
+.editor-progress-card {
+  padding: 1rem 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  background: linear-gradient(135deg, #f7f5ee, #edf3ed);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+.editor-progress-card > div:first-child {
+  display: grid;
+  gap: 0.18rem;
+}
+.editor-progress-card .muted {
+  font-size: 0.78rem;
+}
+.editor-progress-kicker {
+  color: var(--gold);
+  font-size: 0.67rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.editor-progress-status {
+  width: min(230px, 34vw);
+  display: grid;
+  gap: 0.45rem;
+  text-align: right;
+  font-size: 0.82rem;
+}
+.editor-progress-track {
+  height: 0.45rem;
+  overflow: hidden;
+  background: #dce4dc;
+  border-radius: 999px;
+}
+.editor-progress-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--fern);
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+.editor-accordion {
+  display: grid;
+  gap: 0.75rem;
+}
+.editor-accordion-item {
+  overflow: clip;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 32px rgba(20, 55, 46, 0.05);
+}
+.editor-accordion-item > summary {
+  min-height: 4.75rem;
+  padding: 1rem 1.2rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.editor-accordion-item > summary::-webkit-details-marker,
+.editor-subpanel > summary::-webkit-details-marker {
+  display: none;
+}
+.editor-accordion-item > summary::after {
+  content: "⌄";
+  color: var(--forest);
+  font-size: 1.25rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+.editor-accordion-item[open] > summary {
+  background: #f5f7f2;
+  border-bottom: 1px solid var(--line);
+}
+.editor-accordion-item[open] > summary::after {
+  transform: rotate(180deg);
+}
+.editor-accordion-title {
+  color: var(--ink);
+  font-family: Georgia, serif;
+  font-size: clamp(1.25rem, 2vw, 1.55rem);
+}
+.editor-section-status {
+  padding: 0.32rem 0.58rem;
+  color: #7c6031;
+  background: #f7efdf;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.editor-section-status.complete {
+  color: var(--forest);
+  background: var(--sage);
+}
+.editor-accordion-content {
+  padding: 1.25rem;
+}
+.editor-panel-body {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-editor-accordion="profile"] #profileForm > .span-two:first-child h3,
+[data-editor-accordion="policies"] #policiesForm > .span-two:first-child h3,
+[data-editor-accordion="amenities"] #amenitiesForm > div:first-child h3 {
+  display: none;
+}
+[data-editor-accordion="rooms"] #physicalUnitForm > .span-two:first-child {
+  display: none;
+}
+.editor-panel-intro,
+.editor-list-heading {
+  margin-bottom: 1rem;
+}
+.editor-panel-intro h3,
+.editor-list-heading h3 {
+  margin: 0 0 0.28rem;
+  font-family: Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+.editor-panel-intro p {
+  margin: 0;
+}
+.editor-subpanel {
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+}
+.editor-subpanel > summary {
+  padding: 0.95rem 1rem;
+  color: var(--forest);
+  background: #f8faf7;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 800;
+}
+.editor-subpanel > summary::after {
+  content: "+";
+  float: right;
+}
+.editor-subpanel[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.editor-subpanel[open] > summary::after {
+  content: "−";
+}
+.editor-subpanel-content {
+  padding: 1rem;
+}
+.editor-form-surface {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.category-summary-card {
+  min-width: 0;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+}
+.category-summary-copy {
+  min-width: 0;
+}
+.category-summary-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+.category-summary-heading h4 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: 1.12rem;
+}
+.category-type-badge {
+  padding: 0.23rem 0.45rem;
+  color: var(--forest);
+  background: var(--sage);
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+}
+.category-summary-metrics {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.category-summary-metrics span:not(:last-child)::after {
+  content: "·";
+  margin-left: 0.9rem;
+}
+.category-summary-actions button {
+  width: auto;
+  min-height: 2.45rem;
+  padding: 0.55rem 0.75rem;
+  white-space: nowrap;
+}
+#accommodationList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  border: 0;
+}
+.physical-room-card-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+.physical-room-card {
+  padding: 0.9rem 1rem;
+  display: grid;
+  gap: 0.45rem;
+  background: #f8faf7;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+}
+.physical-room-card > div {
+  display: grid;
+  gap: 0.15rem;
+}
 .span-editor {
   grid-column: 1 / -1;
 }
@@ -781,6 +1032,10 @@ button:disabled {
   .operations-grid {
     grid-template-columns: 1fr;
   }
+  #accommodationList,
+  .physical-room-card-list {
+    grid-template-columns: 1fr;
+  }
   .metric-grid {
     grid-template-columns: repeat(3, minmax(130px, 1fr));
   }
@@ -842,6 +1097,35 @@ button:disabled {
   }
   .card-heading {
     display: grid;
+  }
+  .editor-progress-card {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .editor-progress-status {
+    width: 100%;
+    text-align: left;
+  }
+  .editor-accordion-item > summary {
+    min-height: 4.25rem;
+    padding: 0.85rem 0.9rem;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.6rem;
+  }
+  .editor-section-status {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .editor-accordion-content {
+    padding: 1rem;
+  }
+  .category-summary-card {
+    grid-template-columns: 1fr;
+  }
+  .category-summary-actions button {
+    width: 100%;
   }
 }
 

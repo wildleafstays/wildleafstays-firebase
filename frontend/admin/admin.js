@@ -206,6 +206,273 @@ function button(label, onClick, className = "") {
   return element;
 }
 
+function editorAccordionItem(sectionKey, title) {
+  const details = document.createElement("details");
+  details.className = "editor-accordion-item";
+  details.dataset.editorAccordion = sectionKey;
+
+  const summary = document.createElement("summary");
+  const heading = textElement("span", "editor-accordion-title", title);
+  const status = textElement("span", "editor-section-status", "Not started");
+  status.id = `editorSectionStatus-${sectionKey}`;
+  summary.append(heading, status);
+
+  const content = document.createElement("div");
+  content.className = "editor-accordion-content";
+  details.append(summary, content);
+
+  details.addEventListener("toggle", () => {
+    if (!details.open) return;
+
+    document
+      .querySelectorAll("[data-editor-accordion]")
+      .forEach((candidate) => {
+        if (candidate !== details) candidate.open = false;
+      });
+  });
+
+  return { details, content };
+}
+
+function editorSubpanel(id, label, contentNode) {
+  const details = document.createElement("details");
+  details.id = id;
+  details.className = "editor-subpanel";
+  details.append(textElement("summary", "", label));
+
+  const content = document.createElement("div");
+  content.className = "editor-subpanel-content";
+  content.append(contentNode);
+  details.append(content);
+  return details;
+}
+
+function setupPropertyEditorWorkspace() {
+  const root = document.querySelector("#editorScreen .editor-grid");
+  if (!root || root.dataset.workspaceReady === "true") return;
+
+  const profileForm = byId("profileForm");
+  const checklistCard = byId("checklist").closest("aside");
+  const roomCategoryForm = byId("roomCategoryForm");
+  const categoryPhotoForm = byId("roomCategoryImageUploadForm");
+  const locationDetails = document.querySelector(".room-location-details");
+  const physicalUnitForm = byId("physicalUnitForm");
+  const categoryList = byId("accommodationList");
+  const policiesForm = byId("policiesForm");
+  const amenitiesForm = byId("amenitiesForm");
+  const assetSection = byId("imageUploadForm").closest("section");
+
+  if (
+    !profileForm ||
+    !checklistCard ||
+    !roomCategoryForm ||
+    !categoryPhotoForm ||
+    !locationDetails ||
+    !physicalUnitForm ||
+    !categoryList ||
+    !policiesForm ||
+    !amenitiesForm ||
+    !assetSection
+  ) {
+    return;
+  }
+
+  root.dataset.workspaceReady = "true";
+  root.className = "editor-workspace";
+
+  for (const panel of [
+    profileForm,
+    policiesForm,
+    amenitiesForm,
+    assetSection,
+    checklistCard,
+  ]) {
+    panel.classList.remove("card", "span-editor", "checklist-card");
+    panel.classList.add("editor-panel-body");
+  }
+
+  for (const form of [roomCategoryForm, categoryPhotoForm, physicalUnitForm]) {
+    form.classList.add("editor-form-surface");
+  }
+
+  const progress = document.createElement("section");
+  progress.className = "editor-progress-card";
+  const progressCopy = document.createElement("div");
+  progressCopy.append(
+    textElement("span", "editor-progress-kicker", "Property setup"),
+    textElement("strong", "", "Complete one section at a time"),
+    textElement(
+      "span",
+      "muted",
+      "Your existing information is preserved as you move between sections.",
+    ),
+  );
+  const progressStatus = document.createElement("div");
+  progressStatus.className = "editor-progress-status";
+  const progressText = textElement("strong", "", "0 of 6 complete");
+  progressText.id = "editorProgressText";
+  const progressTrack = document.createElement("div");
+  progressTrack.className = "editor-progress-track";
+  const progressBar = document.createElement("span");
+  progressBar.id = "editorProgressBar";
+  progressTrack.append(progressBar);
+  progressStatus.append(progressText, progressTrack);
+  progress.append(progressCopy, progressStatus);
+
+  const accordion = document.createElement("div");
+  accordion.className = "editor-accordion";
+
+  const profile = editorAccordionItem("profile", "Property profile");
+  profile.content.append(profileForm);
+
+  const categories = editorAccordionItem("categories", "Room categories");
+  const categoryIntro = document.createElement("div");
+  categoryIntro.className = "editor-panel-intro";
+  categoryIntro.append(
+    textElement("h3", "", "Your room categories"),
+    textElement(
+      "p",
+      "muted",
+      "Review the room types already available to guests, or add another category.",
+    ),
+  );
+  categories.content.append(
+    categoryIntro,
+    categoryList,
+    editorSubpanel(
+      "roomCategoryCreatePanel",
+      "Add a room category",
+      roomCategoryForm,
+    ),
+    editorSubpanel(
+      "roomCategoryPhotosPanel",
+      "Manage room category photos",
+      categoryPhotoForm,
+    ),
+  );
+
+  const rooms = editorAccordionItem("rooms", "Add rooms");
+  const roomIntro = document.createElement("div");
+  roomIntro.className = "editor-panel-intro";
+  roomIntro.append(
+    textElement("h3", "", "Add an actual room"),
+    textElement(
+      "p",
+      "muted",
+      "Choose its room category, enter the room name or number, and save.",
+    ),
+  );
+  const physicalRoomHeading = document.createElement("div");
+  physicalRoomHeading.className = "editor-list-heading";
+  physicalRoomHeading.append(textElement("h3", "", "Existing rooms"));
+  const physicalRoomList = document.createElement("div");
+  physicalRoomList.id = "physicalRoomList";
+  physicalRoomList.className = "physical-room-card-list";
+  rooms.content.append(
+    roomIntro,
+    physicalUnitForm,
+    locationDetails,
+    physicalRoomHeading,
+    physicalRoomList,
+  );
+
+  const policies = editorAccordionItem("policies", "Policies and house rules");
+  policies.content.append(policiesForm);
+
+  const amenities = editorAccordionItem("amenities", "Property amenities");
+  amenities.content.append(amenitiesForm);
+
+  const assets = editorAccordionItem("assets", "Photos and documents");
+  assets.content.append(assetSection);
+
+  const review = editorAccordionItem("review", "Review and publishing");
+  review.content.append(checklistCard);
+
+  accordion.append(
+    profile.details,
+    categories.details,
+    rooms.details,
+    policies.details,
+    amenities.details,
+    assets.details,
+    review.details,
+  );
+
+  root.replaceChildren(progress, accordion);
+}
+
+setupPropertyEditorWorkspace();
+
+function setEditorSectionStatus(sectionKey, label, complete = false) {
+  const status = byId(`editorSectionStatus-${sectionKey}`);
+  if (!status) return;
+
+  status.textContent = label;
+  status.classList.toggle("complete", complete);
+}
+
+function updateEditorWorkspaceProgress(onboarding) {
+  const checklist = onboarding.checklist || {};
+  const categories = state.layout?.roomCategories || [];
+  const units = state.layout?.physicalUnits || [];
+  const media = onboarding.media || [];
+  const documents = onboarding.documents || [];
+  const completionKeys = [
+    "profileComplete",
+    "accommodationComplete",
+    "policiesComplete",
+    "amenitiesComplete",
+    "mediaComplete",
+    "rightToOperateDocumentPresent",
+  ];
+  const completed = completionKeys.filter((key) => checklist[key]).length;
+
+  setEditorSectionStatus(
+    "profile",
+    checklist.profileComplete ? "Complete" : "Needs attention",
+    checklist.profileComplete,
+  );
+  setEditorSectionStatus(
+    "categories",
+    `${categories.length} categor${categories.length === 1 ? "y" : "ies"}`,
+    categories.length > 0,
+  );
+  setEditorSectionStatus(
+    "rooms",
+    `${units.length} room${units.length === 1 ? "" : "s"}`,
+    units.length > 0,
+  );
+  setEditorSectionStatus(
+    "policies",
+    checklist.policiesComplete ? "Complete" : "Needs attention",
+    checklist.policiesComplete,
+  );
+  setEditorSectionStatus(
+    "amenities",
+    checklist.amenitiesComplete ? "Complete" : "Needs attention",
+    checklist.amenitiesComplete,
+  );
+  setEditorSectionStatus(
+    "assets",
+    `${media.length} photo${media.length === 1 ? "" : "s"} · ${documents.length} document${documents.length === 1 ? "" : "s"}`,
+    checklist.mediaComplete && checklist.rightToOperateDocumentPresent,
+  );
+  setEditorSectionStatus(
+    "review",
+    checklist.readyToSubmit ? "Ready to submit" : `${completed} of 6 complete`,
+    checklist.readyToSubmit,
+  );
+
+  const progressText = byId("editorProgressText");
+  const progressBar = byId("editorProgressBar");
+  if (progressText) {
+    progressText.textContent = `${completed} of 6 complete`;
+  }
+  if (progressBar) {
+    progressBar.style.width = `${Math.round((completed / 6) * 100)}%`;
+  }
+}
+
 function showMessage(message, error = false) {
   portalMessage.textContent = message;
   portalMessage.classList.remove("hidden");
@@ -689,6 +956,7 @@ function renderEditor() {
     "hidden",
     !(editable && onboarding.checklist.readyToSubmit),
   );
+  updateEditorWorkspaceProgress(onboarding);
   renderAccommodation(editable);
   renderAssets(editable);
 }
@@ -888,12 +1156,22 @@ function renderAccommodation(editable) {
   const list = byId("accommodationList");
   list.replaceChildren();
 
+  const physicalRoomList = byId("physicalRoomList");
+  physicalRoomList?.replaceChildren();
+
   if (!categories.length) {
     list.append(
       textElement(
         "p",
         "empty-state",
         "Add a room category before adding actual rooms.",
+      ),
+    );
+    physicalRoomList?.append(
+      textElement(
+        "p",
+        "empty-state",
+        "Rooms will appear here after a room category has been added.",
       ),
     );
     return;
@@ -905,85 +1183,114 @@ function renderAccommodation(editable) {
     );
 
     const row = document.createElement("div");
-    row.className = "compact-row";
+    row.className = "category-summary-card";
 
     const copy = document.createElement("div");
-    copy.append(textElement("strong", "", category.name));
+    copy.className = "category-summary-copy";
 
-    copy.append(
+    const heading = document.createElement("div");
+    heading.className = "category-summary-heading";
+    heading.append(
+      textElement("h4", "", category.name),
       textElement(
         "span",
-        "muted",
-        `${category.accommodationType} | up to ${category.maxOccupancy} guests | ${categoryUnits.length} room${categoryUnits.length === 1 ? "" : "s"} | ${(state.layout?.roomCategoryAmenities || []).filter((item) => item.roomCategoryId === category.id).length} amenities | ${(state.layout?.roomCategoryMedia || []).filter((item) => item.roomCategoryId === category.id).length} photos`,
+        "category-type-badge",
+        category.accommodationType.replaceAll("_", " "),
       ),
     );
 
-    if (!categoryUnits.length) {
-      copy.append(textElement("small", "muted", "No actual rooms added yet."));
+    const metrics = document.createElement("div");
+    metrics.className = "category-summary-metrics";
+    const amenityCount = (state.layout?.roomCategoryAmenities || []).filter(
+      (item) => item.roomCategoryId === category.id,
+    ).length;
+    const photoCount = (state.layout?.roomCategoryMedia || []).filter(
+      (item) => item.roomCategoryId === category.id,
+    ).length;
+
+    for (const metric of [
+      `Up to ${category.maxOccupancy} guests`,
+      `${categoryUnits.length} room${categoryUnits.length === 1 ? "" : "s"}`,
+      `${amenityCount} amenit${amenityCount === 1 ? "y" : "ies"}`,
+      `${photoCount} photo${photoCount === 1 ? "" : "s"}`,
+    ]) {
+      metrics.append(textElement("span", "", metric));
     }
 
-    if (categoryUnits.length) {
-      const roomList = document.createElement("div");
-      roomList.className = "physical-room-list";
+    copy.append(heading, metrics);
 
-      for (const unit of categoryUnits) {
-        const roomRow = document.createElement("div");
-        roomRow.className = "physical-room-row";
-
-        roomRow.append(
-          textElement("strong", "", unit.displayName || unit.unitCode),
-        );
-
-        const details = [];
-
-        const floor = floors.find((candidate) => candidate.id === unit.floorId);
-
-        if (floor) {
-          const structure = structures.find(
-            (candidate) => candidate.id === floor.structureId,
-          );
-
-          details.push(
-            structure && structures.length > 1
-              ? `${floor.name} - ${structure.name}`
-              : floor.name,
-          );
-        }
-
-        if (unit.viewLabel) {
-          details.push(unit.viewLabel);
-        }
-
-        if (unit.liftAccessible) {
-          details.push("Lift");
-        }
-
-        if (unit.wheelchairAccessible) {
-          details.push("Wheelchair friendly");
-        }
-
-        if (unit.stepFreeAccessible) {
-          details.push("Step-free access");
-        }
-
-        roomRow.append(
-          textElement(
-            "small",
-            "muted",
-            details.length
-              ? details.join(" | ")
-              : "No additional room-specific details",
-          ),
-        );
-
-        roomList.append(roomRow);
-      }
-
-      copy.append(roomList);
+    const actions = document.createElement("div");
+    actions.className = "category-summary-actions";
+    if (editable) {
+      actions.append(
+        button(
+          "Manage photos",
+          () => {
+            byId("roomCategoryImageCategory").value = category.id;
+            const photoPanel = byId("roomCategoryPhotosPanel");
+            photoPanel.open = true;
+            photoPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          },
+          "button-secondary",
+        ),
+      );
     }
 
-    row.append(copy);
+    row.append(copy, actions);
     list.append(row);
+  }
+
+  if (!physicalRoomList) return;
+
+  if (!units.length) {
+    physicalRoomList.append(
+      textElement(
+        "p",
+        "empty-state",
+        "No actual rooms have been added yet. Use the form above to add one.",
+      ),
+    );
+    return;
+  }
+
+  for (const unit of units) {
+    const category = categories.find(
+      (candidate) => candidate.id === unit.roomCategoryId,
+    );
+    const roomCard = document.createElement("div");
+    roomCard.className = "physical-room-card";
+    const copy = document.createElement("div");
+    copy.append(
+      textElement("strong", "", unit.displayName || unit.unitCode),
+      textElement("span", "muted", category?.name || "Room category"),
+    );
+
+    const details = [];
+    const floor = floors.find((candidate) => candidate.id === unit.floorId);
+    if (floor) {
+      const structure = structures.find(
+        (candidate) => candidate.id === floor.structureId,
+      );
+      details.push(
+        structure && structures.length > 1
+          ? `${floor.name} - ${structure.name}`
+          : floor.name,
+      );
+    }
+    if (unit.viewLabel) details.push(unit.viewLabel);
+    if (unit.liftAccessible) details.push("Lift");
+    if (unit.wheelchairAccessible) details.push("Wheelchair friendly");
+    if (unit.stepFreeAccessible) details.push("Step-free access");
+
+    roomCard.append(
+      copy,
+      textElement(
+        "small",
+        "muted",
+        details.length ? details.join(" · ") : "No additional details",
+      ),
+    );
+    physicalRoomList.append(roomCard);
   }
 }
 

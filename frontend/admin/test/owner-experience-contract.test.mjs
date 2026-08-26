@@ -6,6 +6,8 @@ const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 const js = fs.readFileSync(new URL("../admin.js", import.meta.url), "utf8");
 
+const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+
 test("room category setup uses owner language and hides internal category code", () => {
   const match = html.match(/<form id="roomCategoryForm"[\s\S]*?<\/form>/);
 
@@ -75,7 +77,36 @@ test("room category summary reports amenities and photos", () => {
 
   assert.match(js, /roomCategoryMedia/);
 
-  assert.match(js, /amenities \| .*photos/);
+  assert.match(js, /category-summary-metrics/);
+  assert.match(js, /amenityCount/);
+  assert.match(js, /photoCount/);
+});
+
+test("property editor uses one-at-a-time sections without replacing existing forms", () => {
+  assert.match(js, /function setupPropertyEditorWorkspace\(\)/);
+  assert.match(js, /data-editor-accordion/);
+  assert.match(js, /if \(candidate !== details\) candidate\.open = false/);
+  assert.match(js, /editorAccordionItem\("profile", "Property profile"\)/);
+  assert.match(js, /editorAccordionItem\("categories", "Room categories"\)/);
+  assert.match(js, /editorAccordionItem\("rooms", "Add rooms"\)/);
+  assert.match(js, /editorAccordionItem\("amenities", "Property amenities"\)/);
+
+  for (const formId of [
+    "profileForm",
+    "roomCategoryForm",
+    "roomCategoryImageUploadForm",
+    "physicalUnitForm",
+    "policiesForm",
+    "amenitiesForm",
+    "imageUploadForm",
+    "documentUploadForm",
+  ]) {
+    assert.match(html, new RegExp(`id="${formId}"`));
+  }
+
+  assert.match(css, /\.editor-accordion-item/);
+  assert.match(css, /#accommodationList,[\s\S]*\.physical-room-card-list/);
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.editor-progress-card/);
 });
 
 test("physical room setup uses owner language and supports floors", () => {
@@ -142,8 +173,8 @@ test("physical room creation preserves the same idempotency key until UI refresh
 });
 
 test("actual room list shows room-specific floor view and accessibility information", () => {
-  assert.ok(js.includes("physical-room-list"));
-  assert.ok(js.includes("physical-room-row"));
+  assert.ok(js.includes("physical-room-card-list"));
+  assert.ok(js.includes("physical-room-card"));
   assert.ok(js.includes("unit.floorId"));
   assert.ok(js.includes('details.push("Lift")'));
   assert.ok(js.includes('details.push("Wheelchair friendly")'));
