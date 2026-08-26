@@ -4,8 +4,8 @@ export const PROPERTY_AMENITY_GROUPS = [
     amenities: [
       ["WIFI", "Wi-Fi"],
       ["HIGH_SPEED_WIFI", "High-speed Wi-Fi"],
-      ["MOBILE_NETWORK", "Good mobile network"]
-    ]
+      ["MOBILE_NETWORK", "Good mobile network"],
+    ],
   },
   {
     label: "Parking & transport",
@@ -17,8 +17,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["EV_CHARGING", "EV charging"],
       ["AIRPORT_TRANSFER", "Airport transfer"],
       ["TAXI_SERVICE", "Taxi service"],
-      ["DRIVER_ACCOMMODATION", "Driver accommodation"]
-    ]
+      ["DRIVER_ACCOMMODATION", "Driver accommodation"],
+    ],
   },
   {
     label: "Food & dining",
@@ -29,8 +29,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["CAFE", "Cafe"],
       ["BAR", "Bar"],
       ["BBQ", "BBQ"],
-      ["PRIVATE_DINING", "Private dining"]
-    ]
+      ["PRIVATE_DINING", "Private dining"],
+    ],
   },
   {
     label: "Accessibility",
@@ -40,8 +40,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["STEP_FREE_ACCESS", "Step-free access"],
       ["ACCESSIBLE_PARKING", "Accessible parking"],
       ["ACCESSIBLE_WASHROOM", "Accessible washroom"],
-      ["RAMP_ACCESS", "Ramp access"]
-    ]
+      ["RAMP_ACCESS", "Ramp access"],
+    ],
   },
   {
     label: "Leisure & wellness",
@@ -54,8 +54,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["STEAM_ROOM", "Steam room"],
       ["YOGA_SPACE", "Yoga space"],
       ["GAMES_ROOM", "Games room"],
-      ["INDOOR_GAMES", "Indoor games"]
-    ]
+      ["INDOOR_GAMES", "Indoor games"],
+    ],
   },
   {
     label: "Families",
@@ -63,8 +63,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["KIDS_AREA", "Kids play area"],
       ["BABY_COT", "Baby cot available"],
       ["HIGH_CHAIR", "High chair"],
-      ["BABYSITTING", "Babysitting"]
-    ]
+      ["BABYSITTING", "Babysitting"],
+    ],
   },
   {
     label: "Services",
@@ -77,8 +77,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["LUGGAGE_STORAGE", "Luggage storage"],
       ["POWER_BACKUP", "Power backup"],
       ["GENERATOR", "Generator"],
-      ["DAILY_CLEANING", "Daily cleaning"]
-    ]
+      ["DAILY_CLEANING", "Daily cleaning"],
+    ],
   },
   {
     label: "Safety",
@@ -88,8 +88,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["FIRE_SAFETY", "Fire safety equipment"],
       ["SMOKE_ALARM", "Smoke alarms"],
       ["FIRST_AID", "First-aid kit"],
-      ["EMERGENCY_LIGHTING", "Emergency lighting"]
-    ]
+      ["EMERGENCY_LIGHTING", "Emergency lighting"],
+    ],
   },
   {
     label: "Outdoor",
@@ -101,8 +101,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["TERRACE", "Terrace"],
       ["ROOFTOP", "Rooftop area"],
       ["PICNIC_AREA", "Picnic area"],
-      ["NATURE_TRAIL", "Nature trail"]
-    ]
+      ["NATURE_TRAIL", "Nature trail"],
+    ],
   },
   {
     label: "Events & business",
@@ -110,8 +110,8 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["BANQUET_HALL", "Banquet hall"],
       ["CONFERENCE_ROOM", "Conference room"],
       ["MEETING_ROOM", "Meeting room"],
-      ["EVENT_SPACE", "Event space"]
-    ]
+      ["EVENT_SPACE", "Event space"],
+    ],
   },
   {
     label: "Other useful facilities",
@@ -119,9 +119,9 @@ export const PROPERTY_AMENITY_GROUPS = [
       ["PET_FRIENDLY", "Pet friendly"],
       ["COMMON_LOUNGE", "Common lounge"],
       ["LIBRARY", "Library"],
-      ["PRAYER_SPACE", "Prayer / meditation space"]
-    ]
-  }
+      ["PRAYER_SPACE", "Prayer / meditation space"],
+    ],
+  },
 ];
 
 export const ROOM_AMENITY_GROUPS = [
@@ -134,8 +134,8 @@ export const ROOM_AMENITY_GROUPS = [
       ["FAN", "Fan"],
       ["ELECTRIC_BLANKET", "Electric blanket"],
       ["SOUNDPROOFING", "Soundproofing"],
-      ["BLACKOUT_CURTAINS", "Blackout curtains"]
-    ]
+      ["BLACKOUT_CURTAINS", "Blackout curtains"],
+    ],
   },
   {
     label: "Bathroom",
@@ -148,16 +148,16 @@ export const ROOM_AMENITY_GROUPS = [
       ["HAIR_DRYER", "Hair dryer"],
       ["TOILETRIES", "Toiletries"],
       ["SLIPPERS", "Slippers"],
-      ["BATHROBE", "Bathrobe"]
-    ]
+      ["BATHROBE", "Bathrobe"],
+    ],
   },
   {
     label: "Entertainment",
     amenities: [
       ["TV", "Television"],
       ["SMART_TV", "Smart TV"],
-      ["CABLE_TV", "Cable / satellite TV"]
-    ]
+      ["CABLE_TV", "Cable / satellite TV"],
+    ],
   },
   {
     label: "Food & beverage",
@@ -165,8 +165,8 @@ export const ROOM_AMENITY_GROUPS = [
       ["TEA_COFFEE", "Tea / coffee maker"],
       ["ELECTRIC_KETTLE", "Electric kettle"],
       ["MINIBAR", "Minibar"],
-      ["REFRIGERATOR", "Refrigerator"]
-    ]
+      ["REFRIGERATOR", "Refrigerator"],
+    ],
   },
   {
     label: "Furniture & storage",
@@ -178,8 +178,8 @@ export const ROOM_AMENITY_GROUPS = [
       ["SEATING_AREA", "Seating area"],
       ["DINING_AREA", "Dining area"],
       ["IRON", "Iron"],
-      ["IRONING_BOARD", "Ironing board"]
-    ]
+      ["IRONING_BOARD", "Ironing board"],
+    ],
   },
   {
     label: "Outdoor & view",
@@ -191,7 +191,7 @@ export const ROOM_AMENITY_GROUPS = [
       ["GARDEN_VIEW", "Garden view"],
       ["FOREST_VIEW", "Forest view"],
       ["POOL_VIEW", "Pool view"],
-      ["CITY_VIEW", "City view"]
-    ]
-  }
+      ["CITY_VIEW", "City view"],
+    ],
+  },
 ];
