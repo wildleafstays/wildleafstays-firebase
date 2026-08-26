@@ -350,6 +350,75 @@ describe("Phase 3A inventory foundation", () => {
     expect(stopped.days[0]?.roomCategories[0]?.sellableQuantity).toBe(0);
   });
 
+  it("lets an owner override daily inventory without changing physical room setup", async () => {
+    const fixture = await createInventoryFixture("ROOMS_ONLY", 2);
+    const service = new InventoryService();
+
+    const result = await db.transaction().execute((trx) =>
+      service.setControls(
+        trx,
+        fixture.actor,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          bucketType: "ROOM_CATEGORY",
+          roomCategoryId: fixture.roomCategoryId,
+          startDate: "2030-05-03",
+          endDate: "2030-05-04",
+          stopSell: false,
+          overbookingLimit: null,
+          capacityOverride: 5
+        },
+        requestMetadata()
+      )
+    );
+
+    expect(result).toMatchObject({ capacityOverride: 5, affectedDays: 1 });
+
+    const open = await availability(fixture, "2030-05-03", "2030-05-04");
+    expect(open.days[0]?.roomCategories[0]).toMatchObject({
+      physicalCapacity: 2,
+      capacityOverride: 5,
+      inventoryCapacity: 5,
+      sellableQuantity: 5
+    });
+
+    await db
+      .updateTable("inventory_daily_buckets")
+      .set({ held_quantity: 1 })
+      .where("property_id", "=", fixture.propertyId)
+      .where("room_category_id", "=", fixture.roomCategoryId)
+      .where("stay_date", "=", "2030-05-03")
+      .executeTakeFirstOrThrow();
+
+    await expect(
+      db.transaction().execute((trx) =>
+        service.setControls(
+          trx,
+          fixture.actor,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            bucketType: "ROOM_CATEGORY",
+            roomCategoryId: fixture.roomCategoryId,
+            startDate: "2030-05-03",
+            endDate: "2030-05-04",
+            stopSell: null,
+            overbookingLimit: null,
+            capacityOverride: 0
+          },
+          requestMetadata()
+        )
+      )
+    ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+
+    const preserved = await availability(fixture, "2030-05-03", "2030-05-04");
+    expect(preserved.days[0]?.roomCategories[0]).toMatchObject({
+      capacityOverride: 5,
+      sellableQuantity: 4
+    });
+  });
+
   it("uses room-category stop-sell as the universal source for full-property availability", async () => {
     const fixture = await createInventoryFixture("BOTH", 2);
     const service = new InventoryService();

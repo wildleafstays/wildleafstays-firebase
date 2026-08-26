@@ -26,6 +26,8 @@ test("room category setup uses owner language and hides internal category code",
 });
 
 test("room category creation persists selected checkbox amenities", () => {
+  assert.match(js, /from "\.\/amenity-catalog\.js"/);
+  assert.match(js, /PROPERTY_AMENITY_GROUPS/);
   assert.match(js, /ROOM_AMENITY_GROUPS/);
   assert.match(js, /input\[name="roomAmenity"\]:checked/);
   assert.match(js, /room-categories\/\$\{roomCategoryId\}\/amenities/);
@@ -207,6 +209,12 @@ test("Step 4B5A owner calendar provides 7, 14 and 30 day views", () => {
   assert.match(js, /function setOwnerCalendarView\(days\)/);
   assert.match(js, /shiftDate\(startDate, days\)/);
   assert.match(js, /syncOwnerCalendarViewButtons/);
+  assert.match(screen[0], /id="previousCalendarWindow"/);
+  assert.match(screen[0], /id="nextCalendarWindow"/);
+  assert.match(screen[0], /id="todayCalendarWindow"/);
+  assert.match(js, /function moveOwnerCalendarWindow\(direction\)/);
+  assert.match(js, /moveOwnerCalendarWindow\(-1\)/);
+  assert.match(js, /moveOwnerCalendarWindow\(1\)/);
 });
 
 test("Step 4B5D owner calendar removes legacy technical controls and clearly labels inventory states", () => {
@@ -241,7 +249,7 @@ test("Step 4B5D owner calendar removes legacy technical controls and clearly lab
   assert.match(js, /owner-inventory-state-available/);
   assert.match(js, /owner-inventory-state-sold-out/);
   assert.match(js, /owner-inventory-state-closed/);
-  assert.match(js, /textContent = "Sold out"/);
+  assert.match(js, /textContent = `0\/\$\{inventoryCapacity\} Sold out`/);
   assert.match(js, /textContent = "Closed"/);
   assert.match(js, /Available`/);
 });
@@ -278,12 +286,33 @@ test("Step 4B5B owner rate cells are compact and open for editing on click", () 
   assert.match(render[0], /owner-rate-display/);
   assert.match(render[0], /owner-rate-editor-input hidden/);
   assert.match(render[0], /display\.addEventListener\("click", beginEditing\)/);
-  assert.match(render[0], /input\.addEventListener\("blur", finishEditing\)/);
+  assert.match(render[0], /input\.addEventListener\("blur", \(\) =>/);
+  assert.match(render[0], /await saveOwnerCategoryCalendar\(category\.id\)/);
   assert.match(render[0], /event\.key === "Enter"/);
   assert.match(render[0], /event\.key === "Escape"/);
 
   assert.match(render[0], /input\.dataset\.categoryId = category\.id/);
   assert.match(render[0], /input\.dataset\.stayDate = date/);
+});
+
+test("owner inventory cells open on click and save a safe daily capacity override", () => {
+  const render = js.match(
+    /function renderOperationsCalendar\(\)[\s\S]*?byId\("calendarFilters"\)\.addEventListener/,
+  );
+
+  assert.ok(render, "owner calendar render function must exist");
+  assert.match(render[0], /owner-inventory-display/);
+  assert.match(render[0], /owner-inventory-editor-input hidden/);
+  assert.match(render[0], /display\.addEventListener\("click", beginEditing\)/);
+  assert.match(
+    render[0],
+    /saveOwnerInventoryCell\(category\.id, date, nextCapacity\)/,
+  );
+
+  assert.match(js, /async function saveOwnerInventoryCell/);
+  assert.match(js, /capacityOverride,/);
+  assert.match(js, /stopSell: false/);
+  assert.match(js, /shiftDate\(stayDate, 1\)/);
 });
 
 test("Step 4B4B owner calendar saves cells by actual stay date instead of array position", () => {

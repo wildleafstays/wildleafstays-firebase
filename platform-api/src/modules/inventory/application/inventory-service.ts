@@ -228,6 +228,7 @@ export class InventoryService {
         stayDate: normalizeDatabaseDate(bucket.stay_date),
         heldQuantity: bucket.held_quantity,
         confirmedQuantity: bucket.confirmed_quantity,
+        capacityOverride: bucket.capacity_override,
         overbookingLimit: bucket.overbooking_limit,
         stopSell: bucket.stop_sell
       })),
@@ -298,11 +299,15 @@ export class InventoryService {
     request: RequestMetadata
   ): Promise<InventoryControlResult> {
     const dates = dateRange(input.startDate, input.endDate, 366);
-    if (input.stopSell === null && input.overbookingLimit === null) {
+    const capacityOverride = input.capacityOverride ?? null;
+    if (input.stopSell === null && input.overbookingLimit === null && capacityOverride === null) {
       throw new ValidationError("At least one inventory control must be supplied");
     }
     if (input.overbookingLimit !== null && input.overbookingLimit < 0) {
       throw new ValidationError("Overbooking limit cannot be negative");
+    }
+    if (capacityOverride !== null && (capacityOverride < 0 || capacityOverride > 1000)) {
+      throw new ValidationError("Inventory capacity must be between 0 and 1000");
     }
 
     const { saleMode } = await this.property(
@@ -344,8 +349,15 @@ export class InventoryService {
       input.startDate,
       input.endDate,
       input.stopSell,
-      input.overbookingLimit
+      input.overbookingLimit,
+      capacityOverride
     );
+
+    if (affectedDays !== dates.length) {
+      throw new ConflictError(
+        "Inventory cannot be set below rooms that are already held or confirmed"
+      );
+    }
 
     const result: InventoryControlResult = {
       propertyId: input.propertyId,
@@ -355,6 +367,7 @@ export class InventoryService {
       endDate: input.endDate,
       stopSell: input.stopSell,
       overbookingLimit: input.overbookingLimit,
+      capacityOverride,
       affectedDays
     };
 

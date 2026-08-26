@@ -32,6 +32,7 @@ export interface PublicAvailabilityBucketRecord {
   stay_date: string;
   held_quantity: number;
   confirmed_quantity: number;
+  capacity_override: number | null;
   overbooking_limit: number;
   stop_sell: boolean;
 }
@@ -159,6 +160,7 @@ export class PublicAvailabilityRepository {
         "stay_date",
         "held_quantity",
         "confirmed_quantity",
+        "capacity_override",
         "overbooking_limit",
         "stop_sell"
       ])

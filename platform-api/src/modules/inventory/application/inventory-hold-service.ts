@@ -518,7 +518,7 @@ export class InventoryHoldService {
           ).size;
 
           const sellable =
-            bucket.capacity +
+            (bucket.capacity_override ?? bucket.capacity) +
             (fullPropertyRequested ? 0 : bucket.overbooking_limit) -
             bucket.held_quantity -
             bucket.confirmed_quantity -
@@ -554,7 +554,7 @@ export class InventoryHoldService {
               const roomBucket = bucketMap.get(
                 bucketKey(InventoryBucketTypes.ROOM_CATEGORY, category.id, date)
               );
-              if (!roomBucket || roomBucket.capacity <= 0) {
+              if (!roomBucket || (roomBucket.capacity_override ?? roomBucket.capacity) <= 0) {
                 throw new ConflictError(
                   "The full property cannot be held because room inventory is incomplete",
                   { roomCategoryId: category.id, date }

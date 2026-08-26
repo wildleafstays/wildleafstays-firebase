@@ -8,6 +8,7 @@ export interface InventoryDailyBucketsTable {
   room_category_id: string | null;
   stay_date: string;
   capacity: number;
+  capacity_override: Generated<number | null>;
   held_quantity: Generated<number>;
   confirmed_quantity: Generated<number>;
   overbooking_limit: Generated<number>;

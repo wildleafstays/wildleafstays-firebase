@@ -48,6 +48,7 @@ interface SetControlsBody extends JsonObject {
   endDate: string;
   stopSell?: boolean;
   overbookingLimit?: number;
+  capacityOverride?: number;
 }
 
 interface CreateBlockBody extends JsonObject {
@@ -171,7 +172,7 @@ export async function registerInventoryRoutes(
       preHandler: authenticate,
       schema: {
         tags: ["Inventory"],
-        summary: "Set stop-sell or overbooking controls for a date range",
+        summary: "Set daily inventory capacity, stop-sell or overbooking controls",
         security: [{ bearerAuth: [] }],
         params: propertyParamsSchema,
         headers: idempotencyHeaders,
@@ -188,7 +189,8 @@ export async function registerInventoryRoutes(
             startDate: { type: "string", format: "date" },
             endDate: { type: "string", format: "date" },
             stopSell: { type: "boolean" },
-            overbookingLimit: { type: "integer", minimum: 0, maximum: 1000 }
+            overbookingLimit: { type: "integer", minimum: 0, maximum: 1000 },
+            capacityOverride: { type: "integer", minimum: 0, maximum: 1000 }
           }
         }
       }
@@ -218,7 +220,8 @@ export async function registerInventoryRoutes(
               startDate: request.body.startDate,
               endDate: request.body.endDate,
               stopSell: request.body.stopSell ?? null,
-              overbookingLimit: request.body.overbookingLimit ?? null
+              overbookingLimit: request.body.overbookingLimit ?? null,
+              capacityOverride: request.body.capacityOverride ?? null
             },
             requestMetadata(request, "partner-api")
           )

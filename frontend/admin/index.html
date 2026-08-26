@@ -283,6 +283,37 @@
               </button>
             </div>
 
+            <div
+              class="owner-calendar-navigation"
+              role="group"
+              aria-label="Move calendar dates"
+            >
+              <span class="owner-calendar-view-label">Move dates</span>
+              <button
+                id="previousCalendarWindow"
+                type="button"
+                class="button-secondary"
+                title="Show earlier dates"
+              >
+                ← Earlier
+              </button>
+              <button
+                id="todayCalendarWindow"
+                type="button"
+                class="button-secondary"
+              >
+                Today
+              </button>
+              <button
+                id="nextCalendarWindow"
+                type="button"
+                class="button-secondary"
+                title="Show later dates"
+              >
+                Later →
+              </button>
+            </div>
+
             <button type="submit">Refresh</button>
           </form>
 
@@ -336,8 +367,9 @@
             <div>
               <h3>Availability control</h3>
               <p class="muted">
-                Inventory quantity comes from your active physical rooms. Use
-                Stop sell only when you want to temporarily close a category.
+                Click any inventory cell below to set that date’s total room
+                inventory. Use Stop sell when you want to close a category
+                across the visible dates.
               </p>
             </div>
 
@@ -363,7 +395,7 @@
               <div>
                 <h3>Rates & inventory</h3>
                 <p id="calendarContext" class="muted">
-                  Inventory, room-only rate and extra guest charges.
+                  Click a cell to edit and save inventory or price instantly.
                 </p>
               </div>
             </div>

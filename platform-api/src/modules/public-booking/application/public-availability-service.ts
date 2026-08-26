@@ -562,6 +562,7 @@ export class PublicAvailabilityService {
       stayDate: bucket.stay_date,
       heldQuantity: Math.max(0, bucket.held_quantity - (expiredByBucket.get(bucket.id) ?? 0)),
       confirmedQuantity: bucket.confirmed_quantity,
+      capacityOverride: bucket.capacity_override,
       overbookingLimit: bucket.overbooking_limit,
       stopSell: bucket.stop_sell
     }));

@@ -38,6 +38,7 @@ export interface SetInventoryControlsInput {
   endDate: string;
   stopSell: boolean | null;
   overbookingLimit: number | null;
+  capacityOverride?: number | null;
 }
 
 export interface CreateInventoryBlockInput {
@@ -59,6 +60,8 @@ export interface RoomCategoryAvailability extends JsonObject {
   roomCategoryName: string;
   date: string;
   physicalCapacity: number;
+  capacityOverride: number | null;
+  inventoryCapacity: number;
   heldQuantity: number;
   confirmedQuantity: number;
   blockedQuantity: number;
@@ -100,6 +103,7 @@ export interface InventoryControlResult extends JsonObject {
   endDate: string;
   stopSell: boolean | null;
   overbookingLimit: number | null;
+  capacityOverride: number | null;
   affectedDays: number;
 }
 

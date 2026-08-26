@@ -198,7 +198,8 @@ export class InventoryRepository {
     startDate: string,
     endDate: string,
     stopSell: boolean | null,
-    overbookingLimit: number | null
+    overbookingLimit: number | null,
+    capacityOverride: number | null
   ): Promise<number> {
     let query = db
       .updateTable("inventory_daily_buckets")
@@ -206,6 +207,8 @@ export class InventoryRepository {
         stop_sell: stopSell === null ? eb.ref("stop_sell") : stopSell,
         overbooking_limit:
           overbookingLimit === null ? eb.ref("overbooking_limit") : overbookingLimit,
+        capacity_override:
+          capacityOverride === null ? eb.ref("capacity_override") : capacityOverride,
         version: sql<number>`inventory_daily_buckets.version + 1`,
         updated_at: sql<Date>`now()`
       }))
@@ -214,6 +217,12 @@ export class InventoryRepository {
       .where("bucket_type", "=", bucketType)
       .where("stay_date", ">=", startDate)
       .where("stay_date", "<", endDate);
+
+    if (capacityOverride !== null) {
+      query = query.where(
+        sql<boolean>`${capacityOverride} + overbooking_limit >= held_quantity + confirmed_quantity`
+      );
+    }
 
     query =
       roomCategoryId === null

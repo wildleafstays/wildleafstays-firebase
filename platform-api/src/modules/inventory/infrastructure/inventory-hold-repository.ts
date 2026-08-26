@@ -224,7 +224,7 @@ export class InventoryHoldRepository {
       })
       .where("id", "=", bucketId)
       .where(
-        sql<boolean>`held_quantity + confirmed_quantity + ${quantity} <= capacity + overbooking_limit`
+        sql<boolean>`held_quantity + confirmed_quantity + ${quantity} <= coalesce(capacity_override, capacity) + overbooking_limit`
       )
       .returning("id")
       .executeTakeFirst();

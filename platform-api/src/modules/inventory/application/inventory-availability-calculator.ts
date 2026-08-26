@@ -22,6 +22,7 @@ export interface AvailabilityBucketInput {
   stayDate: string;
   heldQuantity: number;
   confirmedQuantity: number;
+  capacityOverride?: number | null;
   overbookingLimit: number;
   stopSell: boolean;
 }
@@ -81,6 +82,7 @@ function missingRoomBucket(
     stayDate,
     heldQuantity: 0,
     confirmedQuantity: 0,
+    capacityOverride: null,
     overbookingLimit: 0,
     stopSell: false
   };
@@ -128,8 +130,9 @@ export function calculateInventoryAvailability(
         categoryBlocks.reduce((sum, block) => sum + block.quantity, 0) + unitBlocks.size;
 
       const unavailable = propertyClosed || bucket.stopSell;
+      const inventoryCapacity = bucket.capacityOverride ?? category.capacity;
       const rawSellable =
-        category.capacity +
+        inventoryCapacity +
         bucket.overbookingLimit -
         bucket.heldQuantity -
         bucket.confirmedQuantity -
@@ -141,6 +144,8 @@ export function calculateInventoryAvailability(
         roomCategoryName: category.name,
         date,
         physicalCapacity: category.capacity,
+        capacityOverride: bucket.capacityOverride ?? null,
+        inventoryCapacity,
         heldQuantity: bucket.heldQuantity,
         confirmedQuantity: bucket.confirmedQuantity,
         blockedQuantity,
@@ -162,6 +167,7 @@ export function calculateInventoryAvailability(
         activeRoomCategories.length === 0 ||
         activeRoomCategories.some(
           (room) =>
+            room.inventoryCapacity <= 0 ||
             room.heldQuantity > 0 ||
             room.confirmedQuantity > 0 ||
             room.blockedQuantity > 0 ||

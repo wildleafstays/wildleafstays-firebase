@@ -4,6 +4,10 @@ import {
   uploadFile,
 } from "./api-client.js";
 import {
+  PROPERTY_AMENITY_GROUPS,
+  ROOM_AMENITY_GROUPS,
+} from "./amenity-catalog.js";
+import {
   availableScreens,
   canManagePlatformReservations,
   canReviewProperties,
@@ -19,6 +23,7 @@ const pendingUploadKeys = new Map();
 const pendingPropertyCreateKeys = new Map();
 const pendingRateCalendarSaveKeys = new Map();
 const pendingInventoryControlKeys = new Map();
+const pendingInventoryCellKeys = new Map();
 const pendingOwnerBaseRateKeys = new Map();
 const pendingStructureCreateKeys = new Map();
 const pendingFloorCreateKeys = new Map();
@@ -110,6 +115,33 @@ function setOwnerCalendarView(days) {
   state.calendarViewDays = days;
 
   syncOwnerCalendarViewButtons();
+}
+
+function moveOwnerCalendarWindow(direction) {
+  if (direction !== -1 && direction !== 1) {
+    throw new Error("Calendar direction must be earlier or later.");
+  }
+
+  const form = byId("calendarFilters");
+  const days =
+    ownerCalendarRangeDays(
+      form.elements.startDate.value,
+      form.elements.endDate.value,
+    ) || state.calendarViewDays;
+
+  form.elements.startDate.value = shiftDate(
+    form.elements.startDate.value || localDate(),
+    direction * days,
+  );
+  form.elements.endDate.value = shiftDate(form.elements.startDate.value, days);
+  state.calendarViewDays = days;
+  syncOwnerCalendarViewButtons();
+}
+
+function moveOwnerCalendarToToday() {
+  const form = byId("calendarFilters");
+  form.elements.startDate.value = localDate();
+  setOwnerCalendarView(state.calendarViewDays);
 }
 
 function money(minor, currencyCode = "INR") {
@@ -2052,7 +2084,7 @@ async function refreshCalendarData() {
   renderOperationsCalendar();
 }
 
-async function configureOwnerCategoryBaseRate(categoryId) {
+async function configureOwnerCategoryBaseRate(categoryId, explicitRate = null) {
   const category = state.operationsLayout?.roomCategories?.find(
     (item) => item.id === categoryId,
   );
@@ -2064,18 +2096,19 @@ async function configureOwnerCategoryBaseRate(categoryId) {
   const input = byId("calendarGrid").querySelector(
     `input[data-owner-base-rate="${categoryId}"]`,
   );
+  const rateValue = explicitRate ?? input?.value;
 
-  if (!input) {
+  if (rateValue === undefined || rateValue === null) {
     throw new Error(
       "Base rate input is no longer available. Refresh the calendar.",
     );
   }
 
-  if (!String(input.value).trim()) {
+  if (!String(rateValue).trim()) {
     throw new Error("Enter a base rate.");
   }
 
-  const baseRateMinor = rupeesToMinor(input.value);
+  const baseRateMinor = rupeesToMinor(rateValue);
 
   if (!Number.isSafeInteger(baseRateMinor) || baseRateMinor < 0) {
     throw new Error("Base rate must be a valid non-negative amount.");
@@ -2248,8 +2281,11 @@ async function persistOwnerCategoryCalendar(
     },
   );
 
+  const scrollLeft = byId("calendarGrid").scrollLeft;
+
   if (refreshAfterSave) {
     await refreshCalendarData();
+    byId("calendarGrid").scrollLeft = scrollLeft;
   }
 
   pendingRateCalendarSaveKeys.delete(fingerprint);
@@ -2464,6 +2500,48 @@ async function applyOwnerRateBulkUpdate() {
     }.`,
   );
 }
+
+async function saveOwnerInventoryCell(categoryId, stayDate, capacityOverride) {
+  if (!Number.isSafeInteger(capacityOverride) || capacityOverride < 0) {
+    throw new Error("Inventory must be a whole number of zero or more rooms.");
+  }
+
+  const propertyId = byId("calendarPropertySelect").value;
+  const endDate = shiftDate(stayDate, 1);
+  const fingerprint = [propertyId, categoryId, stayDate, capacityOverride].join(
+    ":",
+  );
+  const key =
+    pendingInventoryCellKeys.get(fingerprint) ||
+    newIdempotencyKey("owner-inventory-cell");
+
+  pendingInventoryCellKeys.set(fingerprint, key);
+
+  const scrollLeft = byId("calendarGrid").scrollLeft;
+
+  await api(
+    `/v1/partner/organizations/${state.organizationId}/properties/${propertyId}/inventory/controls`,
+    {
+      method: "PUT",
+      body: {
+        bucketType: "ROOM_CATEGORY",
+        roomCategoryId: categoryId,
+        startDate: stayDate,
+        endDate,
+        capacityOverride,
+        stopSell: false,
+      },
+      idempotencyKey: key,
+    },
+  );
+
+  await refreshCalendarData();
+  byId("calendarGrid").scrollLeft = scrollLeft;
+
+  pendingInventoryCellKeys.delete(fingerprint);
+  showMessage(`Inventory saved for ${stayDate}.`);
+}
+
 function renderOperationsCalendar() {
   const container = byId("calendarGrid");
   container.replaceChildren();
@@ -2495,7 +2573,7 @@ function renderOperationsCalendar() {
   syncOwnerRateBulkForm(categories, dates);
 
   byId("calendarContext").textContent =
-    "Inventory is derived from physical rooms. EP is the room-only base rate.";
+    "Click any inventory or price cell to edit it. Use Earlier and Later to move through dates without a fixed limit.";
 
   const table = document.createElement("table");
   table.className = "operations-table owner-rate-grid";
@@ -2629,15 +2707,99 @@ function renderOperationsCalendar() {
       if (!availability) {
         inventoryCell.classList.add("owner-inventory-state-unknown");
         inventoryCell.textContent = "?";
-      } else if (availability.stopSell) {
-        inventoryCell.classList.add("owner-inventory-state-closed");
-        inventoryCell.textContent = "Closed";
-      } else if (availability.sellableQuantity <= 0) {
-        inventoryCell.classList.add("owner-inventory-state-sold-out");
-        inventoryCell.textContent = "Sold out";
       } else {
-        inventoryCell.classList.add("owner-inventory-state-available");
-        inventoryCell.textContent = `${availability.sellableQuantity}/${availability.physicalCapacity} Available`;
+        const inventoryCapacity =
+          availability.inventoryCapacity ?? availability.physicalCapacity;
+        const committedQuantity =
+          availability.heldQuantity + availability.confirmedQuantity;
+
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = String(committedQuantity);
+        input.max = "1000";
+        input.step = "1";
+        input.value = String(inventoryCapacity);
+        input.className =
+          "owner-inventory-input owner-inventory-editor-input hidden";
+        input.dataset.categoryId = category.id;
+        input.dataset.stayDate = date;
+
+        const display = document.createElement("button");
+        display.type = "button";
+        display.className = "owner-inventory-display";
+        display.title = "Click to edit total inventory";
+
+        if (availability.stopSell) {
+          inventoryCell.classList.add("owner-inventory-state-closed");
+          display.textContent = "Closed";
+        } else if (availability.sellableQuantity <= 0) {
+          inventoryCell.classList.add("owner-inventory-state-sold-out");
+          display.textContent = `0/${inventoryCapacity} Sold out`;
+        } else {
+          inventoryCell.classList.add("owner-inventory-state-available");
+          display.textContent = `${availability.sellableQuantity}/${inventoryCapacity} Available`;
+        }
+
+        const beginEditing = () => {
+          input.dataset.originalValue = input.value;
+          display.classList.add("hidden");
+          input.classList.remove("hidden");
+          input.focus();
+          input.select();
+        };
+
+        const finishEditing = () => {
+          input.classList.add("hidden");
+          display.classList.remove("hidden");
+        };
+
+        display.addEventListener("click", beginEditing);
+
+        input.addEventListener("blur", () => {
+          finishEditing();
+
+          if (input.dataset.cancelled === "true") {
+            delete input.dataset.cancelled;
+            return;
+          }
+
+          const nextCapacity = Number(input.value);
+          if (
+            nextCapacity === inventoryCapacity &&
+            availability.stopSell === false
+          ) {
+            return;
+          }
+
+          run(async () => {
+            try {
+              await saveOwnerInventoryCell(category.id, date, nextCapacity);
+            } catch (error) {
+              const scrollLeft = byId("calendarGrid").scrollLeft;
+              await refreshCalendarData();
+              byId("calendarGrid").scrollLeft = scrollLeft;
+              throw error;
+            }
+          });
+        });
+
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            input.blur();
+            return;
+          }
+
+          if (event.key === "Escape") {
+            event.preventDefault();
+            input.value = input.dataset.originalValue ?? input.value;
+            input.dataset.cancelled = "true";
+            input.blur();
+          }
+        });
+
+        inventoryCell.classList.add("owner-inventory-editable-cell");
+        inventoryCell.append(display, input);
       }
 
       inventoryRow.append(inventoryCell);
@@ -2660,7 +2822,65 @@ function renderOperationsCalendar() {
         const day = calendar?.days?.find((item) => item.stayDate === date);
 
         if (!day || !productSynced) {
-          cell.append(textElement("span", "muted", "?"));
+          if (
+            field === "base" &&
+            defaultsReady &&
+            setup?.status !== "AMBIGUOUS"
+          ) {
+            const input = document.createElement("input");
+            input.type = "number";
+            input.min = "0";
+            input.step = "0.01";
+            input.placeholder = "Enter rate";
+            input.className = "owner-rate-input owner-rate-editor-input hidden";
+
+            const display = document.createElement("button");
+            display.type = "button";
+            display.className = "owner-rate-display owner-rate-setup-display";
+            display.textContent = "Set";
+            display.title = "Click to set the starting EP rate";
+
+            display.addEventListener("click", () => {
+              display.classList.add("hidden");
+              input.classList.remove("hidden");
+              input.focus();
+              input.select();
+            });
+
+            input.addEventListener("blur", () => {
+              input.classList.add("hidden");
+              display.classList.remove("hidden");
+
+              if (!input.value.trim()) return;
+
+              run(() =>
+                configureOwnerCategoryBaseRate(category.id, input.value),
+              );
+            });
+
+            input.addEventListener("keydown", (event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                input.blur();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                input.value = "";
+                input.blur();
+              }
+            });
+
+            cell.classList.add("owner-rate-editable-cell");
+            cell.append(display, input);
+          } else {
+            cell.append(
+              textElement(
+                "span",
+                "muted",
+                defaultsReady ? "Set EP first" : "Complete setup",
+              ),
+            );
+          }
           row.append(cell);
           return;
         }
@@ -2705,7 +2925,27 @@ function renderOperationsCalendar() {
 
         display.addEventListener("click", beginEditing);
 
-        input.addEventListener("blur", finishEditing);
+        input.addEventListener("blur", () => {
+          finishEditing();
+
+          if (input.dataset.cancelled === "true") {
+            delete input.dataset.cancelled;
+            return;
+          }
+
+          if (input.value === input.dataset.originalValue) return;
+
+          run(async () => {
+            try {
+              await saveOwnerCategoryCalendar(category.id);
+            } catch (error) {
+              const scrollLeft = byId("calendarGrid").scrollLeft;
+              await refreshCalendarData();
+              byId("calendarGrid").scrollLeft = scrollLeft;
+              throw error;
+            }
+          });
+        });
 
         input.addEventListener("keydown", (event) => {
           if (event.key === "Enter") {
@@ -2721,6 +2961,7 @@ function renderOperationsCalendar() {
               input.value = input.dataset.originalValue;
             }
 
+            input.dataset.cancelled = "true";
             input.blur();
           }
         });
@@ -2756,6 +2997,29 @@ document.querySelectorAll("[data-calendar-view-days]").forEach((button) => {
     }),
   );
 });
+
+byId("previousCalendarWindow").addEventListener("click", () =>
+  run(async () => {
+    moveOwnerCalendarWindow(-1);
+    await refreshCalendarData();
+    byId("calendarGrid").scrollLeft = byId("calendarGrid").scrollWidth;
+  }),
+);
+
+byId("nextCalendarWindow").addEventListener("click", () =>
+  run(async () => {
+    moveOwnerCalendarWindow(1);
+    await refreshCalendarData();
+    byId("calendarGrid").scrollLeft = 0;
+  }),
+);
+
+byId("todayCalendarWindow").addEventListener("click", () =>
+  run(async () => {
+    moveOwnerCalendarToToday();
+    await refreshCalendarData();
+  }),
+);
 
 byId("calendarFilters").elements.startDate.addEventListener("change", () => {
   setOwnerCalendarView(state.calendarViewDays);
