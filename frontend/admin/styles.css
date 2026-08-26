@@ -1508,3 +1508,148 @@ label small {
 .owner-rate-grid thead .owner-category-column {
   z-index: 3;
 }
+
+/* Compact owner workspace: the calendar is the primary tool. */
+.owner-calendar-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.owner-calendar-titlebar h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 2vw, 2rem);
+}
+
+.owner-calendar-titlebar span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+#calendarScreen .owner-rate-filters {
+  margin-bottom: 0.65rem;
+  padding: 0.8rem;
+}
+
+.owner-tool-drawer {
+  margin-top: 0.65rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.owner-tool-drawer > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.9rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.owner-tool-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.owner-tool-drawer > summary::after {
+  color: var(--brand);
+  content: "+";
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.owner-tool-drawer[open] > summary::after {
+  content: "−";
+}
+
+.owner-tool-drawer > summary span,
+.owner-tool-drawer > summary small {
+  display: block;
+}
+
+.owner-tool-drawer > summary strong {
+  font-size: 0.88rem;
+}
+
+.owner-tool-drawer > summary small {
+  margin-top: 0.08rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.owner-tool-drawer > form {
+  margin-top: 0;
+  padding: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.owner-rate-bulk-form {
+  grid-template-columns:
+    minmax(160px, 1.2fr) minmax(125px, 0.8fr) minmax(125px, 0.8fr)
+    minmax(135px, 0.9fr) minmax(115px, 0.7fr) auto;
+  gap: 0.55rem;
+}
+
+.owner-inventory-control {
+  grid-template-columns: minmax(190px, 1fr) minmax(220px, 1fr) auto;
+  align-items: end;
+}
+
+.owner-rate-calendar-card {
+  margin-top: 0.65rem;
+  padding: 0.75rem;
+}
+
+.owner-rate-calendar-card .card-heading {
+  align-items: center;
+  margin-bottom: 0.55rem;
+}
+
+.owner-rate-calendar-card .card-heading p {
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.owner-villa-sync-note {
+  display: grid;
+  justify-items: end;
+  line-height: 1.25;
+}
+
+.owner-villa-sync-note strong {
+  color: var(--brand);
+  font-size: 0.78rem;
+}
+
+.owner-villa-sync-note span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.owner-rate-grid th,
+.owner-rate-grid td {
+  padding: 0.38rem 0.42rem;
+}
+
+.owner-rate-display,
+.owner-rate-input {
+  width: 82px !important;
+}
+
+@media (max-width: 900px) {
+  .owner-calendar-titlebar,
+  .owner-rate-calendar-card .card-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .owner-villa-sync-note {
+    justify-items: start;
+  }
+
+  .owner-inventory-control {
+    grid-template-columns: 1fr;
+  }
+}

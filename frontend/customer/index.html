@@ -23,23 +23,52 @@
         <span><strong>Wildleaf</strong><small>STAYS</small></span>
       </a>
       <nav class="site-nav" aria-label="Primary navigation">
-        <a href="#stays">Explore stays</a>
-        <a href="#why-wildleaf">Why Wildleaf</a>
+        <a href="#stays" data-nav-mode="hotel">Hotels</a>
+        <a href="#stays" data-nav-mode="villa">Entire villas</a>
         <a href="#contact">Contact</a>
       </nav>
     </header>
 
     <main>
       <section class="home-hero">
-        <div class="hero-orb hero-orb-one"></div>
-        <div class="hero-orb hero-orb-two"></div>
         <div class="hero-content">
-          <p class="eyebrow">Hotels · Villas · Quiet escapes</p>
-          <h1>Stay somewhere that<br /><em>stays with you.</em></h1>
+          <p class="eyebrow">Book directly with Wildleaf</p>
+          <h1>What would you like to book?</h1>
           <p class="hero-copy">
-            Handpicked places with honest prices, live availability, and a
-            booking experience you can trust.
+            Choose a private room or take the entire property. The two booking
+            journeys stay completely separate.
           </p>
+        </div>
+
+        <div class="stay-mode-switch" role="tablist" aria-label="Stay type">
+          <button
+            id="modeHotel"
+            class="stay-mode-button active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            data-mode="hotel"
+          >
+            <span class="mode-icon" aria-hidden="true">▦</span>
+            <span
+              ><strong>Hotel rooms</strong
+              ><small>Book one or more rooms</small></span
+            >
+          </button>
+          <button
+            id="modeVilla"
+            class="stay-mode-button"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            data-mode="villa"
+          >
+            <span class="mode-icon" aria-hidden="true">⌂</span>
+            <span
+              ><strong>Entire villas</strong
+              ><small>Book the complete property</small></span
+            >
+          </button>
         </div>
 
         <form
@@ -71,8 +100,8 @@
               required
             />
           </label>
-          <label class="search-field compact-field">
-            <span>Rooms</span>
+          <label id="roomCountField" class="search-field compact-field">
+            <span id="roomsLabel">Rooms</span>
             <input
               id="rooms"
               name="rooms"
@@ -84,7 +113,7 @@
             />
           </label>
           <label class="search-field compact-field">
-            <span>Adults / room</span>
+            <span id="adultsLabel">Adults / room</span>
             <input
               id="adults"
               name="adults"
@@ -96,7 +125,7 @@
             />
           </label>
           <label class="search-field compact-field">
-            <span>Children / room</span>
+            <span id="childrenLabel">Children / room</span>
             <input
               id="children"
               name="children"
@@ -108,7 +137,7 @@
             />
           </label>
           <button class="button button-primary search-button" type="submit">
-            Find my stay
+            Search hotels
           </button>
         </form>
       </section>
@@ -116,8 +145,8 @@
       <section id="stays" class="section stays-section">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">The Wildleaf collection</p>
-            <h2 id="resultsTitle">Places worth travelling for</h2>
+            <p id="resultsEyebrow" class="eyebrow">Hotel rooms</p>
+            <h2 id="resultsTitle">Hotels you can book by room</h2>
           </div>
           <p id="resultsStatus" class="section-note" role="status">
             Loading live properties…
@@ -128,24 +157,23 @@
 
       <section id="why-wildleaf" class="section promise-section">
         <div class="promise-intro">
-          <p class="eyebrow">The Wildleaf promise</p>
-          <h2>Less searching.<br />More belonging.</h2>
+          <p class="eyebrow">One inventory</p>
+          <h2>Clear choice.<br />Accurate availability.</h2>
         </div>
         <div class="promise-grid">
           <article>
             <span>01</span>
             <h3>Live availability</h3>
             <p>
-              Every search checks the property’s canonical inventory—never a
-              stale copy.
+              Room and entire-villa searches use the same current inventory.
             </p>
           </article>
           <article>
             <span>02</span>
             <h3>Transparent pricing</h3>
             <p>
-              Taxes, fees, promotions, and final totals come directly from the
-              booking engine.
+              The full-villa price is calculated from its rooms, not a separate
+              price list.
             </p>
           </article>
           <article>

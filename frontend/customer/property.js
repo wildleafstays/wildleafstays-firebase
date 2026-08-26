@@ -19,6 +19,7 @@ const availabilityMessage = document.querySelector("#availabilityMessage");
 const quoteSection = document.querySelector("#quoteSection");
 const guestSection = document.querySelector("#guestSection");
 const statusSection = document.querySelector("#statusSection");
+const requestedMode = query.get("mode") === "villa" ? "villa" : "hotel";
 
 const state = {
   property: null,
@@ -31,6 +32,7 @@ const state = {
   pollTimer: null,
   pollAttempts: 0,
   polling: false,
+  bookingMode: requestedMode,
 };
 
 if (!publicSlug) {
@@ -45,6 +47,10 @@ if (!publicSlug) {
 
 function wireEvents() {
   form.unitCount.addEventListener("change", () => {
+    if (state.bookingMode === "villa") {
+      setUnitCount(1);
+      return;
+    }
     setUnitCount(clamp(Number(form.unitCount.value), 1, 20));
   });
   form.arrivalDate.addEventListener("change", () => {
@@ -77,7 +83,10 @@ function configureInitialSearch() {
     : addDays(arrival, 2);
   const departure =
     departureCandidate > arrival ? departureCandidate : addDays(arrival, 1);
-  const unitCount = clamp(Number(query.get("rooms") || 1), 1, 20);
+  const unitCount =
+    state.bookingMode === "villa"
+      ? 1
+      : clamp(Number(query.get("rooms") || 1), 1, 20);
   const adults = clamp(Number(query.get("adults") || 2), 1, 10);
   const children = clamp(Number(query.get("children") || 0), 0, 6);
 
@@ -102,6 +111,7 @@ async function loadProperty() {
       },
     );
     state.property = data.property;
+    configureBookingMode(data.property);
     renderProperty(data.property);
     propertyContent.classList.remove("hidden");
 
@@ -142,13 +152,35 @@ function renderProperty(property) {
     property.shortDescription ||
     "Discover a stay designed for unhurried days and memorable evenings.";
 
+  const villa = state.bookingMode === "villa";
+  document.querySelector("#bookingModeBadge").textContent = villa
+    ? "Entire villa"
+    : "Hotel rooms";
+  document.querySelector("#propertyOverviewHeading").textContent = villa
+    ? "About this entire villa"
+    : "About this hotel";
+  document.querySelector("#availabilityModeLabel").textContent = villa
+    ? "Entire villa"
+    : "Hotel rooms";
+  document.querySelector("#availabilityHeading").textContent = villa
+    ? "Book the complete property"
+    : "Choose your room";
+  document.querySelector("#assuranceHeading").textContent = villa
+    ? "Entire property"
+    : "Hotel room";
+  document.querySelector("#assuranceNote").textContent = villa
+    ? "One reservation includes every active room in the property."
+    : "Choose only the room category and number of rooms you need.";
+
   const facts = document.querySelector("#propertyFacts");
   facts.replaceChildren(
-    fact("Stay type", titleCase(property.propertyType || "Wildleaf stay")),
-    fact("Booking options", saleModeLabel(property.saleMode)),
-    fact("Check-in", property.checkInTime || "Contact property"),
-    fact("Check-out", property.checkOutTime || "Contact property"),
+    fact("You are booking", villa ? "Entire property" : "Hotel room"),
+    fact("Property type", titleCase(property.propertyType || "Wildleaf stay")),
+    fact("Check-in", formatTime(property.checkInTime) || "Contact property"),
+    fact("Check-out", formatTime(property.checkOutTime) || "Contact property"),
   );
+
+  renderStayConfiguration(property.roomCategories || []);
 
   const amenities = document.querySelector("#amenities");
   amenities.replaceChildren(
@@ -173,6 +205,73 @@ function renderProperty(property) {
     );
 
   renderPolicies(property.policies);
+}
+
+function configureBookingMode(property) {
+  const allowsHotel =
+    !property.saleMode ||
+    property.saleMode === "ROOMS_ONLY" ||
+    property.saleMode === "BOTH";
+  const allowsVilla =
+    property.saleMode === "FULL_PROPERTY_ONLY" || property.saleMode === "BOTH";
+
+  if (state.bookingMode === "villa" && !allowsVilla)
+    state.bookingMode = "hotel";
+  if (state.bookingMode === "hotel" && !allowsHotel && allowsVilla)
+    state.bookingMode = "villa";
+
+  const villa = state.bookingMode === "villa";
+  document.querySelector("#unitCountField").classList.toggle("hidden", villa);
+  document.querySelector("#backToResults").href =
+    `/customer/?mode=${state.bookingMode}`;
+  if (villa && state.units.length !== 1) setUnitCount(1);
+  form.unitCount.value = villa ? "1" : String(state.units.length || 1);
+}
+
+function renderStayConfiguration(categories) {
+  const container = document.querySelector("#stayConfiguration");
+  container.replaceChildren();
+
+  if (state.bookingMode === "villa") {
+    const summary = element("div", "villa-source-summary");
+    summary.append(
+      element("strong", "", "One villa, one shared inventory"),
+      element(
+        "p",
+        "",
+        "The villa includes all active rooms. Its price, included guests, maximum occupancy, and date availability are calculated from the room categories below.",
+      ),
+    );
+    const names = categories.map((category) => category.name).filter(Boolean);
+    if (names.length)
+      summary.append(
+        element("p", "villa-includes", `Includes: ${names.join(" · ")}`),
+      );
+    container.append(summary);
+    return;
+  }
+
+  if (!categories.length) return;
+  const grid = element("div", "room-category-grid");
+  categories.forEach((category) => {
+    const card = element("article", "room-category-summary");
+    card.append(
+      element("h3", "", category.name),
+      element(
+        "p",
+        "",
+        [
+          `Up to ${category.maxOccupancy} guests`,
+          category.bedConfiguration,
+          category.sizeSqm ? `${category.sizeSqm} m²` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      ),
+    );
+    grid.append(card);
+  });
+  container.append(grid);
 }
 
 function renderPolicies(policies) {
@@ -204,6 +303,7 @@ function renderPolicies(policies) {
 }
 
 function setUnitCount(count) {
+  if (state.bookingMode === "villa") count = 1;
   const previous = state.units;
   state.units = Array.from(
     { length: count },
@@ -218,7 +318,13 @@ function renderOccupancyUnits() {
   occupancyUnits.replaceChildren(
     ...state.units.map((unit, index) => {
       const card = element("fieldset", "occupancy-card");
-      const legend = element("legend", "", `Room / unit ${index + 1}`);
+      const legend = element(
+        "legend",
+        "",
+        state.bookingMode === "villa"
+          ? "Guests for the entire villa"
+          : `Room ${index + 1}`,
+      );
 
       const adultsLabel = element("label");
       adultsLabel.append(element("span", "", "Adults"));
@@ -324,16 +430,23 @@ async function searchAvailability() {
 }
 
 function renderAvailability(data) {
-  const available = data.options.filter((option) => option.available);
+  const expectedProductType =
+    state.bookingMode === "villa" ? "FULL_PROPERTY" : "ROOM_CATEGORY";
+  const matchingOptions = (data.options || []).filter(
+    (option) => option.productType === expectedProductType,
+  );
+  const available = matchingOptions.filter((option) => option.available);
   showInlineMessage(
     available.length
-      ? `${available.length} bookable ${available.length === 1 ? "option" : "options"} for ${data.search.nights} ${data.search.nights === 1 ? "night" : "nights"}. Final taxes, fees, and promotions are calculated in the exact quote.`
-      : "No option currently satisfies your dates, occupancy, restrictions, and live inventory.",
+      ? `${available.length} bookable ${available.length === 1 ? "option" : "options"} for ${data.search.nights} ${data.search.nights === 1 ? "night" : "nights"}.`
+      : state.bookingMode === "villa"
+        ? "The entire villa is not available for these dates and guests."
+        : "No room currently satisfies your dates and guests.",
     available.length ? "success" : "warning",
   );
 
   availabilityResults.replaceChildren(
-    ...data.options.map((option) => availabilityCard(option)),
+    ...matchingOptions.map((option) => availabilityCard(option)),
   );
 }
 
@@ -1051,6 +1164,11 @@ function titleCase(value) {
     .toLowerCase()
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatTime(value) {
+  const match = String(value || "").match(/^(\d{2}:\d{2})/);
+  return match?.[1] || "";
 }
 
 function saleModeLabel(value) {

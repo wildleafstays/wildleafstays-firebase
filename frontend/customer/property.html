@@ -22,13 +22,18 @@
         <span class="brand-mark" aria-hidden="true">W</span>
         <span><strong>Wildleaf</strong><small>STAYS</small></span>
       </a>
-      <a class="back-link" href="/customer/">← Explore all stays</a>
+      <a id="backToResults" class="back-link" href="/customer/"
+        >← Back to results</a
+      >
     </header>
 
     <main>
       <section id="propertyHero" class="property-hero">
         <div class="property-hero-pattern"></div>
         <div class="property-hero-content">
+          <span id="bookingModeBadge" class="booking-mode-badge"
+            >Hotel rooms</span
+          >
           <p id="propertyLocation" class="eyebrow">Loading property…</p>
           <h1 id="propertyName">Your Wildleaf stay</h1>
           <p id="propertySummary">Checking the latest property information.</p>
@@ -42,12 +47,13 @@
           <section class="property-overview panel-section">
             <div class="section-heading compact-heading">
               <div>
-                <p class="eyebrow">About this stay</p>
-                <h2>Everything you need, thoughtfully considered</h2>
+                <p class="eyebrow">Property details</p>
+                <h2 id="propertyOverviewHeading">About this hotel</h2>
               </div>
             </div>
             <p id="propertyDescription" class="long-copy"></p>
             <div id="propertyFacts" class="fact-grid"></div>
+            <div id="stayConfiguration" class="stay-configuration"></div>
             <div id="amenities" class="amenity-list"></div>
           </section>
 
@@ -57,8 +63,8 @@
           >
             <div class="section-heading compact-heading">
               <div>
-                <p class="eyebrow">Plan your stay</p>
-                <h2>Check live availability</h2>
+                <p id="availabilityModeLabel" class="eyebrow">Hotel rooms</p>
+                <h2 id="availabilityHeading">Choose your room</h2>
               </div>
               <span class="secure-note">Live inventory</span>
             </div>
@@ -73,8 +79,8 @@
                   ><span>Check-out</span
                   ><input name="departureDate" type="date" required
                 /></label>
-                <label
-                  ><span>Rooms / units</span
+                <label id="unitCountField"
+                  ><span id="unitCountLabel">Rooms</span
                   ><input
                     name="unitCount"
                     type="number"
@@ -130,18 +136,14 @@
         </div>
 
         <aside class="booking-assurance">
-          <p class="eyebrow">Book with confidence</p>
-          <h3>One trusted booking journey</h3>
+          <p class="eyebrow">Your booking</p>
+          <h3 id="assuranceHeading">Hotel room</h3>
           <ul>
-            <li><span>✓</span> Prices calculated by Wildleaf</li>
-            <li><span>✓</span> Inventory held before payment</li>
-            <li><span>✓</span> Secure Razorpay checkout</li>
-            <li><span>✓</span> Backend-verified confirmation</li>
+            <li><span>✓</span> Live price and availability</li>
+            <li><span>✓</span> Secure online payment</li>
+            <li><span>✓</span> Verified confirmation</li>
           </ul>
-          <p class="fine-print">
-            The payment popup never confirms your reservation by itself.
-            Wildleaf waits for verified payment evidence.
-          </p>
+          <p id="assuranceNote" class="fine-print"></p>
         </aside>
       </section>
     </main>

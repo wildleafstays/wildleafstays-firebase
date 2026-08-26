@@ -5,13 +5,47 @@ const results = document.querySelector("#results");
 const resultsTitle = document.querySelector("#resultsTitle");
 const resultsStatus = document.querySelector("#resultsStatus");
 const destinationList = document.querySelector("#destinationList");
+const resultsEyebrow = document.querySelector("#resultsEyebrow");
+const modeButtons = [...document.querySelectorAll("[data-mode]")];
+const modeLinks = [...document.querySelectorAll("[data-nav-mode]")];
+const roomCountField = document.querySelector("#roomCountField");
+
+const state = {
+  mode:
+    new URLSearchParams(location.search).get("mode") === "villa"
+      ? "villa"
+      : "hotel",
+  properties: [],
+};
 
 setDefaultDates();
+applyMode();
 void initialize();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   void loadProperties(form.destination.value.trim());
+});
+
+modeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const mode = button.dataset.mode;
+    if (mode !== "hotel" && mode !== "villa") return;
+    state.mode = mode;
+    applyMode();
+    renderProperties(state.properties);
+    document.querySelector("#stays")?.scrollIntoView({ block: "start" });
+  });
+});
+
+modeLinks.forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    state.mode = link.dataset.navMode === "villa" ? "villa" : "hotel";
+    applyMode();
+    renderProperties(state.properties);
+    document.querySelector("#stays")?.scrollIntoView({ block: "start" });
+  });
 });
 
 async function initialize() {
@@ -41,8 +75,10 @@ async function loadDestinations() {
 
 async function loadProperties(destination) {
   resultsTitle.textContent = destination
-    ? `Stays around ${destination}`
-    : "Places worth travelling for";
+    ? `${state.mode === "villa" ? "Entire villas" : "Hotels"} around ${destination}`
+    : state.mode === "villa"
+      ? "Villas reserved only for you"
+      : "Hotels you can book by room";
   resultsStatus.textContent = "Finding live Wildleaf properties…";
   renderLoadingCards();
 
@@ -53,42 +89,59 @@ async function loadProperties(destination) {
     const data = await apiRequest(`/v1/public/properties?${query}`, {
       cache: "default",
     });
-    renderProperties(data.properties || []);
+    state.properties = data.properties || [];
+    renderProperties(state.properties);
   } catch (error) {
     renderError(error);
   }
 }
 
 function renderProperties(properties) {
+  const visibleProperties = properties.filter((property) =>
+    saleModeAllows(property.saleMode, state.mode),
+  );
   results.replaceChildren();
-  if (!properties.length) {
+  if (!visibleProperties.length) {
     resultsStatus.textContent =
-      "No Wildleaf properties match this destination yet.";
+      state.mode === "villa"
+        ? "No entire villas match this destination yet."
+        : "No hotels match this destination yet.";
     const empty = element("div", "empty-state");
     empty.append(
       element("h3", "", "No stays found"),
       element(
         "p",
         "",
-        "Try a nearby city or clear the destination to explore every live property.",
+        "Try a nearby city, clear the destination, or switch your stay type.",
       ),
     );
     results.append(empty);
     return;
   }
 
-  resultsStatus.textContent = `${properties.length} ${properties.length === 1 ? "property" : "properties"}`;
-  properties.forEach((property, index) =>
+  resultsStatus.textContent = `${visibleProperties.length} ${state.mode === "villa" ? (visibleProperties.length === 1 ? "villa" : "villas") : visibleProperties.length === 1 ? "hotel" : "hotels"}`;
+  visibleProperties.forEach((property, index) =>
     results.append(propertyCard(property, index)),
   );
 }
 
 function propertyCard(property, index) {
-  const article = element("article", "property-card");
+  const article = element(
+    "article",
+    `property-card property-card-${state.mode}`,
+  );
   const visual = element("div", `property-visual visual-${(index % 4) + 1}`);
   visual.append(
-    element("span", "property-index", String(index + 1).padStart(2, "0")),
-    element("span", "property-initial", property.name?.slice(0, 1) || "W"),
+    element(
+      "span",
+      "listing-type-badge",
+      state.mode === "villa" ? "Entire villa" : "Hotel rooms",
+    ),
+    element(
+      "span",
+      "property-visual-symbol",
+      state.mode === "villa" ? "⌂" : "▦",
+    ),
   );
 
   const body = element("div", "property-card-body");
@@ -109,11 +162,20 @@ function propertyCard(property, index) {
   const tags = element("div", "property-tags");
   if (property.propertyType)
     tags.append(element("span", "tag", titleCase(property.propertyType)));
-  if (property.saleMode)
-    tags.append(element("span", "tag", saleModeLabel(property.saleMode)));
+  tags.append(
+    element(
+      "span",
+      "tag",
+      state.mode === "villa" ? "Exclusive use" : "Book by room",
+    ),
+  );
   body.append(tags);
 
-  const link = element("a", "text-link", "Explore this stay");
+  const link = element(
+    "a",
+    "button button-primary property-cta",
+    state.mode === "villa" ? "View entire villa" : "View rooms",
+  );
   link.href = propertyUrl(property.publicSlug);
   link.setAttribute("aria-label", `Explore ${property.name}`);
   body.append(link);
@@ -130,8 +192,41 @@ function propertyUrl(publicSlug) {
     rooms: form.rooms.value,
     adults: form.adults.value,
     children: form.children.value,
+    mode: state.mode,
   });
   return `/customer/property.html?${params}`;
+}
+
+function applyMode() {
+  const villa = state.mode === "villa";
+  form.classList.toggle("villa-search", villa);
+  modeButtons.forEach((button) => {
+    const selected = button.dataset.mode === state.mode;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  roomCountField.classList.toggle("hidden", villa);
+  form.rooms.value = villa ? "1" : form.rooms.value || "1";
+  document.querySelector("#adultsLabel").textContent = villa
+    ? "Adults"
+    : "Adults / room";
+  document.querySelector("#childrenLabel").textContent = villa
+    ? "Children"
+    : "Children / room";
+  document.querySelector(".search-button").textContent = villa
+    ? "Search villas"
+    : "Search hotels";
+  resultsEyebrow.textContent = villa ? "Entire villas" : "Hotel rooms";
+  resultsTitle.textContent = villa
+    ? "Villas reserved only for you"
+    : "Hotels you can book by room";
+  history.replaceState(null, "", `${location.pathname}?mode=${state.mode}`);
+}
+
+function saleModeAllows(saleMode, mode) {
+  if (mode === "villa")
+    return saleMode === "FULL_PROPERTY_ONLY" || saleMode === "BOTH";
+  return !saleMode || saleMode === "ROOMS_ONLY" || saleMode === "BOTH";
 }
 
 function renderLoadingCards() {

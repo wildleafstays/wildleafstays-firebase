@@ -223,16 +223,12 @@
         </section>
 
         <section id="calendarScreen" class="screen hidden">
-          <div class="section-intro">
-            <div>
-              <p class="eyebrow">Rates & inventory</p>
-              <h2>Room rates and availability</h2>
-            </div>
-            <p>
-              Manage each room category across the selected dates. Entire-villa
-              availability is derived automatically from the same room
-              inventory.
-            </p>
+          <div
+            class="owner-calendar-titlebar"
+            aria-label="Room rates and availability"
+          >
+            <h2>Rates & inventory</h2>
+            <span>Click any cell to edit · changes save immediately</span>
           </div>
 
           <form
@@ -317,86 +313,99 @@
             <button type="submit">Refresh</button>
           </form>
 
-          <form id="ownerRateBulkForm" class="card owner-rate-bulk-form">
-            <div class="owner-rate-bulk-heading">
-              <h3>Bulk update rates</h3>
-              <p class="muted">
-                Update EP or extra guest charges across several dates at once.
-                Inventory remains controlled separately.
-              </p>
-            </div>
+          <details class="card owner-tool-drawer">
+            <summary>
+              <span
+                ><strong>Bulk update rates</strong
+                ><small>Change multiple dates at once</small></span
+              >
+            </summary>
 
-            <label>
-              Room category
-              <select name="roomCategoryId" id="ownerRateBulkCategory">
-                <option value="ALL">All room categories</option>
-              </select>
-            </label>
+            <form id="ownerRateBulkForm" class="owner-rate-bulk-form">
+              <label>
+                Room category
+                <select name="roomCategoryId" id="ownerRateBulkCategory">
+                  <option value="ALL">All room categories</option>
+                </select>
+              </label>
 
-            <label>
-              From
-              <input name="startDate" type="date" required />
-            </label>
+              <label>
+                From
+                <input name="startDate" type="date" required />
+              </label>
 
-            <label>
-              Through
-              <input name="endDate" type="date" required />
-            </label>
+              <label>
+                Through
+                <input name="endDate" type="date" required />
+              </label>
 
-            <label>
-              Update
-              <select name="rateField" required>
-                <option value="base">EP rate</option>
-                <option value="adult">Extra adult</option>
-                <option value="child">Extra child</option>
-              </select>
-            </label>
+              <label>
+                Update
+                <select name="rateField" required>
+                  <option value="base">EP rate</option>
+                  <option value="adult">Extra adult</option>
+                  <option value="child">Extra child</option>
+                </select>
+              </label>
 
-            <label>
-              Amount (₹)
-              <input name="amount" type="number" min="0" step="0.01" required />
-            </label>
+              <label>
+                Amount (₹)
+                <input
+                  name="amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </label>
 
-            <button type="submit">Apply &amp; save</button>
-          </form>
+              <button type="submit">Apply &amp; save</button>
+            </form>
+          </details>
 
-          <form
-            id="ownerInventoryControlForm"
-            class="card filter-grid owner-inventory-control"
-          >
-            <div>
-              <h3>Availability control</h3>
-              <p class="muted">
-                Click any inventory cell below to set that date’s total room
-                inventory. Use Stop sell when you want to close a category
-                across the visible dates.
-              </p>
-            </div>
+          <details class="card owner-tool-drawer">
+            <summary>
+              <span
+                ><strong>Availability control</strong
+                ><small>Stop sell across the visible dates</small></span
+              >
+            </summary>
 
-            <label>
-              Room category
-              <select
-                name="roomCategoryId"
-                id="ownerInventoryCategory"
-                required
-              ></select>
-            </label>
+            <form
+              id="ownerInventoryControlForm"
+              class="filter-grid owner-inventory-control"
+            >
+              <label>
+                Room category
+                <select
+                  name="roomCategoryId"
+                  id="ownerInventoryCategory"
+                  required
+                ></select>
+              </label>
 
-            <label class="check-control">
-              <input name="stopSell" type="checkbox" />
-              Stop sell for selected dates
-            </label>
+              <label class="check-control">
+                <input name="stopSell" type="checkbox" />
+                Stop sell for selected dates
+              </label>
 
-            <button type="submit">Apply availability</button>
-          </form>
+              <button type="submit">Apply availability</button>
+            </form>
+          </details>
 
           <section class="card calendar-card owner-rate-calendar-card">
             <div class="card-heading">
               <div>
-                <h3>Rates & inventory</h3>
                 <p id="calendarContext" class="muted">
-                  Click a cell to edit and save inventory or price instantly.
+                  Click a cell to edit. Use Earlier and Later for any date.
                 </p>
+              </div>
+              <div class="owner-villa-sync-note">
+                <strong>Entire villa follows this grid</strong>
+                <span
+                  >Rates, occupancy and availability are derived
+                  automatically.</span
+                >
               </div>
             </div>
 
