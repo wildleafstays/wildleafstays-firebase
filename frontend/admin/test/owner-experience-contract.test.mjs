@@ -90,6 +90,10 @@ test("property editor uses one-at-a-time sections without replacing existing for
   assert.match(js, /editorAccordionItem\("categories", "Room categories"\)/);
   assert.match(js, /editorAccordionItem\("rooms", "Add rooms"\)/);
   assert.match(js, /editorAccordionItem\("amenities", "Property amenities"\)/);
+  assert.match(
+    js,
+    /editorAccordionItem\([\s\S]*?"commercial",[\s\S]*?"Booking rules and charges"/,
+  );
 
   for (const formId of [
     "profileForm",
@@ -97,6 +101,7 @@ test("property editor uses one-at-a-time sections without replacing existing for
     "roomCategoryImageUploadForm",
     "physicalUnitForm",
     "policiesForm",
+    "commercialRulesForm",
     "amenitiesForm",
     "imageUploadForm",
     "documentUploadForm",
@@ -107,6 +112,30 @@ test("property editor uses one-at-a-time sections without replacing existing for
   assert.match(css, /\.editor-accordion-item/);
   assert.match(css, /#accommodationList,[\s\S]*\.physical-room-card-list/);
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.editor-progress-card/);
+});
+
+test("hotel owners control GST, guest ages, cancellation and mandatory fees", () => {
+  const form = html.match(
+    /<form\b[^>]*id="commercialRulesForm"[^>]*>[\s\S]*?<\/form>/,
+  );
+
+  assert.ok(form, "commercial rules form must exist");
+  assert.match(form[0], /name="gstRatePercent"/);
+  assert.match(form[0], /name="infantMaxAge"/);
+  assert.match(form[0], /name="childMaxAge"/);
+  assert.match(form[0], /name="freeCancellationDays"/);
+  assert.match(form[0], /name="lateCancellationPercent"/);
+  assert.match(form[0], /name="noShowPercent"/);
+  assert.match(form[0], /name="feeEnabled"/);
+  assert.match(form[0], /name="feeBasis"/);
+
+  assert.match(js, /priceMode: "EXCLUSIVE"/);
+  assert.match(js, /taxMode: "POLICIES"/);
+  assert.match(js, /guest-age-policy/);
+  assert.match(js, /cancellation-policies/);
+  assert.match(js, /cancellation-assignments/);
+  assert.match(js, /fee-policies/);
+  assert.match(form[0], /Room rates continue to come from your inventory/);
 });
 
 test("physical room setup uses owner language and supports floors", () => {

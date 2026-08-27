@@ -72,6 +72,16 @@ export interface PublicMediaRecord {
   sort_order: number;
 }
 
+export interface PublicRoomCategoryMediaRecord {
+  id: string;
+  room_category_id: string;
+  sort_order: number;
+}
+
+export interface PublicMediaStorageRecord {
+  storage_key: string;
+}
+
 export class PublicCatalogRepository {
   async listDestinations(db: DbExecutor): Promise<PublicDestinationRecord[]> {
     return db
@@ -208,6 +218,59 @@ export class PublicCatalogRepository {
       .orderBy("sort_order")
       .orderBy("name")
       .execute();
+  }
+
+  async listRoomCategoryMedia(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string
+  ): Promise<PublicRoomCategoryMediaRecord[]> {
+    return db
+      .selectFrom("room_category_media as media")
+      .innerJoin("room_categories as category", "category.id", "media.room_category_id")
+      .select([
+        "media.id as id",
+        "media.room_category_id as room_category_id",
+        "media.sort_order as sort_order"
+      ])
+      .where("media.organization_id", "=", organizationId)
+      .where("media.property_id", "=", propertyId)
+      .where("media.status", "=", "ACTIVE")
+      .where("category.status", "=", "ACTIVE")
+      .orderBy("media.room_category_id")
+      .orderBy("media.sort_order")
+      .orderBy("media.created_at")
+      .execute();
+  }
+
+  async findPublicMediaStorage(
+    db: DbExecutor,
+    publicSlug: string,
+    mediaId: string
+  ): Promise<PublicMediaStorageRecord | undefined> {
+    const propertyMedia = await db
+      .selectFrom("property_media as media")
+      .innerJoin("properties as property", "property.id", "media.property_id")
+      .select("media.storage_key as storage_key")
+      .where("property.status", "=", "LIVE")
+      .where("property.public_slug", "=", publicSlug)
+      .where("media.id", "=", mediaId)
+      .where("media.status", "=", "ACTIVE")
+      .where("media.media_type", "=", "IMAGE")
+      .executeTakeFirst();
+    if (propertyMedia) return propertyMedia;
+
+    return db
+      .selectFrom("room_category_media as media")
+      .innerJoin("properties as property", "property.id", "media.property_id")
+      .innerJoin("room_categories as category", "category.id", "media.room_category_id")
+      .select("media.storage_key as storage_key")
+      .where("property.status", "=", "LIVE")
+      .where("property.public_slug", "=", publicSlug)
+      .where("category.status", "=", "ACTIVE")
+      .where("media.id", "=", mediaId)
+      .where("media.status", "=", "ACTIVE")
+      .executeTakeFirst();
   }
 
   async listAmenities(

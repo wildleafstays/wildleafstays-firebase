@@ -1152,6 +1152,172 @@
               </button>
             </form>
 
+            <form
+              id="commercialRulesForm"
+              class="card form-grid two-column commercial-rules-form"
+            >
+              <div class="span-two commercial-form-intro">
+                <div>
+                  <h3>Booking rules and charges</h3>
+                  <p class="muted">
+                    These rules are used to calculate the final price shown to
+                    guests. Room rates continue to come from your inventory
+                    calendar.
+                  </p>
+                </div>
+                <span id="commercialReadiness" class="status-pill"
+                  >Setup required</span
+                >
+              </div>
+
+              <fieldset class="commercial-rule-group span-two">
+                <legend>GST</legend>
+                <p class="muted span-two">
+                  GST is added to the room price. Enter the percentage that
+                  applies to this property.
+                </p>
+                <label
+                  >GST rate (%)<input
+                    name="gstRatePercent"
+                    type="number"
+                    min="0.01"
+                    max="100"
+                    step="0.01"
+                    placeholder="For example, 18"
+                    required
+                /></label>
+              </fieldset>
+
+              <fieldset class="commercial-rule-group span-two">
+                <legend>Guest age limits</legend>
+                <label
+                  >Infant maximum age<input
+                    name="infantMaxAge"
+                    type="number"
+                    min="0"
+                    max="16"
+                    value="2"
+                    required
+                /></label>
+                <label
+                  >Child maximum age<input
+                    name="childMaxAge"
+                    type="number"
+                    min="1"
+                    max="17"
+                    value="12"
+                    required
+                /></label>
+                <label class="check-control">
+                  <input
+                    name="infantsCountTowardsOccupancy"
+                    type="checkbox"
+                    checked
+                  />
+                  Infants count towards total occupancy
+                </label>
+                <label class="check-control">
+                  <input name="infantsChargeAsChildren" type="checkbox" />
+                  Charge infants at the child rate
+                </label>
+              </fieldset>
+
+              <fieldset class="commercial-rule-group span-two">
+                <legend>Cancellation and no-show</legend>
+                <label
+                  >Free cancellation until<input
+                    name="freeCancellationDays"
+                    type="number"
+                    min="0"
+                    max="365"
+                    value="7"
+                    required
+                  /><small>Days before check-in</small></label
+                >
+                <label
+                  >Late cancellation charge (%)<input
+                    name="lateCancellationPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="100"
+                    required
+                /></label>
+                <label
+                  >No-show charge (%)<input
+                    name="noShowPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="100"
+                    required
+                /></label>
+                <label
+                  >Policy name<input
+                    name="cancellationPolicyName"
+                    maxlength="120"
+                    value="Standard cancellation"
+                    required
+                /></label>
+                <label class="span-two"
+                  >Message shown to guests<textarea
+                    name="cancellationPolicyText"
+                    maxlength="5000"
+                    placeholder="Optional. A clear summary will be created automatically if left blank."
+                  ></textarea>
+                </label>
+              </fieldset>
+
+              <fieldset class="commercial-rule-group span-two">
+                <legend>Other mandatory fees</legend>
+                <label class="check-control span-two">
+                  <input name="feeEnabled" type="checkbox" />
+                  Add another mandatory fee
+                </label>
+                <div id="commercialFeeFields" class="form-grid two-column span-two hidden">
+                  <label
+                    >Fee name<input
+                      name="feeName"
+                      maxlength="120"
+                      value="Service fee"
+                  /></label>
+                  <label
+                    >How it is charged<select name="feeBasis">
+                      <option value="PERCENTAGE">Percentage of booking</option>
+                      <option value="PER_STAY">Fixed amount per stay</option>
+                      <option value="PER_NIGHT">Fixed amount per night</option>
+                      <option value="PER_UNIT_PER_STAY">
+                        Fixed amount per room per stay
+                      </option>
+                      <option value="PER_UNIT_PER_NIGHT">
+                        Fixed amount per room per night
+                      </option>
+                    </select></label
+                  >
+                  <label
+                    ><span id="commercialFeeValueLabel">Fee value (%)</span
+                    ><input
+                      name="feeValue"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value="0"
+                  /></label>
+                  <label class="check-control">
+                    <input name="feeTaxable" type="checkbox" /> GST also
+                    applies to this fee
+                  </label>
+                </div>
+              </fieldset>
+
+              <p id="commercialEffectiveNote" class="field-help span-two"></p>
+              <button id="saveCommercialRulesButton" class="span-two" type="submit">
+                Save booking rules
+              </button>
+            </form>
+
             <form id="amenitiesForm" class="card form-grid span-editor">
               <div>
                 <h3>Property amenities</h3>

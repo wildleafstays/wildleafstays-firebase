@@ -177,6 +177,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   await registerPublicCatalogRoutes(app, {
     db: deps.db,
+    propertyAssetStorage: deps.propertyAssetStorage ?? new UnavailablePropertyAssetStorage(),
     authentication: {
       identityVerifier: deps.identityVerifier,
       userRepository,

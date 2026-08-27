@@ -721,6 +721,11 @@ select:focus {
 .guest-form .button {
   justify-self: start;
 }
+.automatic-search-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
 .inline-message,
 .section-error,
 .page-message {
@@ -760,15 +765,73 @@ select:focus {
 }
 .availability-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 1.5rem;
-  align-items: center;
-  padding: 1.25rem;
+  grid-template-columns: 150px minmax(0, 1fr) minmax(190px, auto);
+  gap: 1.25rem;
+  align-items: stretch;
+  overflow: hidden;
+  padding: 0;
   border: 1px solid #dfded7;
   border-radius: var(--radius-sm);
+  background: var(--white);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.availability-card:hover {
+  border-color: var(--sage-500);
+  box-shadow: 0 12px 32px rgba(19, 55, 44, 0.1);
+}
+.rate-card-visual {
+  position: relative;
+  min-height: 190px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.28), transparent 20%),
+    linear-gradient(145deg, #547d68, #173d32 68%, #b98b46);
+}
+.rate-card-visual.has-photo {
+  background-position: center;
+  background-size: cover;
+}
+.rate-card-visual::before,
+.rate-card-visual::after {
+  position: absolute;
+  content: "";
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+}
+.rate-card-visual::before {
+  width: 150px;
+  height: 150px;
+  right: -64px;
+  bottom: -30px;
+}
+.rate-card-visual::after {
+  width: 92px;
+  height: 92px;
+  right: -25px;
+  bottom: 0;
+}
+.rate-card-visual-label {
+  position: absolute;
+  z-index: 1;
+  bottom: 0.8rem;
+  left: 0.8rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(10, 34, 27, 0.72);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.availability-copy {
+  padding: 1.25rem 0;
 }
 .availability-card h3 {
   margin-bottom: 0.35rem;
+  font-size: 1.25rem;
 }
 .availability-card p:last-child {
   margin-bottom: 0;
@@ -779,8 +842,12 @@ select:focus {
 }
 .availability-price {
   display: grid;
+  align-content: center;
   justify-items: end;
   min-width: 175px;
+  padding: 1.25rem;
+  border-left: 1px solid #ece9e1;
+  text-align: right;
 }
 .availability-price > span,
 .availability-price > small {
@@ -792,8 +859,50 @@ select:focus {
   font-size: 1.45rem;
 }
 .availability-price .button {
+  width: 100%;
   min-height: 40px;
   margin-top: 0.7rem;
+}
+.rate-plan-name {
+  margin: 0 0 0.85rem;
+  color: var(--forest-800);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.rate-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  color: #45534d;
+  font-size: 0.76rem;
+}
+.rate-card-facts span::first-letter {
+  color: var(--success);
+}
+.rate-card-description {
+  margin: 0.8rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.availability-price .tax-note {
+  max-width: 190px;
+  margin-top: 0.35rem;
+  line-height: 1.35;
+}
+.availability-price .secure-booking-note {
+  margin-top: 0.4rem;
+  color: var(--success);
+  font-weight: 600;
+}
+.availability-loading {
+  padding: 2rem;
+  border: 1px solid #dfded7;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: linear-gradient(90deg, #faf9f6, #f2f5f1, #faf9f6);
+  background-size: 220% 100%;
+  animation: shimmer 1.4s infinite linear;
 }
 .reason-list {
   margin: 0.6rem 0 0;
@@ -1041,9 +1150,19 @@ select:focus {
   }
   .availability-card {
     grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .rate-card-visual {
+    min-height: 140px;
+  }
+  .availability-copy {
+    padding: 1.2rem;
   }
   .availability-price {
     justify-items: start;
+    border-top: 1px solid #ece9e1;
+    border-left: 0;
+    text-align: left;
   }
   .site-footer {
     align-items: flex-start;

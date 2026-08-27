@@ -33,6 +33,8 @@ const state = {
   pollAttempts: 0,
   polling: false,
   bookingMode: requestedMode,
+  availabilityTimer: null,
+  availabilityRequestVersion: 0,
 };
 
 if (!publicSlug) {
@@ -58,9 +60,9 @@ function wireEvents() {
     form.departureDate.min = minimumDeparture;
     if (form.departureDate.value <= form.arrivalDate.value)
       form.departureDate.value = minimumDeparture;
-    clearResultsAfterSearchChange();
+    scheduleAvailabilitySearch();
   });
-  form.departureDate.addEventListener("change", clearResultsAfterSearchChange);
+  form.departureDate.addEventListener("change", scheduleAvailabilitySearch);
   form.promotionCode.addEventListener("input", clearQuoteAndLater);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -114,6 +116,7 @@ async function loadProperty() {
     configureBookingMode(data.property);
     renderProperty(data.property);
     propertyContent.classList.remove("hidden");
+    await searchAvailability({ resetBooking: false });
 
     if (
       state.session.activeCheckout?.reservationId &&
@@ -163,8 +166,8 @@ function renderProperty(property) {
     ? "Entire villa"
     : "Hotel rooms";
   document.querySelector("#availabilityHeading").textContent = villa
-    ? "Book the complete property"
-    : "Choose your room";
+    ? "Available villa rate"
+    : "Available rooms and rates";
   document.querySelector("#assuranceHeading").textContent = villa
     ? "Entire property"
     : "Hotel room";
@@ -311,7 +314,7 @@ function setUnitCount(count) {
   );
   form.unitCount.value = String(count);
   renderOccupancyUnits();
-  clearResultsAfterSearchChange();
+  scheduleAvailabilitySearch();
 }
 
 function renderOccupancyUnits() {
@@ -333,7 +336,7 @@ function renderOccupancyUnits() {
       adults.addEventListener("change", () => {
         unit.adults = clamp(Number(adults.value), 1, 100);
         adults.value = String(unit.adults);
-        clearResultsAfterSearchChange();
+        scheduleAvailabilitySearch();
       });
       adultsLabel.append(adults);
 
@@ -348,7 +351,7 @@ function renderOccupancyUnits() {
           (_, childIndex) => unit.childAges[childIndex] ?? 8,
         );
         renderOccupancyUnits();
-        clearResultsAfterSearchChange();
+        scheduleAvailabilitySearch();
       });
       childrenLabel.append(children);
       card.append(legend, adultsLabel, childrenLabel);
@@ -385,18 +388,16 @@ function renderOccupancyUnits() {
   );
 }
 
-async function searchAvailability() {
-  clearQuoteAndLater();
-  setBusy(
-    document.querySelector("#availabilityButton"),
-    true,
-    "Checking live inventory…",
-  );
+async function searchAvailability({ resetBooking = true } = {}) {
+  if (resetBooking) clearQuoteAndLater();
+  const requestVersion = ++state.availabilityRequestVersion;
   showInlineMessage(
-    "Checking current inventory and rate restrictions…",
+    "Loading live room inventory and rates…",
     "info",
   );
-  availabilityResults.replaceChildren();
+  availabilityResults.replaceChildren(
+    element("div", "availability-loading", "Finding the best available rates…"),
+  );
 
   try {
     const data = await apiRequest(
@@ -413,19 +414,16 @@ async function searchAvailability() {
         },
       },
     );
+    if (requestVersion !== state.availabilityRequestVersion) return;
     state.availability = data;
     renderAvailability(data);
   } catch (error) {
+    if (requestVersion !== state.availabilityRequestVersion) return;
     showInlineMessage(
-      messageFor(error, "Availability could not be checked."),
+      messageFor(error, "Live rooms and rates could not be loaded."),
       "error",
     );
-  } finally {
-    setBusy(
-      document.querySelector("#availabilityButton"),
-      false,
-      "Check availability",
-    );
+    availabilityResults.replaceChildren();
   }
 }
 
@@ -446,14 +444,31 @@ function renderAvailability(data) {
   );
 
   availabilityResults.replaceChildren(
-    ...matchingOptions.map((option) => availabilityCard(option)),
+    ...available.map((option) => availabilityCard(option, data.search.nights)),
   );
 }
 
-function availabilityCard(option) {
-  const card = element(
-    "article",
-    `availability-card${option.available ? "" : " unavailable-option"}`,
+function availabilityCard(option, nights) {
+  const card = element("article", "availability-card ota-rate-card");
+  const category = state.property.roomCategories?.find(
+    (item) => item.roomCategoryId === option.roomCategoryId,
+  );
+  const visual = element("div", "rate-card-visual");
+  const coverMediaId =
+    option.productType === "FULL_PROPERTY"
+      ? state.property.coverMediaId
+      : category?.coverMediaId || state.property.coverMediaId;
+  if (coverMediaId) {
+    const mediaUrl = `/v1/public/properties/${encodeURIComponent(publicSlug)}/media/${encodeURIComponent(coverMediaId)}`;
+    visual.classList.add("has-photo");
+    visual.style.backgroundImage = `linear-gradient(180deg, transparent 45%, rgba(8, 31, 24, 0.7)), url("${mediaUrl}")`;
+  }
+  visual.append(
+    element(
+      "span",
+      "rate-card-visual-label",
+      option.productType === "FULL_PROPERTY" ? "Entire villa" : "Room",
+    ),
   );
   const main = element("div", "availability-copy");
   main.append(
@@ -467,22 +482,29 @@ function availabilityCard(option) {
     element("h3", "", option.roomCategoryName || state.property.name),
     element(
       "p",
-      "muted",
-      `${option.ratePlanName} · ${option.mealPlanCode} · ${option.requestedUnits} ${option.requestedUnits === 1 ? "unit" : "units"}`,
+      "rate-plan-name",
+      `${mealPlanLabel(option.mealPlanCode)} · ${option.ratePlanName}`,
     ),
   );
-
-  if (option.unavailableReasons.length) {
-    const reasons = element("ul", "reason-list");
-    option.unavailableReasons.forEach((reason) =>
-      reasons.append(element("li", "", reasonLabel(reason))),
-    );
-    main.append(reasons);
+  const facts = element("div", "rate-card-facts");
+  for (const value of [
+    category?.maxOccupancy
+      ? `Up to ${category.maxOccupancy} guests`
+      : null,
+    category?.bedConfiguration,
+    category?.sizeSqm ? `${category.sizeSqm} m²` : null,
+    `${option.requestedUnits} ${option.requestedUnits === 1 ? "room" : "rooms"}`,
+  ].filter(Boolean)) {
+    facts.append(element("span", "", `✓ ${value}`));
+  }
+  main.append(facts);
+  if (category?.description) {
+    main.append(element("p", "rate-card-description", category.description));
   }
 
   const price = element("div", "availability-price");
   price.append(
-    element("span", "", "Preview total"),
+    element("span", "", `Total for ${nights} ${nights === 1 ? "night" : "nights"}`),
     element(
       "strong",
       "",
@@ -493,28 +515,20 @@ function availabilityCard(option) {
       "",
       `from ${money(option.nightlyFromMinor, option.currencyCode)} nightly`,
     ),
+    element("small", "tax-note", "GST and mandatory fees shown before payment"),
   );
 
-  if (option.available) {
-    const button = element(
-      "button",
-      "button button-primary",
-      "Get exact price",
-    );
-    button.type = "button";
-    button.addEventListener(
-      "click",
-      () => void createExactQuote(option, button),
-    );
-    price.append(button);
-  }
-  card.append(main, price);
+  const button = element("button", "button button-primary", "Book now");
+  button.type = "button";
+  button.addEventListener("click", () => void startBooking(option, button));
+  price.append(button, element("small", "secure-booking-note", "Secure payment"));
+  card.append(visual, main, price);
   return card;
 }
 
-async function createExactQuote(option, button) {
+async function startBooking(option, button) {
   clearHoldAndLater();
-  setBusy(button, true, "Calculating exact price…");
+  setBusy(button, true, "Preparing booking…");
   const body = {
     rateProductId: option.rateProductId,
     arrivalDate: form.arrivalDate.value,
@@ -544,19 +558,19 @@ async function createExactQuote(option, button) {
     delete state.session.holdId;
     delete state.session.hold;
     saveBookingSession(publicSlug, state.session);
-    renderQuote(data.quote);
-    quoteSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    renderQuote(data.quote, { showHoldAction: false });
+    await createHold(null, { scrollToGuest: true });
   } catch (error) {
     showInlineMessage(
-      messageFor(error, "An exact price could not be created."),
+      messageFor(error, "This room could not be prepared for booking."),
       "error",
     );
   } finally {
-    setBusy(button, false, "Get exact price");
+    setBusy(button, false, "Book now");
   }
 }
 
-function renderQuote(quote) {
+function renderQuote(quote, { showHoldAction = true } = {}) {
   quoteSection.classList.remove("hidden");
   quoteSection.replaceChildren();
   const heading = element("div", "section-heading compact-heading");
@@ -621,22 +635,25 @@ function renderQuote(quote) {
         "Cancellation terms are snapshotted with this quote.",
     ),
   );
-  const holdButton = element(
-    "button",
-    "button button-primary",
-    "Reserve this price",
-  );
-  holdButton.type = "button";
-  holdButton.addEventListener("click", () => void createHold(holdButton));
-  action.append(holdButton);
+  let holdButton = null;
+  if (showHoldAction) {
+    holdButton = element(
+      "button",
+      "button button-primary",
+      "Reserve this price",
+    );
+    holdButton.type = "button";
+    holdButton.addEventListener("click", () => void createHold(holdButton));
+    action.append(holdButton);
+  }
 
   quoteSection.append(heading, priceBox, details, action);
   startCountdown(expiry, quote.expiresAt, holdButton, "Quote");
 }
 
-async function createHold(button) {
+async function createHold(button, { scrollToGuest = true } = {}) {
   if (!state.quote) return;
-  setBusy(button, true, "Reserving inventory…");
+  if (button) setBusy(button, true, "Reserving inventory…");
   const fingerprint = state.quote.id;
   const key = operationKey(state.session, "hold", fingerprint);
   saveBookingSession(publicSlug, state.session);
@@ -651,14 +668,16 @@ async function createHold(button) {
     state.session.hold = data.hold;
     saveBookingSession(publicSlug, state.session);
     renderGuestForm();
-    guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (scrollToGuest) {
+      guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   } catch (error) {
     renderSectionError(
       quoteSection,
       messageFor(error, "Inventory could not be reserved."),
     );
   } finally {
-    setBusy(button, false, "Reserve this price");
+    if (button) setBusy(button, false, "Reserve this price");
   }
 }
 
@@ -1034,7 +1053,7 @@ function startCountdown(target, expiresAt, button, label) {
     const remaining = new Date(expiresAt).getTime() - Date.now();
     if (remaining <= 0) {
       target.textContent = `${label} expired`;
-      button.disabled = true;
+      if (button) button.disabled = true;
       window.clearInterval(state.countdownTimer);
       return;
     }
@@ -1044,6 +1063,18 @@ function startCountdown(target, expiresAt, button, label) {
   };
   update();
   state.countdownTimer = window.setInterval(update, 1000);
+}
+
+function scheduleAvailabilitySearch() {
+  clearResultsAfterSearchChange();
+  if (state.availabilityTimer) {
+    window.clearTimeout(state.availabilityTimer);
+  }
+  if (!state.property) return;
+  state.availabilityTimer = window.setTimeout(() => {
+    state.availabilityTimer = null;
+    void searchAvailability({ resetBooking: false });
+  }, 350);
 }
 
 function clearResultsAfterSearchChange() {
@@ -1181,6 +1212,16 @@ function saleModeLabel(value) {
   );
 }
 
+function mealPlanLabel(code) {
+  const labels = {
+    EP: "Room only",
+    CP: "Breakfast included",
+    MAP: "Breakfast and one main meal",
+    AP: "All meals included",
+  };
+  return labels[code] || titleCase(code || "Rate plan");
+}
+
 function reasonLabel(reason) {
   return (
     {
@@ -1199,8 +1240,13 @@ function reasonLabel(reason) {
 
 function messageFor(error, fallback) {
   if (!(error instanceof ApiError)) return fallback;
-  if (error.status === 409)
-    return `${error.message} Refresh availability before trying again.`;
+  if (
+    error.status === 409 &&
+    /commercial configuration|commercial rules/i.test(error.message)
+  ) {
+    return "Online booking rules for this property are still being completed. No payment was taken.";
+  }
+  if (error.status === 409) return error.message;
   if (error.status === 503)
     return "Secure payment is temporarily unavailable. No reservation or payment was created.";
   return error.message || fallback;

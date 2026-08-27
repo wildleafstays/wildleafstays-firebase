@@ -65,15 +65,24 @@ export class PublicCatalogService {
       throw new NotFoundError("Public property not found");
     }
 
-    const [roomRows, amenityRows, policyRow, mediaRows] = await Promise.all([
+    const [roomRows, roomMediaRows, amenityRows, policyRow, mediaRows] = await Promise.all([
       this.repository.listRoomCategories(db, record.organization_id, record.id),
+      this.repository.listRoomCategoryMedia(db, record.organization_id, record.id),
       this.repository.listAmenities(db, record.organization_id, record.id),
       this.repository.getPolicies(db, record.organization_id, record.id),
       this.repository.listMedia(db, record.organization_id, record.id)
     ]);
 
+    const categoryCoverIds = new Map<string, string>();
+    for (const media of roomMediaRows) {
+      if (!categoryCoverIds.has(media.room_category_id)) {
+        categoryCoverIds.set(media.room_category_id, media.id);
+      }
+    }
+
     const roomCategories: PublicRoomCategoryView[] = roomRows.map((row) => ({
       roomCategoryId: row.id,
+      coverMediaId: categoryCoverIds.get(row.id) ?? null,
       code: row.code,
       name: row.name,
       accommodationType: row.accommodation_type,

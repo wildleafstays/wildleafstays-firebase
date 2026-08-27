@@ -557,8 +557,50 @@ button:disabled {
   border-radius: 0;
   box-shadow: none;
 }
+.commercial-form-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.commercial-form-intro h3,
+.commercial-form-intro p {
+  margin-top: 0;
+}
+.commercial-form-intro .status-pill.ready {
+  color: var(--forest);
+  background: var(--sage);
+}
+.commercial-rule-group {
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: #f8faf7;
+}
+.commercial-rule-group legend {
+  padding: 0 0.45rem;
+  color: var(--forest);
+  font-family: Georgia, serif;
+  font-size: 1.12rem;
+  font-weight: 700;
+}
+.commercial-rule-group > .muted {
+  margin: 0;
+}
+#commercialFeeFields {
+  padding-top: 0.25rem;
+}
+#commercialEffectiveNote {
+  margin: 0;
+}
 [data-editor-accordion="profile"] #profileForm > .span-two:first-child h3,
 [data-editor-accordion="policies"] #policiesForm > .span-two:first-child h3,
+[data-editor-accordion="commercial"] #commercialRulesForm > .span-two:first-child h3,
 [data-editor-accordion="amenities"] #amenitiesForm > div:first-child h3 {
   display: none;
 }
@@ -1126,6 +1168,15 @@ button:disabled {
   }
   .category-summary-actions button {
     width: 100%;
+  }
+  .commercial-form-intro {
+    display: grid;
+  }
+  .commercial-rule-group {
+    grid-template-columns: 1fr;
+  }
+  .commercial-rule-group .span-two {
+    grid-column: auto;
   }
 }
 

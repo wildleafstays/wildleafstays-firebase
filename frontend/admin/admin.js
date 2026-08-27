@@ -36,6 +36,8 @@ const state = {
   property: null,
   onboarding: null,
   layout: null,
+  commercial: null,
+  editorRatePlans: [],
   reservations: [],
   reservationCursor: null,
   operationsPropertyId: null,
@@ -259,6 +261,7 @@ function setupPropertyEditorWorkspace() {
   const physicalUnitForm = byId("physicalUnitForm");
   const categoryList = byId("accommodationList");
   const policiesForm = byId("policiesForm");
+  const commercialRulesForm = byId("commercialRulesForm");
   const amenitiesForm = byId("amenitiesForm");
   const assetSection = byId("imageUploadForm").closest("section");
 
@@ -271,6 +274,7 @@ function setupPropertyEditorWorkspace() {
     !physicalUnitForm ||
     !categoryList ||
     !policiesForm ||
+    !commercialRulesForm ||
     !amenitiesForm ||
     !assetSection
   ) {
@@ -283,6 +287,7 @@ function setupPropertyEditorWorkspace() {
   for (const panel of [
     profileForm,
     policiesForm,
+    commercialRulesForm,
     amenitiesForm,
     assetSection,
     checklistCard,
@@ -309,7 +314,7 @@ function setupPropertyEditorWorkspace() {
   );
   const progressStatus = document.createElement("div");
   progressStatus.className = "editor-progress-status";
-  const progressText = textElement("strong", "", "0 of 6 complete");
+  const progressText = textElement("strong", "", "0 of 7 complete");
   progressText.id = "editorProgressText";
   const progressTrack = document.createElement("div");
   progressTrack.className = "editor-progress-track";
@@ -379,6 +384,12 @@ function setupPropertyEditorWorkspace() {
   const policies = editorAccordionItem("policies", "Policies and house rules");
   policies.content.append(policiesForm);
 
+  const commercial = editorAccordionItem(
+    "commercial",
+    "Booking rules and charges",
+  );
+  commercial.content.append(commercialRulesForm);
+
   const amenities = editorAccordionItem("amenities", "Property amenities");
   amenities.content.append(amenitiesForm);
 
@@ -393,6 +404,7 @@ function setupPropertyEditorWorkspace() {
     categories.details,
     rooms.details,
     policies.details,
+    commercial.details,
     amenities.details,
     assets.details,
     review.details,
@@ -411,6 +423,36 @@ function setEditorSectionStatus(sectionKey, label, complete = false) {
   status.classList.toggle("complete", complete);
 }
 
+function commercialConfigurationReady(configuration = state.commercial) {
+  if (!configuration) return false;
+  const settings = configuration.settingsVersions?.at(-1);
+  const activePlans = state.editorRatePlans.filter(
+    (plan) => plan.status === "ACTIVE",
+  );
+  const assignedPlanIds = new Set(
+    (configuration.cancellationAssignments || []).map(
+      (assignment) => assignment.rate_plan_id,
+    ),
+  );
+  const hasTax =
+    settings?.tax_mode === "POLICIES" &&
+    configuration.taxVersions?.length > 0 &&
+    configuration.taxAssignments?.some((assignment) => assignment.enabled);
+  const hasFees =
+    settings?.fee_mode === "NO_FEES" ||
+    (configuration.feeVersions?.length > 0 &&
+      configuration.feeAssignments?.some((assignment) => assignment.enabled));
+
+  return Boolean(
+    hasTax &&
+      hasFees &&
+      configuration.guestAgeVersions?.length > 0 &&
+      configuration.cancellationVersions?.length > 0 &&
+      activePlans.length > 0 &&
+      activePlans.every((plan) => assignedPlanIds.has(plan.id)),
+  );
+}
+
 function updateEditorWorkspaceProgress(onboarding) {
   const checklist = onboarding.checklist || {};
   const categories = state.layout?.roomCategories || [];
@@ -425,7 +467,11 @@ function updateEditorWorkspaceProgress(onboarding) {
     "mediaComplete",
     "rightToOperateDocumentPresent",
   ];
-  const completed = completionKeys.filter((key) => checklist[key]).length;
+  const onboardingCompleted = completionKeys.filter(
+    (key) => checklist[key],
+  ).length;
+  const commercialComplete = commercialConfigurationReady();
+  const completed = onboardingCompleted + (commercialComplete ? 1 : 0);
 
   setEditorSectionStatus(
     "profile",
@@ -448,6 +494,11 @@ function updateEditorWorkspaceProgress(onboarding) {
     checklist.policiesComplete,
   );
   setEditorSectionStatus(
+    "commercial",
+    commercialComplete ? "Online booking ready" : "Setup required",
+    commercialComplete,
+  );
+  setEditorSectionStatus(
     "amenities",
     checklist.amenitiesComplete ? "Complete" : "Needs attention",
     checklist.amenitiesComplete,
@@ -459,17 +510,17 @@ function updateEditorWorkspaceProgress(onboarding) {
   );
   setEditorSectionStatus(
     "review",
-    checklist.readyToSubmit ? "Ready to submit" : `${completed} of 6 complete`,
+    checklist.readyToSubmit ? "Ready to submit" : `${onboardingCompleted} of 6 complete`,
     checklist.readyToSubmit,
   );
 
   const progressText = byId("editorProgressText");
   const progressBar = byId("editorProgressBar");
   if (progressText) {
-    progressText.textContent = `${completed} of 6 complete`;
+    progressText.textContent = `${completed} of 7 complete`;
   }
   if (progressBar) {
-    progressBar.style.width = `${Math.round((completed / 6) * 100)}%`;
+    progressBar.style.width = `${Math.round((completed / 7) * 100)}%`;
   }
 }
 
@@ -811,7 +862,8 @@ byId("backToProperties").addEventListener("click", () =>
 );
 
 async function openProperty(organizationId, propertyId) {
-  const [profile, onboarding, layout] = await Promise.all([
+  const base = `/v1/partner/organizations/${organizationId}/properties/${propertyId}`;
+  const [profile, onboarding, layout, commercial, ratePlans] = await Promise.all([
     api(`/v1/partner/organizations/${organizationId}/properties/${propertyId}`),
     api(
       `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
@@ -819,10 +871,14 @@ async function openProperty(organizationId, propertyId) {
     api(
       `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
     ),
+    api(`${base}/commercial`),
+    api(`${base}/rates/plans`),
   ]);
   state.property = profile.property;
   state.onboarding = onboarding;
   state.layout = layout;
+  state.commercial = commercial;
+  state.editorRatePlans = ratePlans.ratePlans || [];
   renderEditor();
   await showScreen("editor");
 }
@@ -900,6 +956,178 @@ function renderRoomAmenityChoices(editable) {
   }
 }
 
+function latestCommercialRow(rows, policyKey, policyId) {
+  return (rows || [])
+    .filter((row) => !policyId || row[policyKey] === policyId)
+    .sort(
+      (left, right) =>
+        Number(left.version_number || 0) - Number(right.version_number || 0),
+    )
+    .at(-1);
+}
+
+function commercialEffectiveDate(configuration = state.commercial) {
+  const today = localDate();
+  const datedRows = [
+    ...(configuration?.settingsVersions || []),
+    ...(configuration?.taxVersions || []),
+    ...(configuration?.taxAssignments || []),
+    ...(configuration?.feeVersions || []),
+    ...(configuration?.feeAssignments || []),
+    ...(configuration?.cancellationVersions || []),
+    ...(configuration?.cancellationAssignments || []),
+    ...(configuration?.guestAgeVersions || []),
+  ];
+  const latest = datedRows
+    .map((row) => row.effective_from)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  return latest ? [today, shiftDate(latest, 1)].sort().at(-1) : today;
+}
+
+function syncCommercialFeeFields() {
+  const form = byId("commercialRulesForm");
+  if (!form) return;
+  const enabled = form.elements.feeEnabled.checked;
+  const readOnly = form.elements.feeEnabled.disabled;
+  const percentage = form.elements.feeBasis.value === "PERCENTAGE";
+  byId("commercialFeeFields").classList.toggle("hidden", !enabled);
+  byId("commercialFeeValueLabel").textContent = percentage
+    ? "Fee value (%)"
+    : "Fee value (₹)";
+  for (const name of ["feeName", "feeBasis", "feeValue", "feeTaxable"]) {
+    form.elements[name].disabled = !enabled || readOnly;
+  }
+}
+
+function renderCommercialRules() {
+  const form = byId("commercialRulesForm");
+  form.reset();
+  const configuration = state.commercial || {};
+  const settings = configuration.settingsVersions?.at(-1);
+
+  const taxPolicy =
+    configuration.taxPolicies?.find((policy) => policy.code === "GST") ||
+    configuration.taxPolicies?.[0];
+  const taxVersion = latestCommercialRow(
+    configuration.taxVersions,
+    "tax_policy_id",
+    taxPolicy?.id,
+  );
+  const taxComponents = (configuration.taxComponents || []).filter(
+    (component) => component.tax_policy_version_id === taxVersion?.id,
+  );
+  if (taxComponents.length) {
+    const totalBasisPoints = taxComponents.reduce(
+      (sum, component) => sum + Number(component.rate_basis_points || 0),
+      0,
+    );
+    form.elements.gstRatePercent.value = String(totalBasisPoints / 100);
+  }
+
+  const guestAge = latestCommercialRow(
+    configuration.guestAgeVersions,
+    "property_id",
+    state.property.id,
+  );
+  if (guestAge) {
+    form.elements.infantMaxAge.value = guestAge.infant_max_age ?? "";
+    form.elements.childMaxAge.value = guestAge.child_max_age;
+    form.elements.infantsCountTowardsOccupancy.checked =
+      guestAge.infants_count_towards_occupancy;
+    form.elements.infantsChargeAsChildren.checked =
+      guestAge.infants_charge_as_children;
+  }
+
+  const cancellationPolicy =
+    configuration.cancellationPolicies?.find(
+      (policy) => policy.code === "STANDARD",
+    ) || configuration.cancellationPolicies?.[0];
+  const cancellationVersion = latestCommercialRow(
+    configuration.cancellationVersions,
+    "cancellation_policy_id",
+    cancellationPolicy?.id,
+  );
+  if (cancellationPolicy) {
+    form.elements.cancellationPolicyName.value = cancellationPolicy.name;
+  }
+  if (cancellationVersion) {
+    form.elements.cancellationPolicyText.value =
+      cancellationVersion.policy_text || "";
+    const tiers = (configuration.cancellationTiers || []).filter(
+      (tier) =>
+        tier.cancellation_policy_version_id === cancellationVersion.id,
+    );
+    const freeTier = tiers
+      .filter(
+        (tier) =>
+          tier.trigger_type === "CANCELLATION" &&
+          Number(tier.penalty_value) === 0 &&
+          Number(tier.minimum_minutes_before_arrival) > 0,
+      )
+      .sort(
+        (left, right) =>
+          Number(right.minimum_minutes_before_arrival) -
+          Number(left.minimum_minutes_before_arrival),
+      )[0];
+    const lateTier = tiers.find(
+      (tier) =>
+        tier.trigger_type === "CANCELLATION" &&
+        Number(tier.minimum_minutes_before_arrival) === 0,
+    );
+    const noShowTier = tiers.find(
+      (tier) => tier.trigger_type === "NO_SHOW",
+    );
+    form.elements.freeCancellationDays.value = String(
+      Math.round(Number(freeTier?.minimum_minutes_before_arrival || 0) / 1440),
+    );
+    form.elements.lateCancellationPercent.value = String(
+      Number(lateTier?.penalty_value || 0) / 100,
+    );
+    form.elements.noShowPercent.value = String(
+      Number(noShowTier?.penalty_value || 0) / 100,
+    );
+  }
+
+  const feeEnabled = settings?.fee_mode === "POLICIES";
+  form.elements.feeEnabled.checked = feeEnabled;
+  const feePolicy =
+    configuration.feePolicies?.find((policy) => policy.code === "OWNER_FEE") ||
+    configuration.feePolicies?.[0];
+  const feeVersion = latestCommercialRow(
+    configuration.feeVersions,
+    "fee_policy_id",
+    feePolicy?.id,
+  );
+  if (feePolicy) form.elements.feeName.value = feePolicy.name;
+  if (feeVersion) {
+    const percentage = feeVersion.calculation_type === "PERCENTAGE";
+    form.elements.feeBasis.value = percentage
+      ? "PERCENTAGE"
+      : feeVersion.application_basis;
+    form.elements.feeValue.value = String(
+      percentage
+        ? Number(feeVersion.rate_basis_points || 0) / 100
+        : Number(feeVersion.amount_minor || 0) / 100,
+    );
+    form.elements.feeTaxable.checked = feeVersion.taxable;
+  }
+
+  const ready = commercialConfigurationReady(configuration);
+  const readiness = byId("commercialReadiness");
+  readiness.textContent = ready ? "Online booking ready" : "Setup required";
+  readiness.classList.toggle("ready", ready);
+  byId("commercialEffectiveNote").textContent = ready
+    ? `Changes saved now will apply to stays from ${commercialEffectiveDate(configuration)}.`
+    : "Complete this once to enable exact guest pricing and online booking.";
+
+  const manageable = state.property.status !== "ARCHIVED";
+  for (const control of form.elements) control.disabled = !manageable;
+  syncCommercialFeeFields();
+}
+
 function renderEditor() {
   const property = state.property;
   const onboarding = state.onboarding;
@@ -911,6 +1139,7 @@ function renderEditor() {
   const editable = editableProperty(property.status);
   renderPropertyAmenities(onboarding.amenities || [], editable);
   renderRoomAmenityChoices(editable);
+  renderCommercialRules();
   for (const form of [
     byId("profileForm"),
     byId("policiesForm"),
@@ -1407,6 +1636,303 @@ byId("policiesForm").addEventListener("submit", (event) => {
     );
     await refreshEditorOnboarding();
     showMessage("Property policies saved.");
+  });
+});
+
+async function refreshCommercialConfiguration() {
+  const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}`;
+  const [commercial, plans] = await Promise.all([
+    api(`${base}/commercial`),
+    api(`${base}/rates/plans`),
+  ]);
+  state.commercial = commercial;
+  state.editorRatePlans = plans.ratePlans || [];
+  renderCommercialRules();
+  updateEditorWorkspaceProgress(state.onboarding);
+}
+
+async function ensureCommercialPolicy({
+  collection,
+  suffix,
+  code,
+  name,
+  description,
+}) {
+  const existing = state.commercial?.[collection]?.find(
+    (policy) => policy.code === code && policy.status === "ACTIVE",
+  );
+  if (existing) return existing;
+
+  const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/commercial`;
+  const result = await idempotent(
+    `${base}/${suffix}`,
+    "POST",
+    `commercial-${code.toLowerCase()}-create`,
+    { code, name, description },
+  );
+  return result.policy;
+}
+
+byId("commercialRulesForm").elements.feeEnabled.addEventListener(
+  "change",
+  syncCommercialFeeFields,
+);
+byId("commercialRulesForm").elements.feeBasis.addEventListener(
+  "change",
+  syncCommercialFeeFields,
+);
+
+byId("commercialRulesForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  run(async () => {
+    await refreshCommercialConfiguration();
+
+    const form = event.currentTarget;
+    const gstRatePercent = Number(form.elements.gstRatePercent.value);
+    const infantMaxAge = Number(form.elements.infantMaxAge.value);
+    const childMaxAge = Number(form.elements.childMaxAge.value);
+    const freeCancellationDays = Number(
+      form.elements.freeCancellationDays.value,
+    );
+    const lateCancellationPercent = Number(
+      form.elements.lateCancellationPercent.value,
+    );
+    const noShowPercent = Number(form.elements.noShowPercent.value);
+    const feeEnabled = form.elements.feeEnabled.checked;
+
+    if (!(gstRatePercent > 0 && gstRatePercent <= 100)) {
+      throw new Error("Enter the GST percentage applicable to this property.");
+    }
+    if (
+      !Number.isInteger(infantMaxAge) ||
+      !Number.isInteger(childMaxAge) ||
+      infantMaxAge < 0 ||
+      infantMaxAge >= childMaxAge ||
+      childMaxAge > 17
+    ) {
+      throw new Error(
+        "The infant age must be lower than the child age, and the child age cannot exceed 17.",
+      );
+    }
+    if (
+      !Number.isInteger(freeCancellationDays) ||
+      freeCancellationDays < 0 ||
+      !Number.isInteger(lateCancellationPercent) ||
+      lateCancellationPercent < 0 ||
+      lateCancellationPercent > 100 ||
+      !Number.isInteger(noShowPercent) ||
+      noShowPercent < 0 ||
+      noShowPercent > 100
+    ) {
+      throw new Error("Enter valid cancellation and no-show rules.");
+    }
+
+    const activeRatePlans = state.editorRatePlans.filter(
+      (plan) => plan.status === "ACTIVE",
+    );
+    if (!activeRatePlans.length) {
+      throw new Error(
+        "Set a base room rate in Rates & inventory before enabling online booking.",
+      );
+    }
+
+    const effectiveFrom = commercialEffectiveDate();
+    const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/commercial`;
+
+    const taxPolicy = await ensureCommercialPolicy({
+      collection: "taxPolicies",
+      suffix: "tax-policies",
+      code: "GST",
+      name: "GST",
+      description: "GST charged separately from the room and extra-guest rates.",
+    });
+    await idempotent(
+      `${base}/tax-policies/${taxPolicy.id}/versions`,
+      "POST",
+      "commercial-gst-version",
+      {
+        effectiveFrom,
+        priceMode: "EXCLUSIVE",
+        selectionBasis: "ALWAYS",
+        minimumBasisMinor: null,
+        maximumBasisMinor: null,
+        appliesToAccommodation: true,
+        appliesToExtraGuest: true,
+        appliesToFee: true,
+        expectedCurrentVersion: Number(taxPolicy.current_version || 0),
+        components: [
+          {
+            code: "GST",
+            name: "GST",
+            rateBasisPoints: Math.round(gstRatePercent * 100),
+            sortOrder: 0,
+          },
+        ],
+      },
+    );
+    await idempotent(
+      `${base}/tax-policies/${taxPolicy.id}/assignments`,
+      "POST",
+      "commercial-gst-assignment",
+      {
+        effectiveFrom,
+        scopeType: "PROPERTY",
+        ratePlanId: null,
+        rateProductId: null,
+        enabled: true,
+      },
+    );
+
+    await idempotent(
+      `${base}/guest-age-policy`,
+      "PUT",
+      "commercial-guest-age",
+      {
+        effectiveFrom,
+        infantMaxAge,
+        childMaxAge,
+        infantsCountTowardsOccupancy:
+          form.elements.infantsCountTowardsOccupancy.checked,
+        infantsCountTowardsChildLimit:
+          form.elements.infantsChargeAsChildren.checked,
+        infantsChargeAsChildren:
+          form.elements.infantsChargeAsChildren.checked,
+        expectedVersion: Number(
+          state.commercial?.guestAgeHeader?.current_version || 0,
+        ),
+      },
+    );
+
+    const cancellationPolicyName =
+      form.elements.cancellationPolicyName.value.trim() ||
+      "Standard cancellation";
+    const cancellationPolicy = await ensureCommercialPolicy({
+      collection: "cancellationPolicies",
+      suffix: "cancellation-policies",
+      code: "STANDARD",
+      name: cancellationPolicyName,
+      description: "Owner-managed cancellation and no-show terms.",
+    });
+    const generatedCancellationText = freeCancellationDays
+      ? `Free cancellation until ${freeCancellationDays} day${freeCancellationDays === 1 ? "" : "s"} before check-in. Later cancellations are charged at ${lateCancellationPercent}% of the stay. No-shows are charged at ${noShowPercent}%.`
+      : `Cancellations are charged at ${lateCancellationPercent}% of the stay. No-shows are charged at ${noShowPercent}%.`;
+    const cancellationTiers = [];
+    if (freeCancellationDays > 0) {
+      cancellationTiers.push({
+        triggerType: "CANCELLATION",
+        minimumMinutesBeforeArrival: freeCancellationDays * 1440,
+        penaltyType: "PERCENTAGE_OF_STAY",
+        penaltyValue: 0,
+      });
+    }
+    cancellationTiers.push(
+      {
+        triggerType: "CANCELLATION",
+        minimumMinutesBeforeArrival: 0,
+        penaltyType: "PERCENTAGE_OF_STAY",
+        penaltyValue: lateCancellationPercent * 100,
+      },
+      {
+        triggerType: "NO_SHOW",
+        minimumMinutesBeforeArrival: null,
+        penaltyType: "PERCENTAGE_OF_STAY",
+        penaltyValue: noShowPercent * 100,
+      },
+    );
+    await idempotent(
+      `${base}/cancellation-policies/${cancellationPolicy.id}/versions`,
+      "POST",
+      "commercial-cancellation-version",
+      {
+        effectiveFrom,
+        arrivalLocalTime: state.property.checkInTime || "14:00",
+        policyText:
+          form.elements.cancellationPolicyText.value.trim() ||
+          generatedCancellationText,
+        expectedCurrentVersion: Number(
+          cancellationPolicy.current_version || 0,
+        ),
+        tiers: cancellationTiers,
+      },
+    );
+    for (const plan of activeRatePlans) {
+      await idempotent(
+        `${base}/cancellation-assignments`,
+        "POST",
+        `commercial-cancellation-${plan.id}`,
+        {
+          ratePlanId: plan.id,
+          cancellationPolicyId: cancellationPolicy.id,
+          effectiveFrom,
+        },
+      );
+    }
+
+    if (feeEnabled) {
+      const feeValue = Number(form.elements.feeValue.value);
+      if (!(feeValue > 0)) {
+        throw new Error("Enter a fee greater than zero, or turn the fee off.");
+      }
+      const feeName = form.elements.feeName.value.trim() || "Service fee";
+      const feeBasis = form.elements.feeBasis.value;
+      const percentage = feeBasis === "PERCENTAGE";
+      const feePolicy = await ensureCommercialPolicy({
+        collection: "feePolicies",
+        suffix: "fee-policies",
+        code: "OWNER_FEE",
+        name: feeName,
+        description: "Mandatory fee configured by the property owner.",
+      });
+      await idempotent(
+        `${base}/fee-policies/${feePolicy.id}/versions`,
+        "POST",
+        "commercial-fee-version",
+        {
+          effectiveFrom,
+          calculationType: percentage ? "PERCENTAGE" : "FIXED",
+          applicationBasis: percentage ? "STAY_CHARGES" : feeBasis,
+          amountMinor: percentage ? null : rupeesToMinor(feeValue),
+          rateBasisPoints: percentage ? Math.round(feeValue * 100) : null,
+          priceMode: "EXCLUSIVE",
+          taxable: form.elements.feeTaxable.checked,
+          taxPolicyId: form.elements.feeTaxable.checked
+            ? taxPolicy.id
+            : null,
+          expectedCurrentVersion: Number(feePolicy.current_version || 0),
+        },
+      );
+      await idempotent(
+        `${base}/fee-policies/${feePolicy.id}/assignments`,
+        "POST",
+        "commercial-fee-assignment",
+        {
+          effectiveFrom,
+          scopeType: "PROPERTY",
+          ratePlanId: null,
+          rateProductId: null,
+          enabled: true,
+        },
+      );
+    }
+
+    await idempotent(
+      `${base}/settings`,
+      "PUT",
+      "commercial-settings",
+      {
+        effectiveFrom,
+        taxMode: "POLICIES",
+        feeMode: feeEnabled ? "POLICIES" : "NO_FEES",
+        expectedVersion: Number(
+          state.commercial?.settingsHeader?.current_version || 0,
+        ),
+      },
+    );
+
+    await refreshCommercialConfiguration();
+    showMessage(
+      `Booking rules saved. They apply to stays from ${effectiveFrom}.`,
+    );
   });
 });
 

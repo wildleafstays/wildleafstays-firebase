@@ -1,7 +1,12 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
-import { AuthenticationError, ValidationError } from "../../../shared/errors/app-error.js";
+import type { PropertyAssetStorage } from "../../../infrastructure/storage/property-asset-storage.js";
+import {
+  AuthenticationError,
+  NotFoundError,
+  ValidationError
+} from "../../../shared/errors/app-error.js";
 import {
   authenticateIfPresent,
   type AuthenticationDependencies
@@ -14,6 +19,7 @@ import { PublicCatalogService } from "../application/public-catalog-service.js";
 import { PublicCheckoutStatusService } from "../application/public-checkout-status-service.js";
 import { PublicCheckoutService } from "../application/public-checkout-service.js";
 import { PublicQuoteService } from "../application/public-quote-service.js";
+import { PublicCatalogRepository } from "../infrastructure/public-catalog-repository.js";
 import type { PublicAvailabilityRequest } from "../domain/public-availability.js";
 import type { PublicCheckoutRequest } from "../domain/public-checkout.js";
 import type { PublicCheckoutStatusRequest } from "../domain/public-checkout-status.js";
@@ -22,6 +28,7 @@ export interface PublicCatalogRouteDependencies {
   db: Kysely<Database>;
   authentication?: AuthenticationDependencies;
   razorpayOrderGateway?: RazorpayOrderGateway | null;
+  propertyAssetStorage?: PropertyAssetStorage;
 }
 
 interface PublicPropertiesQuery {
@@ -31,6 +38,9 @@ interface PublicPropertiesQuery {
 
 interface PublicPropertyParams {
   publicSlug: string;
+}
+interface PublicMediaParams extends PublicPropertyParams {
+  mediaId: string;
 }
 interface PublicQuoteParams extends PublicPropertyParams {
   quoteId: string;
@@ -97,6 +107,7 @@ const roomCategorySchema = {
   additionalProperties: false,
   required: [
     "roomCategoryId",
+    "coverMediaId",
     "code",
     "name",
     "accommodationType",
@@ -112,6 +123,7 @@ const roomCategorySchema = {
   ],
   properties: {
     roomCategoryId: { type: "string", format: "uuid" },
+    coverMediaId: nullableUuid,
     code: { type: "string" },
     name: { type: "string" },
     accommodationType: { type: "string" },
@@ -873,6 +885,7 @@ export async function registerPublicCatalogRoutes(
   deps: PublicCatalogRouteDependencies
 ): Promise<void> {
   const service = new PublicCatalogService();
+  const catalogRepository = new PublicCatalogRepository();
   const availabilityService = new PublicAvailabilityService();
   const publicQuoteService = new PublicQuoteService();
   const publicCheckoutStatusService = new PublicCheckoutStatusService();
@@ -996,6 +1009,45 @@ export async function registerPublicCatalogRoutes(
     async (request, reply) => {
       setPublicCache(reply);
       return service.getProperty(deps.db, request.params.publicSlug);
+    }
+  );
+
+  app.get<{ Params: PublicMediaParams }>(
+    "/v1/public/properties/:publicSlug/media/:mediaId",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Open a published property or room-category image",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug", "mediaId"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            },
+            mediaId: { type: "string", format: "uuid" }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!deps.propertyAssetStorage) throw new NotFoundError("Published image not found");
+      const media = await catalogRepository.findPublicMediaStorage(
+        deps.db,
+        request.params.publicSlug.toLowerCase(),
+        request.params.mediaId
+      );
+      if (!media) throw new NotFoundError("Published image not found");
+      const url = await deps.propertyAssetStorage.createReadUrl(
+        media.storage_key,
+        new Date(Date.now() + 10 * 60 * 1000)
+      );
+      void reply.header("cache-control", "public, max-age=300");
+      return reply.redirect(url);
     }
   );
 
