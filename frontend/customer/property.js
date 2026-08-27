@@ -72,7 +72,7 @@ function wireEvents() {
 
 function configureInitialSearch() {
   const today = dateValue(new Date());
-  const defaultArrival = addDays(today, 1);
+  const defaultArrival = today;
   const requestedArrival = validDate(query.get("arrivalDate"))
     ? query.get("arrivalDate")
     : null;
@@ -82,7 +82,7 @@ function configureInitialSearch() {
       : defaultArrival;
   const departureCandidate = validDate(query.get("departureDate"))
     ? query.get("departureDate")
-    : addDays(arrival, 2);
+    : addDays(arrival, 1);
   const departure =
     departureCandidate > arrival ? departureCandidate : addDays(arrival, 1);
   const unitCount =
@@ -162,12 +162,6 @@ function renderProperty(property) {
   document.querySelector("#propertyOverviewHeading").textContent = villa
     ? "About this entire villa"
     : "About this hotel";
-  document.querySelector("#availabilityModeLabel").textContent = villa
-    ? "Entire villa"
-    : "Hotel rooms";
-  document.querySelector("#availabilityHeading").textContent = villa
-    ? "Available villa rate"
-    : "Available rooms and rates";
   document.querySelector("#assuranceHeading").textContent = villa
     ? "Entire property"
     : "Hotel room";
@@ -254,27 +248,8 @@ function renderStayConfiguration(categories) {
     return;
   }
 
-  if (!categories.length) return;
-  const grid = element("div", "room-category-grid");
-  categories.forEach((category) => {
-    const card = element("article", "room-category-summary");
-    card.append(
-      element("h3", "", category.name),
-      element(
-        "p",
-        "",
-        [
-          `Up to ${category.maxOccupancy} guests`,
-          category.bedConfiguration,
-          category.sizeSqm ? `${category.sizeSqm} m²` : null,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      ),
-    );
-    grid.append(card);
-  });
-  container.append(grid);
+  // Hotel room categories and occupancy are shown once, in their bookable
+  // rate cards. Repeating them in the property summary makes the page noisy.
 }
 
 function renderPolicies(policies) {

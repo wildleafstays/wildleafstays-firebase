@@ -248,13 +248,19 @@ export class PublicAvailabilityRepository {
         "product.product_type as product_type",
         "product.room_category_id as room_category_id",
         "product.base_rate_minor as base_rate_minor",
-        "product.included_adults as included_adults",
-        "product.included_children as included_children",
-        "product.max_adults as max_adults",
-        "product.max_children as max_children",
-        "product.max_occupancy as max_occupancy",
-        "product.extra_adult_minor as extra_adult_minor",
-        "product.extra_child_minor as extra_child_minor",
+        sql<number>`coalesce(category.base_adults, product.included_adults)`.as("included_adults"),
+        sql<number>`coalesce(category.base_children, product.included_children)`.as(
+          "included_children"
+        ),
+        sql<number>`coalesce(category.max_adults, product.max_adults)`.as("max_adults"),
+        sql<number>`coalesce(category.max_children, product.max_children)`.as("max_children"),
+        sql<number>`coalesce(category.max_occupancy, product.max_occupancy)`.as("max_occupancy"),
+        sql<number>`coalesce(category.default_extra_adult_minor, product.extra_adult_minor)`.as(
+          "extra_adult_minor"
+        ),
+        sql<number>`coalesce(category.default_extra_child_minor, product.extra_child_minor)`.as(
+          "extra_child_minor"
+        ),
         "plan.code as rate_plan_code",
         "plan.name as rate_plan_name",
         "plan.meal_plan_code as meal_plan_code",

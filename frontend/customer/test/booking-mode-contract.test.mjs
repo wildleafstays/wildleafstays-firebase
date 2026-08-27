@@ -47,13 +47,26 @@ test("villa presentation explicitly uses the shared room source", () => {
 test("property page loads inventory automatically and offers direct booking", () => {
   assert.doesNotMatch(propertyHtml, /id="availabilityButton"/);
   assert.doesNotMatch(propertyHtml, />\s*Check availability\s*</);
-  assert.match(propertyHtml, /updates automatically/);
+  assert.doesNotMatch(propertyHtml, /Available rooms and rates/);
+  assert.match(propertyHtml, /class="availability-form"/);
   assert.match(propertySource, /await searchAvailability\(\{ resetBooking: false \}\)/);
   assert.match(propertySource, /function scheduleAvailabilitySearch\(\)/);
   assert.match(propertySource, /"Book now"/);
   assert.match(propertySource, /async function startBooking\(option, button\)/);
   assert.match(propertySource, /await createHold\(null, \{ scrollToGuest: true \}\)/);
   assert.doesNotMatch(propertySource, /"Get exact price"/);
+});
+
+test("property search defaults to today, one night, one room and two adults", () => {
+  assert.match(propertySource, /const defaultArrival = today/);
+  assert.match(propertySource, /: addDays\(arrival, 1\)/);
+  assert.match(propertySource, /query\.get\("rooms"\) \|\| 1/);
+  assert.match(propertySource, /query\.get\("adults"\) \|\| 2/);
+});
+
+test("hotel room categories are not repeated in the property summary", () => {
+  assert.match(propertySource, /Repeating them in the property summary makes the page noisy/);
+  assert.doesNotMatch(propertySource, /const card = element\("article", "room-category-summary"\)/);
 });
 
 test("available rates use OTA-style room facts and calendar-backed totals", () => {

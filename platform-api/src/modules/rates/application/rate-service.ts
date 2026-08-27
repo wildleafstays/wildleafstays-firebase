@@ -1042,6 +1042,22 @@ export class RateService {
       throw new ConflictError("Rate product is missing its rate plan");
     }
 
+    const category = product.room_category_id
+      ? await this.rates.findRoomCategory(trx, organizationId, propertyId, product.room_category_id)
+      : null;
+    const canonicalProduct: RateProductRecord = category
+      ? {
+          ...product,
+          included_adults: category.base_adults ?? product.included_adults,
+          included_children: category.base_children ?? product.included_children,
+          max_adults: category.max_adults,
+          max_children: category.max_children,
+          max_occupancy: category.max_occupancy,
+          extra_adult_minor: category.default_extra_adult_minor ?? product.extra_adult_minor,
+          extra_child_minor: category.default_extra_child_minor ?? product.extra_child_minor
+        }
+      : product;
+
     const overrides = await this.rates.listCalendarDays(trx, rateProductId, startDate, endDate);
     const byDate = new Map(overrides.map((row) => [row.stay_date, row]));
 
@@ -1050,9 +1066,9 @@ export class RateService {
       if (!row) {
         return {
           stayDate,
-          rateMinor: product.base_rate_minor,
-          extraAdultMinor: product.extra_adult_minor,
-          extraChildMinor: product.extra_child_minor,
+          rateMinor: canonicalProduct.base_rate_minor,
+          extraAdultMinor: canonicalProduct.extra_adult_minor,
+          extraChildMinor: canonicalProduct.extra_child_minor,
           minimumStay: 1,
           maximumStay: null,
           closedToArrival: false,
@@ -1065,8 +1081,8 @@ export class RateService {
       return {
         stayDate,
         rateMinor: row.rate_minor,
-        extraAdultMinor: row.extra_adult_minor ?? product.extra_adult_minor,
-        extraChildMinor: row.extra_child_minor ?? product.extra_child_minor,
+        extraAdultMinor: row.extra_adult_minor ?? canonicalProduct.extra_adult_minor,
+        extraChildMinor: row.extra_child_minor ?? canonicalProduct.extra_child_minor,
         minimumStay: row.minimum_stay,
         maximumStay: row.maximum_stay,
         closedToArrival: row.closed_to_arrival,
@@ -1079,7 +1095,7 @@ export class RateService {
 
     return {
       ratePlan: ratePlanView(plan),
-      rateProduct: rateProductView(product),
+      rateProduct: rateProductView(canonicalProduct),
       currencyCode: plan.currency_code,
       startDate,
       endDate,

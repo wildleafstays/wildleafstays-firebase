@@ -24,6 +24,14 @@ const publicAvailability = readFileSync(
   "utf8"
 );
 
+const publicAvailabilityRepository = readFileSync(
+  new URL(
+    "../src/modules/public-booking/infrastructure/public-availability-repository.ts",
+    import.meta.url
+  ),
+  "utf8"
+);
+
 describe("universal full-property booking wiring", () => {
   it("routes quote creation through the derived booking calendar", () => {
     expect(quoteService).toContain("getQuoteCalendar(");
@@ -46,5 +54,19 @@ describe("universal full-property booking wiring", () => {
   it("calculates full-property extras from category-rate snapshots rather than the shell product extra values", () => {
     expect(quoteCalculator).toContain("day.fullPropertyCategoryRates");
     expect(quoteCalculator).toContain("calculateFullPropertyExtraGuestCharge(");
+  });
+
+  it("uses room-category occupancy and extra defaults for every room meal plan", () => {
+    expect(publicAvailabilityRepository).toContain(
+      "coalesce(category.max_adults, product.max_adults)"
+    );
+    expect(publicAvailabilityRepository).toContain(
+      "coalesce(category.max_occupancy, product.max_occupancy)"
+    );
+    expect(publicAvailabilityRepository).toContain(
+      "coalesce(category.default_extra_adult_minor, product.extra_adult_minor)"
+    );
+    expect(rateService).toContain("const canonicalProduct: RateProductRecord = category");
+    expect(rateService).toContain("rateProduct: rateProductView(canonicalProduct)");
   });
 });

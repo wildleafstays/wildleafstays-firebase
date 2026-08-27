@@ -57,18 +57,7 @@
             <div id="amenities" class="amenity-list"></div>
           </section>
 
-          <section
-            id="availabilitySection"
-            class="panel-section booking-section"
-          >
-            <div class="section-heading compact-heading">
-              <div>
-                <p id="availabilityModeLabel" class="eyebrow">Hotel rooms</p>
-                <h2 id="availabilityHeading">Choose your room</h2>
-              </div>
-              <span class="secure-note">Live inventory · updates automatically</span>
-            </div>
-
+          <section id="availabilitySection" class="booking-section">
             <form id="availabilityForm" class="availability-form">
               <div class="date-grid">
                 <label
@@ -90,17 +79,16 @@
                 /></label>
               </div>
               <div id="occupancyUnits" class="occupancy-units"></div>
-              <label class="promo-field"
-                ><span>Promotion code <small>(optional)</small></span
-                ><input
-                  name="promotionCode"
-                  maxlength="40"
-                  placeholder="Enter code"
-              /></label>
-              <p class="automatic-search-note">
-                Available rooms and bookable rates appear automatically for
-                your selected stay.
-              </p>
+              <details class="promo-disclosure">
+                <summary>Add promotion code</summary>
+                <label class="promo-field"
+                  ><span>Promotion code <small>(optional)</small></span
+                  ><input
+                    name="promotionCode"
+                    maxlength="40"
+                    placeholder="Enter code"
+                /></label>
+              </details>
             </form>
 
             <div

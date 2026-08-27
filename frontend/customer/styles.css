@@ -1638,3 +1638,198 @@ select:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* Compact OTA-style property booking page */
+.property-hero {
+  min-height: 190px;
+}
+
+.property-hero-content {
+  max-width: 1180px;
+  padding-top: 30px;
+  padding-bottom: 38px;
+}
+
+.property-hero h1 {
+  margin: 0.35rem 0 0.3rem;
+  font-size: clamp(2rem, 4vw, 3.45rem);
+  line-height: 1.02;
+}
+
+.property-hero-content > p:last-child {
+  margin: 0;
+  font-size: 0.94rem;
+}
+
+.booking-mode-badge {
+  margin-bottom: 0.4rem;
+}
+
+.property-layout {
+  margin-top: -18px;
+}
+
+.property-overview {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.8fr) minmax(0, 1.35fr);
+  gap: 0.55rem 1.2rem;
+  padding: 1rem 1.15rem;
+}
+
+.property-overview .section-heading {
+  grid-column: 1;
+  margin: 0;
+}
+
+.property-overview .section-heading .eyebrow {
+  display: none;
+}
+
+.property-overview .compact-heading h2 {
+  font-size: 1.35rem;
+}
+
+.property-overview .long-copy {
+  grid-column: 2;
+  align-self: center;
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.property-overview .fact-grid {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0.35rem 0 0;
+}
+
+.property-overview .fact-card {
+  padding: 0.6rem 0.75rem;
+}
+
+.property-overview .stay-configuration:empty {
+  display: none;
+}
+
+.property-overview .stay-configuration,
+.property-overview .amenity-list {
+  grid-column: 1 / -1;
+  margin: 0.25rem 0 0;
+}
+
+.booking-section {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.availability-form {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(250px, 1.15fr);
+  gap: 0.65rem;
+  padding: 0.7rem;
+  border: 1px solid #d9ddd7;
+  border-radius: 14px;
+  background: var(--white);
+  box-shadow: 0 8px 24px rgba(19, 55, 44, 0.08);
+}
+
+.availability-form .date-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.availability-form input {
+  min-height: 42px;
+  padding: 0.55rem 0.65rem;
+}
+
+.availability-form label > span,
+.availability-form legend {
+  font-size: 0.65rem;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.availability-form .occupancy-units {
+  grid-template-columns: 1fr;
+}
+
+.availability-form .occupancy-card {
+  min-width: 0;
+  padding: 0 0 0 0.65rem;
+  border: 0;
+  border-left: 1px solid #e3e7e1;
+  border-radius: 0;
+  background: transparent;
+}
+
+.availability-form .occupancy-card legend {
+  padding: 0;
+}
+
+.promo-disclosure {
+  grid-column: 1 / -1;
+  width: max-content;
+  color: var(--forest-800);
+  font-size: 0.75rem;
+}
+
+.promo-disclosure summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.promo-disclosure .promo-field {
+  width: min(310px, calc(100vw - 4rem));
+  margin-top: 0.6rem;
+}
+
+.availability-results {
+  margin-top: 0.8rem;
+}
+
+.booking-assurance {
+  margin-top: 18px;
+}
+
+@media (max-width: 920px) {
+  .availability-form {
+    grid-template-columns: 1fr;
+  }
+
+  .availability-form .occupancy-card {
+    padding: 0.55rem 0 0;
+    border-top: 1px solid #e3e7e1;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .property-hero {
+    min-height: 170px;
+  }
+
+  .property-hero-content {
+    padding: 24px 1rem 30px;
+  }
+
+  .property-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .property-overview .section-heading,
+  .property-overview .long-copy {
+    grid-column: 1;
+  }
+
+  .property-overview .fact-grid,
+  .availability-form .date-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .property-overview .fact-grid .fact-card:first-child,
+  .availability-form .date-grid #unitCountField {
+    grid-column: 1 / -1;
+  }
+}
