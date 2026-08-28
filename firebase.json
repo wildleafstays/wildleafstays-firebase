@@ -6,9 +6,34 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "redirects": [
+      {
+        "source": "/",
+        "destination": "/customer/?mode=hotel",
+        "type": 302
+      }
+    ],
     "headers": [
       {
-        "source": "**/*.@(html|js|css)",
+        "source": "**/*.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "**/*.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "**/*.css",
         "headers": [
           {
             "key": "Cache-Control",
