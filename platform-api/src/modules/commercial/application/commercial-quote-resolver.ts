@@ -24,6 +24,7 @@ import {
   type FeeAssignmentRecord,
   type TaxAssignmentRecord
 } from "../infrastructure/commercial-quote-repository.js";
+import { PlatformHotelGstService } from "./platform-hotel-gst-service.js";
 
 interface ResolveInput {
   organizationId: string;
@@ -206,7 +207,10 @@ function resolveFeePolicy(
 }
 
 export class CommercialQuoteResolver {
-  constructor(private readonly repository = new CommercialQuoteRepository()) {}
+  constructor(
+    private readonly repository = new CommercialQuoteRepository(),
+    private readonly hotelGst = new PlatformHotelGstService()
+  ) {}
 
   async resolve(
     trx: Transaction<Database>,
@@ -214,11 +218,28 @@ export class CommercialQuoteResolver {
   ): Promise<ResolvedCommercialQuoteContext | null> {
     if (input.stayDates.length === 0) return null;
 
+    // GST schedules are global and append-only. Materialize any newly effective
+    // platform version lazily for consenting properties before resolving a quote.
+    const hotelGstAccepted = await this.hotelGst.syncAcceptedRules(
+      trx,
+      input.organizationId,
+      input.propertyId
+    );
+
     const data = await this.repository.loadResolutionData(
       trx,
       input.organizationId,
       input.propertyId
     );
+
+    if (
+      !hotelGstAccepted &&
+      data.taxPolicies.some((policy) => policy.code === "GST" && policy.status === "ACTIVE")
+    ) {
+      throw new ConflictError(
+        "The property owner must accept the platform-controlled Indian hotel GST schedule"
+      );
+    }
 
     const arrivalDate = input.stayDates[0]!;
     const arrivalSettings = latestEffective(data.settingsVersions, arrivalDate);

@@ -114,13 +114,15 @@ test("property editor uses one-at-a-time sections without replacing existing for
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.editor-progress-card/);
 });
 
-test("hotel owners control GST, guest ages, cancellation and mandatory fees", () => {
+test("Wildleaf controls GST while hotel owners consent and manage other booking rules", () => {
   const form = html.match(
     /<form\b[^>]*id="commercialRulesForm"[^>]*>[\s\S]*?<\/form>/,
   );
 
   assert.ok(form, "commercial rules form must exist");
-  assert.match(form[0], /name="gstRatePercent"/);
+  assert.match(form[0], /name="gstRulesAccepted"/);
+  assert.doesNotMatch(form[0], /name="gstRatePercent"/);
+  assert.match(form[0], /Property owners cannot change GST percentages/);
   assert.match(form[0], /name="infantMaxAge"/);
   assert.match(form[0], /name="childMaxAge"/);
   assert.match(form[0], /name="freeCancellationDays"/);
@@ -131,6 +133,8 @@ test("hotel owners control GST, guest ages, cancellation and mandatory fees", ()
 
   assert.match(js, /priceMode: "EXCLUSIVE"/);
   assert.match(js, /taxMode: "POLICIES"/);
+  assert.match(js, /commercial\/hotel-gst-consent/);
+  assert.match(js, /platform\/commercial\/hotel-gst-rules/);
   assert.match(js, /guest-age-policy/);
   assert.match(js, /cancellation-policies/);
   assert.match(js, /cancellation-assignments/);

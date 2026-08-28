@@ -592,6 +592,42 @@ button:disabled {
 .commercial-rule-group > .muted {
   margin: 0;
 }
+.gst-rule-summary {
+  display: grid;
+  gap: 0.75rem;
+}
+.gst-slab-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.gst-slab-grid article {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: #fff;
+}
+.gst-slab-grid strong,
+.gst-slab-grid small {
+  display: block;
+}
+.gst-rate {
+  color: var(--forest);
+  font-family: Georgia, serif;
+  font-size: 1.45rem;
+  font-weight: 700;
+}
+.gst-consent-control {
+  align-items: flex-start;
+  padding: 0.85rem;
+  border-radius: 0.55rem;
+  background: #edf5ee;
+}
+.platform-gst-editor {
+  margin-bottom: 1rem;
+}
 #commercialFeeFields {
   padding-top: 0.25rem;
 }
@@ -600,7 +636,10 @@ button:disabled {
 }
 [data-editor-accordion="profile"] #profileForm > .span-two:first-child h3,
 [data-editor-accordion="policies"] #policiesForm > .span-two:first-child h3,
-[data-editor-accordion="commercial"] #commercialRulesForm > .span-two:first-child h3,
+[data-editor-accordion="commercial"]
+  #commercialRulesForm
+  > .span-two:first-child
+  h3,
 [data-editor-accordion="amenities"] #amenitiesForm > div:first-child h3 {
   display: none;
 }
@@ -1171,6 +1210,9 @@ button:disabled {
   }
   .commercial-form-intro {
     display: grid;
+  }
+  .gst-slab-grid {
+    grid-template-columns: 1fr;
   }
   .commercial-rule-group {
     grid-template-columns: 1fr;

@@ -424,6 +424,79 @@
             /></label>
           </div>
           <div id="controlCenterMetrics" class="metric-grid"></div>
+          <section id="platformGstRulesCard" class="card hidden">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Statutory pricing</p>
+                <h3>Indian hotel GST schedule</h3>
+                <p class="muted">
+                  Effective-dated platform rules. Property owners can review and
+                  accept these rules, but cannot edit them.
+                </p>
+              </div>
+              <span class="status-pill">Super admin only</span>
+            </div>
+            <div id="platformGstRuleHistory" class="compact-list"></div>
+            <details class="editor-subpanel platform-gst-editor">
+              <summary>Add a future GST rule</summary>
+              <div class="editor-subpanel-content">
+                <form id="platformGstRuleForm" class="form-grid three-column">
+                  <label
+                    >Effective from<input
+                      name="effectiveFrom"
+                      type="date"
+                      required
+                  /></label>
+                  <label
+                    >Threshold (₹ per room/day)<input
+                      name="thresholdRupees"
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value="7500"
+                      required
+                  /></label>
+                  <label
+                    >Official source URL<input
+                      name="sourceUrl"
+                      type="url"
+                      value="https://gstcouncil.gov.in/sites/default/files/2025-09/press_release_press_information_bureau.pdf"
+                      required
+                  /></label>
+                  <label
+                    >Rate up to threshold (%)<input
+                      name="lowerRatePercent"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value="5"
+                      required
+                  /></label>
+                  <label class="check-control"
+                    ><input name="lowerItcAvailable" type="checkbox" /> ITC
+                    available for lower slab</label
+                  >
+                  <span></span>
+                  <label
+                    >Rate above threshold (%)<input
+                      name="upperRatePercent"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value="18"
+                      required
+                  /></label>
+                  <label class="check-control"
+                    ><input name="upperItcAvailable" type="checkbox" checked />
+                    ITC available for upper slab</label
+                  >
+                  <button type="submit">Publish future rule</button>
+                </form>
+              </div>
+            </details>
+          </section>
           <form
             id="controlCenterFilters"
             class="card filter-grid compact-filters"
@@ -1171,21 +1244,20 @@
               </div>
 
               <fieldset class="commercial-rule-group span-two">
-                <legend>GST</legend>
-                <p class="muted span-two">
-                  GST is added to the room price. Enter the percentage that
-                  applies to this property.
+                <legend>Indian hotel GST</legend>
+                <div id="hotelGstRuleSummary" class="gst-rule-summary span-two">
+                  Loading the current statutory schedule…
+                </div>
+                <label class="check-control gst-consent-control span-two">
+                  <input name="gstRulesAccepted" type="checkbox" required />
+                  <span id="hotelGstConsentText"
+                    >I accept the platform-controlled GST rules.</span
+                  >
+                </label>
+                <p class="field-help span-two">
+                  Wildleaf management maintains this effective-dated schedule.
+                  Property owners cannot change GST percentages or thresholds.
                 </p>
-                <label
-                  >GST rate (%)<input
-                    name="gstRatePercent"
-                    type="number"
-                    min="0.01"
-                    max="100"
-                    step="0.01"
-                    placeholder="For example, 18"
-                    required
-                /></label>
               </fieldset>
 
               <fieldset class="commercial-rule-group span-two">
@@ -1276,7 +1348,10 @@
                   <input name="feeEnabled" type="checkbox" />
                   Add another mandatory fee
                 </label>
-                <div id="commercialFeeFields" class="form-grid two-column span-two hidden">
+                <div
+                  id="commercialFeeFields"
+                  class="form-grid two-column span-two hidden"
+                >
                   <label
                     >Fee name<input
                       name="feeName"
@@ -1305,15 +1380,20 @@
                       step="0.01"
                       value="0"
                   /></label>
-                  <label class="check-control">
-                    <input name="feeTaxable" type="checkbox" /> GST also
-                    applies to this fee
-                  </label>
+                  <p class="field-help">
+                    GST for room accommodation is calculated automatically from
+                    the room value. This fee is stored separately and is not
+                    included in the room-value slab calculation.
+                  </p>
                 </div>
               </fieldset>
 
               <p id="commercialEffectiveNote" class="field-help span-two"></p>
-              <button id="saveCommercialRulesButton" class="span-two" type="submit">
+              <button
+                id="saveCommercialRulesButton"
+                class="span-two"
+                type="submit"
+              >
                 Save booking rules
               </button>
             </form>

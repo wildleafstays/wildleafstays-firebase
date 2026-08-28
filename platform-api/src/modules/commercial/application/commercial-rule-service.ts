@@ -37,6 +37,10 @@ import {
 const MAX_MONEY_MINOR = 100_000_000;
 const MAX_BASIS_POINTS = 10_000;
 
+function isPlatformControlledGstPolicy(code: string): boolean {
+  return code === "GST" || code.startsWith("INDIA_GST_");
+}
+
 function parseDate(value: string, field = "effectiveFrom"): void {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new ValidationError(`${field} must use YYYY-MM-DD format`);
@@ -360,6 +364,9 @@ export class CommercialRuleService {
       Permissions.COMMERCIAL_MANAGE
     );
     const normalized = normalizePolicy(input);
+    if (kind === "tax" && isPlatformControlledGstPolicy(normalized.code)) {
+      this.authorization.assert(actor, Permissions.PLATFORM_MANAGE, { kind: "platform" });
+    }
     const existing =
       kind === "tax"
         ? await this.rules.findTaxPolicyByCode(trx, input.propertyId, normalized.code)
@@ -449,6 +456,9 @@ export class CommercialRuleService {
       input.taxPolicyId
     );
     if (!policy) throw new NotFoundError("Tax policy not found");
+    if (isPlatformControlledGstPolicy(policy.code)) {
+      this.authorization.assert(actor, Permissions.PLATFORM_MANAGE, { kind: "platform" });
+    }
     if (policy.status !== "ACTIVE")
       throw new ConflictError("Inactive tax policies cannot receive new versions");
     validateExpectedVersion(input.expectedCurrentVersion, policy.current_version, "Tax policy");
@@ -624,6 +634,9 @@ export class CommercialRuleService {
       input.taxPolicyId
     );
     if (!policy) throw new NotFoundError("Tax policy not found");
+    if (isPlatformControlledGstPolicy(policy.code)) {
+      this.authorization.assert(actor, Permissions.PLATFORM_MANAGE, { kind: "platform" });
+    }
     if (policy.status !== "ACTIVE" || policy.current_version < 1) {
       throw new ConflictError("Tax policy must be active and versioned before assignment");
     }

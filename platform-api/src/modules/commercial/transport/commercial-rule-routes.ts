@@ -9,6 +9,7 @@ import { IdempotencyService } from "../../../shared/idempotency/idempotency-serv
 import type { AccessRepository } from "../../access/infrastructure/access-repository.js";
 import type { UserRepository } from "../../identity/infrastructure/user-repository.js";
 import { CommercialRuleService } from "../application/commercial-rule-service.js";
+import { PlatformHotelGstService } from "../application/platform-hotel-gst-service.js";
 import type {
   CancellationPenaltyType,
   CancellationTriggerType,
@@ -115,6 +116,21 @@ interface GuestAgeBody extends JsonObject {
   expectedVersion: number;
 }
 
+interface HotelGstConsentBody extends JsonObject {
+  ruleVersionId: string;
+  accepted: boolean;
+}
+
+interface PlatformHotelGstRuleBody extends JsonObject {
+  effectiveFrom: string;
+  thresholdMinor: number;
+  lowerRateBasisPoints: number;
+  upperRateBasisPoints: number;
+  lowerItcAvailable: boolean;
+  upperItcAvailable: boolean;
+  sourceUrl: string;
+}
+
 const propertyParamsSchema = {
   type: "object",
   additionalProperties: false,
@@ -186,7 +202,160 @@ export async function registerCommercialRuleRoutes(
   const authenticate = requireAuthentication(deps);
   const idempotency = new IdempotencyService(deps.db);
   const service = new CommercialRuleService();
+  const hotelGst = new PlatformHotelGstService();
   const base = "/v1/partner/organizations/:organizationId/properties/:propertyId/commercial";
+
+  app.get<{ Params: PropertyParams }>(
+    `${base}/hotel-gst-consent`,
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Commercial Rules"],
+        summary: "Get the platform-controlled Indian hotel GST rule and property consent",
+        security: [{ bearerAuth: [] }],
+        params: propertyParamsSchema
+      }
+    },
+    async (request) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      return deps.db
+        .transaction()
+        .execute((trx) =>
+          hotelGst.getOwnerConsent(
+            trx,
+            actor,
+            request.params.organizationId,
+            request.params.propertyId
+          )
+        );
+    }
+  );
+
+  app.put<{ Params: PropertyParams; Body: HotelGstConsentBody }>(
+    `${base}/hotel-gst-consent`,
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Commercial Rules"],
+        summary: "Accept the platform-controlled Indian hotel GST rule",
+        security: [{ bearerAuth: [] }],
+        params: propertyParamsSchema,
+        headers: idempotencyHeaders,
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["ruleVersionId", "accepted"],
+          properties: {
+            ruleVersionId: { type: "string", format: "uuid" },
+            accepted: { type: "boolean", const: true }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      const key = requireIdempotencyKey(request.headers);
+      const result = await idempotency.execute(
+        {
+          scopeKey: `commercial.hotel-gst.consent:${request.params.propertyId}:user:${actor.userId}`,
+          key,
+          requestBody: request.body
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await hotelGst.acceptOwnerConsent(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              ...request.body
+            },
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.get(
+    "/v1/platform/commercial/hotel-gst-rules",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Commercial Rules"],
+        summary: "List platform Indian hotel GST rule versions",
+        security: [{ bearerAuth: [] }]
+      }
+    },
+    async (request) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      return deps.db.transaction().execute((trx) => hotelGst.listRules(trx, actor));
+    }
+  );
+
+  app.post<{ Body: PlatformHotelGstRuleBody }>(
+    "/v1/platform/commercial/hotel-gst-rules",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Commercial Rules"],
+        summary: "Append a platform Indian hotel GST rule version",
+        security: [{ bearerAuth: [] }],
+        headers: idempotencyHeaders,
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "effectiveFrom",
+            "thresholdMinor",
+            "lowerRateBasisPoints",
+            "upperRateBasisPoints",
+            "lowerItcAvailable",
+            "upperItcAvailable",
+            "sourceUrl"
+          ],
+          properties: {
+            effectiveFrom: { type: "string", format: "date" },
+            thresholdMinor: { type: "integer", minimum: 1 },
+            lowerRateBasisPoints: { type: "integer", minimum: 0, maximum: 10000 },
+            upperRateBasisPoints: { type: "integer", minimum: 0, maximum: 10000 },
+            lowerItcAvailable: { type: "boolean" },
+            upperItcAvailable: { type: "boolean" },
+            sourceUrl: { type: "string", format: "uri", maxLength: 2000 }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      const key = requireIdempotencyKey(request.headers);
+      const result = await idempotency.execute(
+        {
+          scopeKey: `platform.hotel-gst.rule:user:${actor.userId}`,
+          key,
+          requestBody: request.body
+        },
+        async (trx) => ({
+          statusCode: 201,
+          body: await hotelGst.createRule(
+            trx,
+            actor,
+            request.body,
+            requestMetadata(request, "platform-api")
+          )
+        })
+      );
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
 
   app.get<{ Params: PropertyParams }>(
     base,

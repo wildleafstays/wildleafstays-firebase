@@ -106,6 +106,11 @@ import type {
   RatePlanCancellationAssignmentsTable
 } from "../../modules/commercial/infrastructure/commercial-rules-database-types.js";
 import type {
+  PlatformHotelGstRuleVersionsTable,
+  PropertyHotelGstConsentsTable,
+  PropertyHotelGstRuleSyncsTable
+} from "../../modules/commercial/infrastructure/platform-hotel-gst-database-types.js";
+import type {
   PromotionAssignmentsTable,
   PromotionCampaignsTable,
   PromotionCampaignVersionsTable,
@@ -562,6 +567,9 @@ export interface Database {
   guest_age_policies: GuestAgePoliciesTable;
   guest_age_policy_versions: GuestAgePolicyVersionsTable;
   commercial_rule_events: CommercialRuleEventsTable;
+  platform_hotel_gst_rule_versions: PlatformHotelGstRuleVersionsTable;
+  property_hotel_gst_consents: PropertyHotelGstConsentsTable;
+  property_hotel_gst_rule_syncs: PropertyHotelGstRuleSyncsTable;
   property_promotion_settings: PropertyPromotionSettingsTable;
   property_promotion_setting_versions: PropertyPromotionSettingVersionsTable;
   promotion_campaigns: PromotionCampaignsTable;

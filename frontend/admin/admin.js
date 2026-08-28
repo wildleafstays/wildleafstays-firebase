@@ -37,6 +37,8 @@ const state = {
   onboarding: null,
   layout: null,
   commercial: null,
+  hotelGst: null,
+  platformGstRules: [],
   editorRatePlans: [],
   reservations: [],
   reservationCursor: null,
@@ -444,12 +446,13 @@ function commercialConfigurationReady(configuration = state.commercial) {
       configuration.feeAssignments?.some((assignment) => assignment.enabled));
 
   return Boolean(
+    state.hotelGst?.accepted &&
     hasTax &&
-      hasFees &&
-      configuration.guestAgeVersions?.length > 0 &&
-      configuration.cancellationVersions?.length > 0 &&
-      activePlans.length > 0 &&
-      activePlans.every((plan) => assignedPlanIds.has(plan.id)),
+    hasFees &&
+    configuration.guestAgeVersions?.length > 0 &&
+    configuration.cancellationVersions?.length > 0 &&
+    activePlans.length > 0 &&
+    activePlans.every((plan) => assignedPlanIds.has(plan.id)),
   );
 }
 
@@ -510,7 +513,9 @@ function updateEditorWorkspaceProgress(onboarding) {
   );
   setEditorSectionStatus(
     "review",
-    checklist.readyToSubmit ? "Ready to submit" : `${onboardingCompleted} of 6 complete`,
+    checklist.readyToSubmit
+      ? "Ready to submit"
+      : `${onboardingCompleted} of 6 complete`,
     checklist.readyToSubmit,
   );
 
@@ -863,21 +868,26 @@ byId("backToProperties").addEventListener("click", () =>
 
 async function openProperty(organizationId, propertyId) {
   const base = `/v1/partner/organizations/${organizationId}/properties/${propertyId}`;
-  const [profile, onboarding, layout, commercial, ratePlans] = await Promise.all([
-    api(`/v1/partner/organizations/${organizationId}/properties/${propertyId}`),
-    api(
-      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
-    ),
-    api(
-      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
-    ),
-    api(`${base}/commercial`),
-    api(`${base}/rates/plans`),
-  ]);
+  const [profile, onboarding, layout, commercial, ratePlans, hotelGst] =
+    await Promise.all([
+      api(
+        `/v1/partner/organizations/${organizationId}/properties/${propertyId}`,
+      ),
+      api(
+        `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
+      ),
+      api(
+        `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
+      ),
+      api(`${base}/commercial`),
+      api(`${base}/rates/plans`),
+      api(`${base}/commercial/hotel-gst-consent`),
+    ]);
   state.property = profile.property;
   state.onboarding = onboarding;
   state.layout = layout;
   state.commercial = commercial;
+  state.hotelGst = hotelGst;
   state.editorRatePlans = ratePlans.ratePlans || [];
   renderEditor();
   await showScreen("editor");
@@ -970,8 +980,6 @@ function commercialEffectiveDate(configuration = state.commercial) {
   const today = localDate();
   const datedRows = [
     ...(configuration?.settingsVersions || []),
-    ...(configuration?.taxVersions || []),
-    ...(configuration?.taxAssignments || []),
     ...(configuration?.feeVersions || []),
     ...(configuration?.feeAssignments || []),
     ...(configuration?.cancellationVersions || []),
@@ -997,9 +1005,76 @@ function syncCommercialFeeFields() {
   byId("commercialFeeValueLabel").textContent = percentage
     ? "Fee value (%)"
     : "Fee value (₹)";
-  for (const name of ["feeName", "feeBasis", "feeValue", "feeTaxable"]) {
+  for (const name of ["feeName", "feeBasis", "feeValue"]) {
     form.elements[name].disabled = !enabled || readOnly;
   }
+}
+
+function renderHotelGstRule() {
+  const summary = byId("hotelGstRuleSummary");
+  const consentLabel = byId("hotelGstConsentText");
+  const checkbox = byId("commercialRulesForm").elements.gstRulesAccepted;
+  summary.replaceChildren();
+
+  const gst = state.hotelGst;
+  const rule = gst?.currentRule;
+  if (!rule) {
+    summary.append(
+      textElement(
+        "p",
+        "notice error",
+        "The current GST schedule could not be loaded.",
+      ),
+    );
+    checkbox.checked = false;
+    return;
+  }
+
+  const threshold = money(rule.thresholdMinor, "INR");
+  const lowerRate = Number(rule.lower.rateBasisPoints) / 100;
+  const upperRate = Number(rule.upper.rateBasisPoints) / 100;
+  const rows = document.createElement("div");
+  rows.className = "gst-slab-grid";
+  for (const [title, rate, cgst, sgst, itc] of [
+    [
+      `Room value up to ${threshold} per room/day`,
+      lowerRate,
+      Number(rule.lower.cgstBasisPoints) / 100,
+      Number(rule.lower.sgstBasisPoints) / 100,
+      rule.lower.itcAvailable,
+    ],
+    [
+      `Room value above ${threshold} per room/day`,
+      upperRate,
+      Number(rule.upper.cgstBasisPoints) / 100,
+      Number(rule.upper.sgstBasisPoints) / 100,
+      rule.upper.itcAvailable,
+    ],
+  ]) {
+    const card = document.createElement("article");
+    card.append(
+      textElement("strong", "", title),
+      textElement("span", "gst-rate", `${rate}% GST`),
+      textElement("small", "", `CGST ${cgst}% + SGST ${sgst}%`),
+      textElement(
+        "small",
+        "",
+        itc ? "ITC available" : "No input tax credit (ITC)",
+      ),
+    );
+    rows.append(card);
+  }
+  const source = document.createElement("a");
+  source.href = rule.sourceUrl;
+  source.target = "_blank";
+  source.rel = "noreferrer";
+  source.textContent = `Official source · rule v${rule.version} · effective ${rule.effectiveFrom}`;
+  summary.append(rows, source);
+
+  consentLabel.textContent = gst.accepted
+    ? `Accepted on ${new Date(gst.consent.acceptedAt).toLocaleString("en-IN")}. Wildleaf will apply the current schedule and future statutory updates.`
+    : gst.acceptanceText;
+  checkbox.checked = Boolean(gst.accepted);
 }
 
 function renderCommercialRules() {
@@ -1008,24 +1083,7 @@ function renderCommercialRules() {
   const configuration = state.commercial || {};
   const settings = configuration.settingsVersions?.at(-1);
 
-  const taxPolicy =
-    configuration.taxPolicies?.find((policy) => policy.code === "GST") ||
-    configuration.taxPolicies?.[0];
-  const taxVersion = latestCommercialRow(
-    configuration.taxVersions,
-    "tax_policy_id",
-    taxPolicy?.id,
-  );
-  const taxComponents = (configuration.taxComponents || []).filter(
-    (component) => component.tax_policy_version_id === taxVersion?.id,
-  );
-  if (taxComponents.length) {
-    const totalBasisPoints = taxComponents.reduce(
-      (sum, component) => sum + Number(component.rate_basis_points || 0),
-      0,
-    );
-    form.elements.gstRatePercent.value = String(totalBasisPoints / 100);
-  }
+  renderHotelGstRule();
 
   const guestAge = latestCommercialRow(
     configuration.guestAgeVersions,
@@ -1057,8 +1115,7 @@ function renderCommercialRules() {
     form.elements.cancellationPolicyText.value =
       cancellationVersion.policy_text || "";
     const tiers = (configuration.cancellationTiers || []).filter(
-      (tier) =>
-        tier.cancellation_policy_version_id === cancellationVersion.id,
+      (tier) => tier.cancellation_policy_version_id === cancellationVersion.id,
     );
     const freeTier = tiers
       .filter(
@@ -1077,9 +1134,7 @@ function renderCommercialRules() {
         tier.trigger_type === "CANCELLATION" &&
         Number(tier.minimum_minutes_before_arrival) === 0,
     );
-    const noShowTier = tiers.find(
-      (tier) => tier.trigger_type === "NO_SHOW",
-    );
+    const noShowTier = tiers.find((tier) => tier.trigger_type === "NO_SHOW");
     form.elements.freeCancellationDays.value = String(
       Math.round(Number(freeTier?.minimum_minutes_before_arrival || 0) / 1440),
     );
@@ -1112,7 +1167,6 @@ function renderCommercialRules() {
         ? Number(feeVersion.rate_basis_points || 0) / 100
         : Number(feeVersion.amount_minor || 0) / 100,
     );
-    form.elements.feeTaxable.checked = feeVersion.taxable;
   }
 
   const ready = commercialConfigurationReady(configuration);
@@ -1125,6 +1179,8 @@ function renderCommercialRules() {
 
   const manageable = state.property.status !== "ARCHIVED";
   for (const control of form.elements) control.disabled = !manageable;
+  form.elements.gstRulesAccepted.disabled =
+    !manageable || state.hotelGst?.accepted;
   syncCommercialFeeFields();
 }
 
@@ -1641,12 +1697,14 @@ byId("policiesForm").addEventListener("submit", (event) => {
 
 async function refreshCommercialConfiguration() {
   const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}`;
-  const [commercial, plans] = await Promise.all([
+  const [commercial, plans, hotelGst] = await Promise.all([
     api(`${base}/commercial`),
     api(`${base}/rates/plans`),
+    api(`${base}/commercial/hotel-gst-consent`),
   ]);
   state.commercial = commercial;
   state.editorRatePlans = plans.ratePlans || [];
+  state.hotelGst = hotelGst;
   renderCommercialRules();
   updateEditorWorkspaceProgress(state.onboarding);
 }
@@ -1688,7 +1746,6 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     await refreshCommercialConfiguration();
 
     const form = event.currentTarget;
-    const gstRatePercent = Number(form.elements.gstRatePercent.value);
     const infantMaxAge = Number(form.elements.infantMaxAge.value);
     const childMaxAge = Number(form.elements.childMaxAge.value);
     const freeCancellationDays = Number(
@@ -1700,8 +1757,10 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     const noShowPercent = Number(form.elements.noShowPercent.value);
     const feeEnabled = form.elements.feeEnabled.checked;
 
-    if (!(gstRatePercent > 0 && gstRatePercent <= 100)) {
-      throw new Error("Enter the GST percentage applicable to this property.");
+    if (!form.elements.gstRulesAccepted.checked) {
+      throw new Error(
+        "Review and accept the Indian hotel GST rules to continue.",
+      );
     }
     if (
       !Number.isInteger(infantMaxAge) ||
@@ -1739,49 +1798,17 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     const effectiveFrom = commercialEffectiveDate();
     const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/commercial`;
 
-    const taxPolicy = await ensureCommercialPolicy({
-      collection: "taxPolicies",
-      suffix: "tax-policies",
-      code: "GST",
-      name: "GST",
-      description: "GST charged separately from the room and extra-guest rates.",
-    });
-    await idempotent(
-      `${base}/tax-policies/${taxPolicy.id}/versions`,
-      "POST",
-      "commercial-gst-version",
-      {
-        effectiveFrom,
-        priceMode: "EXCLUSIVE",
-        selectionBasis: "ALWAYS",
-        minimumBasisMinor: null,
-        maximumBasisMinor: null,
-        appliesToAccommodation: true,
-        appliesToExtraGuest: true,
-        appliesToFee: true,
-        expectedCurrentVersion: Number(taxPolicy.current_version || 0),
-        components: [
-          {
-            code: "GST",
-            name: "GST",
-            rateBasisPoints: Math.round(gstRatePercent * 100),
-            sortOrder: 0,
-          },
-        ],
-      },
-    );
-    await idempotent(
-      `${base}/tax-policies/${taxPolicy.id}/assignments`,
-      "POST",
-      "commercial-gst-assignment",
-      {
-        effectiveFrom,
-        scopeType: "PROPERTY",
-        ratePlanId: null,
-        rateProductId: null,
-        enabled: true,
-      },
-    );
+    if (!state.hotelGst?.accepted) {
+      state.hotelGst = await idempotent(
+        `${base}/hotel-gst-consent`,
+        "PUT",
+        "commercial-hotel-gst-consent",
+        {
+          ruleVersionId: state.hotelGst.currentRule.id,
+          accepted: true,
+        },
+      );
+    }
 
     await idempotent(
       `${base}/guest-age-policy`,
@@ -1795,8 +1822,7 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
           form.elements.infantsCountTowardsOccupancy.checked,
         infantsCountTowardsChildLimit:
           form.elements.infantsChargeAsChildren.checked,
-        infantsChargeAsChildren:
-          form.elements.infantsChargeAsChildren.checked,
+        infantsChargeAsChildren: form.elements.infantsChargeAsChildren.checked,
         expectedVersion: Number(
           state.commercial?.guestAgeHeader?.current_version || 0,
         ),
@@ -1849,9 +1875,7 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
         policyText:
           form.elements.cancellationPolicyText.value.trim() ||
           generatedCancellationText,
-        expectedCurrentVersion: Number(
-          cancellationPolicy.current_version || 0,
-        ),
+        expectedCurrentVersion: Number(cancellationPolicy.current_version || 0),
         tiers: cancellationTiers,
       },
     );
@@ -1894,10 +1918,8 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
           amountMinor: percentage ? null : rupeesToMinor(feeValue),
           rateBasisPoints: percentage ? Math.round(feeValue * 100) : null,
           priceMode: "EXCLUSIVE",
-          taxable: form.elements.feeTaxable.checked,
-          taxPolicyId: form.elements.feeTaxable.checked
-            ? taxPolicy.id
-            : null,
+          taxable: false,
+          taxPolicyId: null,
           expectedCurrentVersion: Number(feePolicy.current_version || 0),
         },
       );
@@ -1915,19 +1937,14 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       );
     }
 
-    await idempotent(
-      `${base}/settings`,
-      "PUT",
-      "commercial-settings",
-      {
-        effectiveFrom,
-        taxMode: "POLICIES",
-        feeMode: feeEnabled ? "POLICIES" : "NO_FEES",
-        expectedVersion: Number(
-          state.commercial?.settingsHeader?.current_version || 0,
-        ),
-      },
-    );
+    await idempotent(`${base}/settings`, "PUT", "commercial-settings", {
+      effectiveFrom,
+      taxMode: "POLICIES",
+      feeMode: feeEnabled ? "POLICIES" : "NO_FEES",
+      expectedVersion: Number(
+        state.commercial?.settingsHeader?.current_version || 0,
+      ),
+    });
 
     await refreshCommercialConfiguration();
     showMessage(
@@ -2602,6 +2619,70 @@ byId("openReservationsButton").addEventListener("click", () =>
   run(() => showScreen("reservations")),
 );
 
+function canManagePlatformGst() {
+  return (state.session?.platformRoles || []).includes("SUPER_ADMIN");
+}
+
+function renderPlatformGstRules() {
+  const card = byId("platformGstRulesCard");
+  card.classList.toggle("hidden", !canManagePlatformGst());
+  if (!canManagePlatformGst()) return;
+
+  const list = byId("platformGstRuleHistory");
+  list.replaceChildren();
+  for (const rule of state.platformGstRules) {
+    const row = document.createElement("article");
+    row.className = "compact-row";
+    const copy = document.createElement("div");
+    const threshold = money(rule.thresholdMinor, "INR");
+    copy.append(
+      textElement(
+        "strong",
+        "",
+        `Version ${rule.version} · effective ${rule.effectiveFrom}`,
+      ),
+      textElement(
+        "span",
+        "",
+        `${Number(rule.lower.rateBasisPoints) / 100}% through ${threshold}; ${Number(rule.upper.rateBasisPoints) / 100}% above ${threshold}`,
+      ),
+      textElement(
+        "small",
+        "muted",
+        `Lower slab: ${rule.lower.itcAvailable ? "ITC available" : "no ITC"} · Upper slab: ${rule.upper.itcAvailable ? "ITC available" : "no ITC"}`,
+      ),
+    );
+    const source = document.createElement("a");
+    source.href = rule.sourceUrl;
+    source.target = "_blank";
+    source.rel = "noreferrer";
+    source.textContent = "Official source";
+    row.append(copy, source);
+    list.append(row);
+  }
+
+  const latest = state.platformGstRules[0];
+  const form = byId("platformGstRuleForm");
+  if (!form.elements.effectiveFrom.value) {
+    form.elements.effectiveFrom.min = shiftDate(
+      latest?.effectiveFrom || localDate(),
+      1,
+    );
+    form.elements.effectiveFrom.value = form.elements.effectiveFrom.min;
+  }
+}
+
+async function loadPlatformGstRules() {
+  if (!canManagePlatformGst()) {
+    state.platformGstRules = [];
+    renderPlatformGstRules();
+    return;
+  }
+  const result = await api("/v1/platform/commercial/hotel-gst-rules");
+  state.platformGstRules = result.rules || [];
+  renderPlatformGstRules();
+}
+
 async function loadControlCenter(append) {
   const dateInput = byId("controlCenterDate");
   if (!dateInput.value) dateInput.value = localDate();
@@ -2629,6 +2710,7 @@ async function loadControlCenter(append) {
       }),
     ),
   ]);
+  if (!append) await loadPlatformGstRules();
   state.platformReservations = append
     ? [...state.platformReservations, ...page.reservations]
     : page.reservations;
@@ -2687,6 +2769,34 @@ byId("controlCenterFilters").addEventListener("submit", (event) => {
 byId("loadMoreControlCenterReservations").addEventListener("click", () =>
   run(() => loadControlCenter(true)),
 );
+
+byId("platformGstRuleForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  run(async () => {
+    if (!canManagePlatformGst()) {
+      throw new Error("Only a Wildleaf super admin can publish GST rules.");
+    }
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
+    await idempotent(
+      "/v1/platform/commercial/hotel-gst-rules",
+      "POST",
+      "platform-hotel-gst-rule-create",
+      {
+        effectiveFrom: values.effectiveFrom,
+        thresholdMinor: rupeesToMinor(values.thresholdRupees),
+        lowerRateBasisPoints: Math.round(Number(values.lowerRatePercent) * 100),
+        upperRateBasisPoints: Math.round(Number(values.upperRatePercent) * 100),
+        lowerItcAvailable: form.elements.lowerItcAvailable.checked,
+        upperItcAvailable: form.elements.upperItcAvailable.checked,
+        sourceUrl: values.sourceUrl.trim(),
+      },
+    );
+    form.elements.effectiveFrom.value = "";
+    await loadPlatformGstRules();
+    showMessage("The future hotel GST rule was published.");
+  });
+});
 
 async function loadReservations(append) {
   const form = byId("reservationFilters");
