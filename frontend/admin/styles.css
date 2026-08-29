@@ -625,6 +625,26 @@ button:disabled {
   border-radius: 0.55rem;
   background: #edf5ee;
 }
+.guest-age-explanation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border-radius: 0.55rem;
+  background: #edf5ee;
+}
+.guest-age-explanation p {
+  margin: 0;
+  line-height: 1.45;
+}
+.commercial-missing-items {
+  margin: 0;
+  color: #9a3e2c;
+  font-weight: 700;
+}
+.commercial-missing-items.ready {
+  color: #17623e;
+}
 .platform-gst-editor {
   margin-bottom: 1rem;
 }
@@ -1219,6 +1239,9 @@ button:disabled {
   }
   .commercial-rule-group .span-two {
     grid-column: auto;
+  }
+  .guest-age-explanation {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -1286,14 +1286,18 @@
               <fieldset class="commercial-rule-group span-two">
                 <legend>Guest age limits</legend>
                 <label
-                  >Infant maximum age<input
+                  >Infant stays free up to age<input
                     name="infantMaxAge"
                     type="number"
                     min="0"
                     max="16"
-                    value="2"
+                    value="5"
                     required
-                /></label>
+                  /><small
+                    >Enter the oldest age that will be treated as an
+                    infant.</small
+                  ></label
+                >
                 <label
                   >Child maximum age<input
                     name="childMaxAge"
@@ -1302,19 +1306,14 @@
                     max="17"
                     value="12"
                     required
-                /></label>
-                <label class="check-control">
-                  <input
-                    name="infantsCountTowardsOccupancy"
-                    type="checkbox"
-                    checked
-                  />
-                  Infants count towards total occupancy
-                </label>
-                <label class="check-control">
-                  <input name="infantsChargeAsChildren" type="checkbox" />
-                  Charge infants at the child rate
-                </label>
+                  /><small
+                    >Guests above this age are counted as adults.</small
+                  ></label
+                >
+                <div
+                  id="guestAgeExplanation"
+                  class="guest-age-explanation span-two"
+                ></div>
               </fieldset>
 
               <fieldset class="commercial-rule-group span-two">
@@ -1412,6 +1411,10 @@
               </fieldset>
 
               <p id="commercialEffectiveNote" class="field-help span-two"></p>
+              <p
+                id="commercialMissingItems"
+                class="commercial-missing-items span-two"
+              ></p>
               <button
                 id="saveCommercialRulesButton"
                 class="span-two"

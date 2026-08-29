@@ -156,13 +156,52 @@ test("GST consent is read before any commercial configuration refresh", () => {
   const acceptanceRead = handler.indexOf(
     "form.elements.gstRulesAccepted.checked",
   );
-  const firstRefresh = handler.indexOf("await refreshCommercialConfiguration()");
+  const firstRefresh = handler.indexOf(
+    "await refreshCommercialConfiguration()",
+  );
 
-  assert.ok(acceptanceRead >= 0, "GST acceptance must be read from the submitted form");
+  assert.ok(
+    acceptanceRead >= 0,
+    "GST acceptance must be read from the submitted form",
+  );
   assert.ok(
     firstRefresh === -1 || firstRefresh > acceptanceRead,
     "the form must not be refreshed before reading GST acceptance",
   );
+});
+
+test("guest age rules explain free infants and paid occupancy-counted children", () => {
+  const form = html.match(
+    /<form\b[^>]*id="commercialRulesForm"[^>]*>[\s\S]*?<\/form>/,
+  );
+
+  assert.ok(form, "commercial rules form must exist");
+  assert.match(form[0], /Infant stays free up to age/);
+  assert.match(form[0], /id="guestAgeExplanation"/);
+  assert.doesNotMatch(form[0], /name="infantsCountTowardsOccupancy"/);
+  assert.doesNotMatch(form[0], /name="infantsChargeAsChildren"/);
+  assert.match(js, /Infant: age 0 to \$\{infantMaxAge\}/);
+  assert.match(js, /Stays free and does not count towards room occupancy/);
+  assert.match(
+    js,
+    /Charged at the child rate and counts towards room occupancy/,
+  );
+  assert.match(js, /infantsCountTowardsOccupancy: false/);
+  assert.match(js, /infantsCountTowardsChildLimit: false/);
+  assert.match(js, /infantsChargeAsChildren: false/);
+});
+
+test("booking rule readiness identifies missing records and sends a valid no-show tier", () => {
+  assert.match(html, /id="commercialMissingItems"/);
+  assert.match(js, /function commercialConfigurationMissing/);
+  assert.match(js, /cancellation and no-show rules/);
+  assert.match(js, /cancellation rules for/);
+
+  const noShow = js.match(
+    /triggerType: "NO_SHOW",[\s\S]*?penaltyValue: noShowPercent \* 100,/,
+  );
+  assert.ok(noShow, "no-show request must exist");
+  assert.doesNotMatch(noShow[0], /minimumMinutesBeforeArrival/);
 });
 
 test("approved and live owners can accept responsibility and regain editing", () => {
@@ -170,7 +209,10 @@ test("approved and live owners can accept responsibility and regain editing", ()
   assert.match(html, /id="ownerResponsibilityForm"/);
   assert.match(html, /name="accepted"/);
   assert.match(js, /\/owner-responsibility/);
-  assert.match(js, /termsVersionId: state\.ownerResponsibility\.currentTerms\.id/);
+  assert.match(
+    js,
+    /termsVersionId: state\.ownerResponsibility\.currentTerms\.id/,
+  );
   assert.match(js, /\["APPROVED", "LIVE"\]/);
   assert.match(js, /state\.ownerResponsibility\?\.editable/);
   assert.match(js, /Property editing is enabled/);

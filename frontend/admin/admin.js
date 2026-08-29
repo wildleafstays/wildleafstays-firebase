@@ -426,8 +426,8 @@ function setEditorSectionStatus(sectionKey, label, complete = false) {
   status.classList.toggle("complete", complete);
 }
 
-function commercialConfigurationReady(configuration = state.commercial) {
-  if (!configuration) return false;
+function commercialConfigurationMissing(configuration = state.commercial) {
+  if (!configuration) return ["booking configuration"];
   const settings = configuration.settingsVersions?.at(-1);
   const activePlans = state.editorRatePlans.filter(
     (plan) => plan.status === "ACTIVE",
@@ -446,15 +446,27 @@ function commercialConfigurationReady(configuration = state.commercial) {
     (configuration.feeVersions?.length > 0 &&
       configuration.feeAssignments?.some((assignment) => assignment.enabled));
 
-  return Boolean(
-    state.hotelGst?.accepted &&
-    hasTax &&
-    hasFees &&
-    configuration.guestAgeVersions?.length > 0 &&
-    configuration.cancellationVersions?.length > 0 &&
-    activePlans.length > 0 &&
-    activePlans.every((plan) => assignedPlanIds.has(plan.id)),
+  const missing = [];
+  if (!state.hotelGst?.accepted) missing.push("GST acceptance");
+  if (!hasTax) missing.push("active GST schedule");
+  if (!hasFees) missing.push("mandatory-fee choice");
+  if (!configuration.guestAgeVersions?.length) missing.push("guest age rules");
+  if (!configuration.cancellationVersions?.length)
+    missing.push("cancellation and no-show rules");
+  if (!activePlans.length) missing.push("an active room rate plan");
+  const unassignedPlans = activePlans.filter(
+    (plan) => !assignedPlanIds.has(plan.id),
   );
+  if (unassignedPlans.length) {
+    missing.push(
+      `cancellation rules for ${unassignedPlans.map((plan) => plan.name).join(", ")}`,
+    );
+  }
+  return missing;
+}
+
+function commercialConfigurationReady(configuration = state.commercial) {
+  return commercialConfigurationMissing(configuration).length === 0;
 }
 
 function updateEditorWorkspaceProgress(onboarding) {
@@ -1011,23 +1023,38 @@ function latestCommercialRow(rows, policyKey, policyId) {
     .at(-1);
 }
 
-function commercialEffectiveDate(configuration = state.commercial) {
+function nextCommercialEffectiveDate(rows = []) {
   const today = localDate();
-  const datedRows = [
-    ...(configuration?.settingsVersions || []),
-    ...(configuration?.feeVersions || []),
-    ...(configuration?.feeAssignments || []),
-    ...(configuration?.cancellationVersions || []),
-    ...(configuration?.cancellationAssignments || []),
-    ...(configuration?.guestAgeVersions || []),
-  ];
-  const latest = datedRows
+  const latest = rows
     .map((row) => row.effective_from)
     .filter(Boolean)
     .sort()
     .at(-1);
 
   return latest ? [today, shiftDate(latest, 1)].sort().at(-1) : today;
+}
+
+function renderGuestAgeExplanation() {
+  const form = byId("commercialRulesForm");
+  const container = byId("guestAgeExplanation");
+  const infantMaxAge = Number(form.elements.infantMaxAge.value);
+  const childMaxAge = Number(form.elements.childMaxAge.value);
+  if (!Number.isInteger(infantMaxAge) || !Number.isInteger(childMaxAge)) {
+    container.replaceChildren();
+    return;
+  }
+  container.replaceChildren(
+    textElement(
+      "p",
+      "",
+      `Infant: age 0 to ${infantMaxAge}. Stays free and does not count towards room occupancy.`,
+    ),
+    textElement(
+      "p",
+      "",
+      `Child: age ${infantMaxAge + 1} to ${childMaxAge}. Charged at the child rate and counts towards room occupancy.`,
+    ),
+  );
 }
 
 function syncCommercialFeeFields() {
@@ -1128,11 +1155,8 @@ function renderCommercialRules() {
   if (guestAge) {
     form.elements.infantMaxAge.value = guestAge.infant_max_age ?? "";
     form.elements.childMaxAge.value = guestAge.child_max_age;
-    form.elements.infantsCountTowardsOccupancy.checked =
-      guestAge.infants_count_towards_occupancy;
-    form.elements.infantsChargeAsChildren.checked =
-      guestAge.infants_charge_as_children;
   }
+  renderGuestAgeExplanation();
 
   const cancellationPolicy =
     configuration.cancellationPolicies?.find(
@@ -1209,8 +1233,14 @@ function renderCommercialRules() {
   readiness.textContent = ready ? "Online booking ready" : "Setup required";
   readiness.classList.toggle("ready", ready);
   byId("commercialEffectiveNote").textContent = ready
-    ? `Changes saved now will apply to stays from ${commercialEffectiveDate(configuration)}.`
+    ? "All required booking rules are configured."
     : "Complete this once to enable exact guest pricing and online booking.";
+  const missingItems = commercialConfigurationMissing(configuration);
+  const missing = byId("commercialMissingItems");
+  missing.textContent = missingItems.length
+    ? `Still needed: ${missingItems.join("; ")}.`
+    : "Setup complete. Guests can receive exact prices and book online.";
+  missing.classList.toggle("ready", missingItems.length === 0);
 
   const manageable = state.property.status !== "ARCHIVED";
   for (const control of form.elements) control.disabled = !manageable;
@@ -1801,6 +1831,12 @@ byId("commercialRulesForm").elements.feeBasis.addEventListener(
   "change",
   syncCommercialFeeFields,
 );
+for (const name of ["infantMaxAge", "childMaxAge"]) {
+  byId("commercialRulesForm").elements[name].addEventListener(
+    "input",
+    renderGuestAgeExplanation,
+  );
+}
 
 byId("commercialRulesForm").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1855,7 +1891,6 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       );
     }
 
-    const effectiveFrom = commercialEffectiveDate();
     const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/commercial`;
 
     if (!state.hotelGst?.accepted) {
@@ -1870,24 +1905,38 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       );
     }
 
-    await idempotent(
-      `${base}/guest-age-policy`,
-      "PUT",
-      "commercial-guest-age",
-      {
-        effectiveFrom,
-        infantMaxAge,
-        childMaxAge,
-        infantsCountTowardsOccupancy:
-          form.elements.infantsCountTowardsOccupancy.checked,
-        infantsCountTowardsChildLimit:
-          form.elements.infantsChargeAsChildren.checked,
-        infantsChargeAsChildren: form.elements.infantsChargeAsChildren.checked,
-        expectedVersion: Number(
-          state.commercial?.guestAgeHeader?.current_version || 0,
-        ),
-      },
+    const currentGuestAge = latestCommercialRow(
+      state.commercial?.guestAgeVersions,
+      "property_id",
+      state.property.id,
     );
+    const guestAgeChanged =
+      !currentGuestAge ||
+      Number(currentGuestAge.infant_max_age) !== infantMaxAge ||
+      Number(currentGuestAge.child_max_age) !== childMaxAge ||
+      currentGuestAge.infants_count_towards_occupancy ||
+      currentGuestAge.infants_count_towards_child_limit ||
+      currentGuestAge.infants_charge_as_children;
+    if (guestAgeChanged) {
+      await idempotent(
+        `${base}/guest-age-policy`,
+        "PUT",
+        "commercial-guest-age",
+        {
+          effectiveFrom: nextCommercialEffectiveDate(
+            state.commercial?.guestAgeVersions || [],
+          ),
+          infantMaxAge,
+          childMaxAge,
+          infantsCountTowardsOccupancy: false,
+          infantsCountTowardsChildLimit: false,
+          infantsChargeAsChildren: false,
+          expectedVersion: Number(
+            state.commercial?.guestAgeHeader?.current_version || 0,
+          ),
+        },
+      );
+    }
 
     const cancellationPolicyName =
       form.elements.cancellationPolicyName.value.trim() ||
@@ -1920,17 +1969,21 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       },
       {
         triggerType: "NO_SHOW",
-        minimumMinutesBeforeArrival: null,
         penaltyType: "PERCENTAGE_OF_STAY",
         penaltyValue: noShowPercent * 100,
       },
+    );
+    const cancellationEffectiveFrom = nextCommercialEffectiveDate(
+      (state.commercial?.cancellationVersions || []).filter(
+        (version) => version.cancellation_policy_id === cancellationPolicy.id,
+      ),
     );
     await idempotent(
       `${base}/cancellation-policies/${cancellationPolicy.id}/versions`,
       "POST",
       "commercial-cancellation-version",
       {
-        effectiveFrom,
+        effectiveFrom: cancellationEffectiveFrom,
         arrivalLocalTime: state.property.checkInTime || "14:00",
         policyText:
           form.elements.cancellationPolicyText.value.trim() ||
@@ -1940,6 +1993,17 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       },
     );
     for (const plan of activeRatePlans) {
+      const alreadyAssigned = (state.commercial?.cancellationAssignments || [])
+        .filter((assignment) => assignment.rate_plan_id === plan.id)
+        .sort((left, right) =>
+          String(left.effective_from).localeCompare(
+            String(right.effective_from),
+          ),
+        )
+        .at(-1);
+      if (alreadyAssigned?.cancellation_policy_id === cancellationPolicy.id) {
+        continue;
+      }
       await idempotent(
         `${base}/cancellation-assignments`,
         "POST",
@@ -1947,7 +2011,7 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
         {
           ratePlanId: plan.id,
           cancellationPolicyId: cancellationPolicy.id,
-          effectiveFrom,
+          effectiveFrom: cancellationEffectiveFrom,
         },
       );
     }
@@ -1972,7 +2036,11 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
         "POST",
         "commercial-fee-version",
         {
-          effectiveFrom,
+          effectiveFrom: nextCommercialEffectiveDate(
+            (state.commercial?.feeVersions || []).filter(
+              (version) => version.fee_policy_id === feePolicy.id,
+            ),
+          ),
           calculationType: percentage ? "PERCENTAGE" : "FIXED",
           applicationBasis: percentage ? "STAY_CHARGES" : feeBasis,
           amountMinor: percentage ? null : rupeesToMinor(feeValue),
@@ -1988,7 +2056,9 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
         "POST",
         "commercial-fee-assignment",
         {
-          effectiveFrom,
+          effectiveFrom: nextCommercialEffectiveDate(
+            state.commercial?.feeAssignments || [],
+          ),
           scopeType: "PROPERTY",
           ratePlanId: null,
           rateProductId: null,
@@ -1997,18 +2067,28 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       );
     }
 
-    await idempotent(`${base}/settings`, "PUT", "commercial-settings", {
-      effectiveFrom,
-      taxMode: "POLICIES",
-      feeMode: feeEnabled ? "POLICIES" : "NO_FEES",
-      expectedVersion: Number(
-        state.commercial?.settingsHeader?.current_version || 0,
-      ),
-    });
+    const desiredFeeMode = feeEnabled ? "POLICIES" : "NO_FEES";
+    const currentSettings = state.commercial?.settingsVersions?.at(-1);
+    if (
+      !currentSettings ||
+      currentSettings.tax_mode !== "POLICIES" ||
+      currentSettings.fee_mode !== desiredFeeMode
+    ) {
+      await idempotent(`${base}/settings`, "PUT", "commercial-settings", {
+        effectiveFrom: nextCommercialEffectiveDate(
+          state.commercial?.settingsVersions || [],
+        ),
+        taxMode: "POLICIES",
+        feeMode: desiredFeeMode,
+        expectedVersion: Number(
+          state.commercial?.settingsHeader?.current_version || 0,
+        ),
+      });
+    }
 
     await refreshCommercialConfiguration();
     showMessage(
-      `Booking rules saved. They apply to stays from ${effectiveFrom}.`,
+      "Booking rules saved. Online-booking readiness has been refreshed.",
     );
   });
 });
