@@ -222,6 +222,22 @@ test("additional fees are optional and fee payloads omit inapplicable null field
   assert.match(js, /desiredFeeMode = feeEnabled \? "POLICIES" : "NO_FEES"/);
 });
 
+test("GST synchronization completes before commercial readiness is loaded", () => {
+  const refresh = js.match(
+    /async function refreshCommercialConfiguration\(\) \{[\s\S]*?\n\}/,
+  );
+
+  assert.ok(refresh, "commercial refresh function must exist");
+  const gstRead = refresh[0].indexOf("commercial/hotel-gst-consent");
+  const commercialRead = refresh[0].indexOf("api(`${base}/commercial`)");
+  assert.ok(gstRead >= 0, "GST consent must be refreshed");
+  assert.ok(commercialRead >= 0, "commercial configuration must be refreshed");
+  assert.ok(
+    gstRead < commercialRead,
+    "GST synchronization must finish before commercial readiness is read",
+  );
+});
+
 test("approved and live owners can accept responsibility and regain editing", () => {
   assert.match(html, /id="ownerResponsibilityCard"/);
   assert.match(html, /id="ownerResponsibilityForm"/);

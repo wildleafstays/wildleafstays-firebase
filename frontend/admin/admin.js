@@ -908,13 +908,16 @@ byId("ownerResponsibilityForm").addEventListener("submit", (event) => {
 
 async function openProperty(organizationId, propertyId) {
   const base = `/v1/partner/organizations/${organizationId}/properties/${propertyId}`;
+  // Reading GST consent also materializes Wildleaf's active statutory tax
+  // policies for an accepted property. Complete that transaction before the
+  // commercial snapshot is loaded so readiness never observes a stale gap.
+  const hotelGst = await api(`${base}/commercial/hotel-gst-consent`);
   const [
     profile,
     onboarding,
     layout,
     commercial,
     ratePlans,
-    hotelGst,
     ownerResponsibility,
   ] = await Promise.all([
     api(`/v1/partner/organizations/${organizationId}/properties/${propertyId}`),
@@ -926,7 +929,6 @@ async function openProperty(organizationId, propertyId) {
     ),
     api(`${base}/commercial`),
     api(`${base}/rates/plans`),
-    api(`${base}/commercial/hotel-gst-consent`),
     api(`${base}/owner-responsibility`),
   ]);
   state.property = profile.property;
@@ -1789,10 +1791,12 @@ byId("policiesForm").addEventListener("submit", (event) => {
 
 async function refreshCommercialConfiguration() {
   const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}`;
-  const [commercial, plans, hotelGst] = await Promise.all([
+  // This endpoint synchronizes accepted platform GST rules into the
+  // property's commercial configuration, so it must finish first.
+  const hotelGst = await api(`${base}/commercial/hotel-gst-consent`);
+  const [commercial, plans] = await Promise.all([
     api(`${base}/commercial`),
     api(`${base}/rates/plans`),
-    api(`${base}/commercial/hotel-gst-consent`),
   ]);
   state.commercial = commercial;
   state.editorRatePlans = plans.ratePlans || [];
