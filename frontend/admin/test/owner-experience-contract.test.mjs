@@ -238,6 +238,14 @@ test("GST synchronization completes before commercial readiness is loaded", () =
   );
 });
 
+test("saving booking rules makes a property without promotions bookable", () => {
+  assert.match(js, /const promotionConfiguration = await api\(/);
+  assert.match(js, /`\$\{base\}\/promotions`/);
+  assert.match(js, /`\$\{base\}\/promotions\/settings`/);
+  assert.match(js, /promotionMode: "NO_PROMOTIONS"/);
+  assert.match(js, /commercial-promotion-settings/);
+});
+
 test("approved and live owners can accept responsibility and regain editing", () => {
   assert.match(html, /id="ownerResponsibilityCard"/);
   assert.match(html, /id="ownerResponsibilityForm"/);

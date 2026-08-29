@@ -2105,6 +2105,30 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       });
     }
 
+    // Exact public quotes must explicitly evaluate promotions. A property
+    // without a promotion campaign is a valid, bookable configuration, so
+    // initialize it as NO_PROMOTIONS instead of leaving quote creation in an
+    // incomplete state.
+    const promotionConfiguration = await api(
+      `${base}/promotions`,
+    );
+    if (!promotionConfiguration.settingsVersions?.length) {
+      await idempotent(
+        `${base}/promotions/settings`,
+        "PUT",
+        "commercial-promotion-settings",
+        {
+          effectiveFrom: nextCommercialEffectiveDate(
+            promotionConfiguration.settingsVersions || [],
+          ),
+          promotionMode: "NO_PROMOTIONS",
+          expectedVersion: Number(
+            promotionConfiguration.settingsHeader?.current_version || 0,
+          ),
+        },
+      );
+    }
+
     await refreshCommercialConfiguration();
     showMessage(
       "Booking rules saved. Online-booking readiness has been refreshed.",
