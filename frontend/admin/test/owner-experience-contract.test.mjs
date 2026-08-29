@@ -204,6 +204,24 @@ test("booking rule readiness identifies missing records and sends a valid no-sho
   assert.doesNotMatch(noShow[0], /minimumMinutesBeforeArrival/);
 });
 
+test("additional fees are optional and fee payloads omit inapplicable null fields", () => {
+  const form = html.match(
+    /<form\b[^>]*id="commercialRulesForm"[^>]*>[\s\S]*?<\/form>/,
+  );
+
+  assert.ok(form, "commercial rules form must exist");
+  assert.match(form[0], /Optional additional fee/);
+  assert.match(form[0], /Leave this unticked when the property has no/);
+  assert.match(js, /additional-fee setting \(none is allowed\)/);
+  assert.match(js, /const feeVersionBody =/);
+  assert.match(js, /feeVersionBody\.rateBasisPoints =/);
+  assert.match(js, /feeVersionBody\.amountMinor =/);
+  assert.doesNotMatch(js, /amountMinor: percentage \? null/);
+  assert.doesNotMatch(js, /rateBasisPoints: percentage \?/);
+  assert.match(js, /feeMode: desiredFeeMode/);
+  assert.match(js, /desiredFeeMode = feeEnabled \? "POLICIES" : "NO_FEES"/);
+});
+
 test("approved and live owners can accept responsibility and regain editing", () => {
   assert.match(html, /id="ownerResponsibilityCard"/);
   assert.match(html, /id="ownerResponsibilityForm"/);

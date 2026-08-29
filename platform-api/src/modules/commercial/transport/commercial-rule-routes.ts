@@ -820,7 +820,7 @@ export async function registerCommercialRuleRoutes(
                 properties: {
                   triggerType: { type: "string", enum: ["CANCELLATION", "NO_SHOW"] },
                   minimumMinutesBeforeArrival: {
-                    anyOf: [{ type: "null" }, { type: "integer", minimum: 0 }]
+                    anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }]
                   },
                   penaltyType: {
                     type: "string",

@@ -449,7 +449,7 @@ function commercialConfigurationMissing(configuration = state.commercial) {
   const missing = [];
   if (!state.hotelGst?.accepted) missing.push("GST acceptance");
   if (!hasTax) missing.push("active GST schedule");
-  if (!hasFees) missing.push("mandatory-fee choice");
+  if (!hasFees) missing.push("additional-fee setting (none is allowed)");
   if (!configuration.guestAgeVersions?.length) missing.push("guest age rules");
   if (!configuration.cancellationVersions?.length)
     missing.push("cancellation and no-show rules");
@@ -1840,7 +1840,11 @@ for (const name of ["infantMaxAge", "childMaxAge"]) {
 
 byId("commercialRulesForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  run(async () => {
+  const saveButton = byId("saveCommercialRulesButton");
+  if (saveButton.dataset.saving === "true") return;
+  saveButton.dataset.saving = "true";
+  saveButton.disabled = true;
+  void run(async () => {
     const form = event.currentTarget;
     const infantMaxAge = Number(form.elements.infantMaxAge.value);
     const childMaxAge = Number(form.elements.childMaxAge.value);
@@ -1852,8 +1856,16 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     );
     const noShowPercent = Number(form.elements.noShowPercent.value);
     const feeEnabled = form.elements.feeEnabled.checked;
+    const gstRulesAccepted = form.elements.gstRulesAccepted.checked;
+    const cancellationPolicyNameInput =
+      form.elements.cancellationPolicyName.value.trim();
+    const cancellationPolicyTextInput =
+      form.elements.cancellationPolicyText.value.trim();
+    const feeNameInput = form.elements.feeName.value.trim();
+    const feeBasisInput = form.elements.feeBasis.value;
+    const feeValueInput = Number(form.elements.feeValue.value);
 
-    if (!form.elements.gstRulesAccepted.checked) {
+    if (!gstRulesAccepted) {
       throw new Error(
         "Review and accept the Indian hotel GST rules to continue.",
       );
@@ -1881,6 +1893,8 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     ) {
       throw new Error("Enter valid cancellation and no-show rules.");
     }
+
+    await refreshCommercialConfiguration();
 
     const activeRatePlans = state.editorRatePlans.filter(
       (plan) => plan.status === "ACTIVE",
@@ -1939,8 +1953,7 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     }
 
     const cancellationPolicyName =
-      form.elements.cancellationPolicyName.value.trim() ||
-      "Standard cancellation";
+      cancellationPolicyNameInput || "Standard cancellation";
     const cancellationPolicy = await ensureCommercialPolicy({
       collection: "cancellationPolicies",
       suffix: "cancellation-policies",
@@ -1985,9 +1998,7 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       {
         effectiveFrom: cancellationEffectiveFrom,
         arrivalLocalTime: state.property.checkInTime || "14:00",
-        policyText:
-          form.elements.cancellationPolicyText.value.trim() ||
-          generatedCancellationText,
+        policyText: cancellationPolicyTextInput || generatedCancellationText,
         expectedCurrentVersion: Number(cancellationPolicy.current_version || 0),
         tiers: cancellationTiers,
       },
@@ -2017,39 +2028,43 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     }
 
     if (feeEnabled) {
-      const feeValue = Number(form.elements.feeValue.value);
+      const feeValue = feeValueInput;
       if (!(feeValue > 0)) {
         throw new Error("Enter a fee greater than zero, or turn the fee off.");
       }
-      const feeName = form.elements.feeName.value.trim() || "Service fee";
-      const feeBasis = form.elements.feeBasis.value;
+      const feeName = feeNameInput || "Service fee";
+      const feeBasis = feeBasisInput;
       const percentage = feeBasis === "PERCENTAGE";
       const feePolicy = await ensureCommercialPolicy({
         collection: "feePolicies",
         suffix: "fee-policies",
         code: "OWNER_FEE",
         name: feeName,
-        description: "Mandatory fee configured by the property owner.",
+        description:
+          "Optional additional charge configured by the property owner.",
       });
+      const feeVersionBody = {
+        effectiveFrom: nextCommercialEffectiveDate(
+          (state.commercial?.feeVersions || []).filter(
+            (version) => version.fee_policy_id === feePolicy.id,
+          ),
+        ),
+        calculationType: percentage ? "PERCENTAGE" : "FIXED",
+        applicationBasis: percentage ? "STAY_CHARGES" : feeBasis,
+        priceMode: "EXCLUSIVE",
+        taxable: false,
+        expectedCurrentVersion: Number(feePolicy.current_version || 0),
+      };
+      if (percentage) {
+        feeVersionBody.rateBasisPoints = Math.round(feeValue * 100);
+      } else {
+        feeVersionBody.amountMinor = rupeesToMinor(feeValue);
+      }
       await idempotent(
         `${base}/fee-policies/${feePolicy.id}/versions`,
         "POST",
         "commercial-fee-version",
-        {
-          effectiveFrom: nextCommercialEffectiveDate(
-            (state.commercial?.feeVersions || []).filter(
-              (version) => version.fee_policy_id === feePolicy.id,
-            ),
-          ),
-          calculationType: percentage ? "PERCENTAGE" : "FIXED",
-          applicationBasis: percentage ? "STAY_CHARGES" : feeBasis,
-          amountMinor: percentage ? null : rupeesToMinor(feeValue),
-          rateBasisPoints: percentage ? Math.round(feeValue * 100) : null,
-          priceMode: "EXCLUSIVE",
-          taxable: false,
-          taxPolicyId: null,
-          expectedCurrentVersion: Number(feePolicy.current_version || 0),
-        },
+        feeVersionBody,
       );
       await idempotent(
         `${base}/fee-policies/${feePolicy.id}/assignments`,
@@ -2090,6 +2105,9 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     showMessage(
       "Booking rules saved. Online-booking readiness has been refreshed.",
     );
+  }).finally(() => {
+    delete saveButton.dataset.saving;
+    saveButton.disabled = state.property?.status === "ARCHIVED";
   });
 });
 
