@@ -52,6 +52,8 @@ test("property page loads inventory automatically and offers direct booking", ()
   assert.match(propertySource, /await searchAvailability\(\{ resetBooking: false \}\)/);
   assert.match(propertySource, /function scheduleAvailabilitySearch\(\)/);
   assert.match(propertySource, /"Book now"/);
+  assert.match(propertySource, /GST and any additional fees shown before payment/);
+  assert.doesNotMatch(propertySource, /GST and mandatory fees shown before payment/);
   assert.match(propertySource, /async function startBooking\(option, button\)/);
   assert.match(propertySource, /await createHold\(null, \{ scrollToGuest: true \}\)/);
   assert.doesNotMatch(propertySource, /"Get exact price"/);
@@ -74,5 +76,5 @@ test("available rates use OTA-style room facts and calendar-backed totals", () =
   assert.match(propertySource, /category\?\.maxOccupancy/);
   assert.match(propertySource, /mealPlanLabel/);
   assert.match(propertySource, /option\.estimatedTotalMinor/);
-  assert.match(propertySource, /GST and mandatory fees shown before payment/);
+  assert.match(propertySource, /GST and any additional fees shown before payment/);
 });

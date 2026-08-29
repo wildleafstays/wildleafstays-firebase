@@ -490,7 +490,11 @@ function availabilityCard(option, nights) {
       "",
       `from ${money(option.nightlyFromMinor, option.currencyCode)} nightly`,
     ),
-    element("small", "tax-note", "GST and mandatory fees shown before payment"),
+    element(
+      "small",
+      "tax-note",
+      "GST and any additional fees shown before payment",
+    ),
   );
 
   const button = element("button", "button button-primary", "Book now");
