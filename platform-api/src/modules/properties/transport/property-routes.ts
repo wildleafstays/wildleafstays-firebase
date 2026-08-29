@@ -11,6 +11,7 @@ import { IdempotencyService } from "../../../shared/idempotency/idempotency-serv
 import { CreatePropertyDraftService } from "../application/create-property-draft-service.js";
 import { GetPropertyService } from "../application/get-property-service.js";
 import { ListPropertiesService } from "../application/list-properties-service.js";
+import { OwnerResponsibilityService } from "../application/owner-responsibility-service.js";
 import { SavePropertyProfileService } from "../application/save-property-profile-service.js";
 import type { PropertyType, SaleMode } from "../domain/property-profile.js";
 
@@ -55,6 +56,11 @@ interface SavePropertyProfileBody extends JsonObject {
   contactEmail?: string;
   checkInTime?: string;
   checkOutTime?: string;
+}
+
+interface OwnerResponsibilityBody extends JsonObject {
+  termsVersionId: string;
+  accepted: boolean;
 }
 
 const uuidParams = {
@@ -243,6 +249,7 @@ export async function registerPropertyRoutes(
   const createService = new CreatePropertyDraftService();
   const getService = new GetPropertyService();
   const listService = new ListPropertiesService();
+  const ownerResponsibility = new OwnerResponsibilityService();
   const saveService = new SavePropertyProfileService();
 
   app.post<{ Params: OrganizationParams; Body: CreatePropertyBody }>(
@@ -348,6 +355,79 @@ export async function registerPropertyRoutes(
         request.params.organizationId,
         request.params.propertyId
       );
+    }
+  );
+
+  app.get<{ Params: PropertyParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/owner-responsibility",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Properties"],
+        summary: "Get the current owner responsibility terms and acceptance",
+        security: [{ bearerAuth: [] }],
+        params: propertyParams
+      }
+    },
+    async (request) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      return ownerResponsibility.get(
+        deps.db,
+        actor,
+        request.params.organizationId,
+        request.params.propertyId
+      );
+    }
+  );
+
+  app.put<{ Params: PropertyParams; Body: OwnerResponsibilityBody }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/owner-responsibility",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Properties"],
+        summary: "Accept owner responsibility for an approved or live property listing",
+        security: [{ bearerAuth: [] }],
+        params: propertyParams,
+        headers: idempotencyHeaders,
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["termsVersionId", "accepted"],
+          properties: {
+            termsVersionId: { type: "string", format: "uuid" },
+            accepted: { type: "boolean", const: true }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      const key = requireIdempotencyKey(request.headers);
+      const result = await idempotency.execute(
+        {
+          scopeKey: `property.owner-responsibility:${request.params.propertyId}:user:${actor.userId}`,
+          key,
+          requestBody: request.body
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await ownerResponsibility.accept(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              ...request.body
+            },
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
     }
   );
 

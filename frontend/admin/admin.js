@@ -38,6 +38,7 @@ const state = {
   layout: null,
   commercial: null,
   hotelGst: null,
+  ownerResponsibility: null,
   platformGstRules: [],
   editorRatePlans: [],
   reservations: [],
@@ -866,28 +867,62 @@ byId("backToProperties").addEventListener("click", () =>
   run(() => showScreen("properties")),
 );
 
+byId("ownerResponsibilityForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  run(async () => {
+    const form = event.currentTarget;
+    if (!form.elements.accepted.checked) {
+      throw new Error(
+        "Read and accept the owner responsibility terms to enable editing.",
+      );
+    }
+    const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}`;
+    state.ownerResponsibility = await idempotent(
+      `${base}/owner-responsibility`,
+      "PUT",
+      "property-owner-responsibility",
+      {
+        termsVersionId: state.ownerResponsibility.currentTerms.id,
+        accepted: true,
+      },
+    );
+    renderEditor();
+    showMessage(
+      "Responsibility accepted. Property editing is enabled.",
+      "success",
+    );
+  });
+});
+
 async function openProperty(organizationId, propertyId) {
   const base = `/v1/partner/organizations/${organizationId}/properties/${propertyId}`;
-  const [profile, onboarding, layout, commercial, ratePlans, hotelGst] =
-    await Promise.all([
-      api(
-        `/v1/partner/organizations/${organizationId}/properties/${propertyId}`,
-      ),
-      api(
-        `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
-      ),
-      api(
-        `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
-      ),
-      api(`${base}/commercial`),
-      api(`${base}/rates/plans`),
-      api(`${base}/commercial/hotel-gst-consent`),
-    ]);
+  const [
+    profile,
+    onboarding,
+    layout,
+    commercial,
+    ratePlans,
+    hotelGst,
+    ownerResponsibility,
+  ] = await Promise.all([
+    api(`/v1/partner/organizations/${organizationId}/properties/${propertyId}`),
+    api(
+      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
+    ),
+    api(
+      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
+    ),
+    api(`${base}/commercial`),
+    api(`${base}/rates/plans`),
+    api(`${base}/commercial/hotel-gst-consent`),
+    api(`${base}/owner-responsibility`),
+  ]);
   state.property = profile.property;
   state.onboarding = onboarding;
   state.layout = layout;
   state.commercial = commercial;
   state.hotelGst = hotelGst;
+  state.ownerResponsibility = ownerResponsibility;
   state.editorRatePlans = ratePlans.ratePlans || [];
   renderEditor();
   await showScreen("editor");
@@ -1192,7 +1227,9 @@ function renderEditor() {
   fillForm(byId("profileForm"), property);
   fillForm(byId("policiesForm"), onboarding.policies || {});
 
-  const editable = editableProperty(property.status);
+  renderOwnerResponsibility();
+  const editable =
+    editableProperty(property.status) || state.ownerResponsibility?.editable;
   renderPropertyAmenities(onboarding.amenities || [], editable);
   renderRoomAmenityChoices(editable);
   renderCommercialRules();
@@ -1239,11 +1276,36 @@ function renderEditor() {
   const submit = byId("submitPropertyButton");
   submit.classList.toggle(
     "hidden",
-    !(editable && onboarding.checklist.readyToSubmit),
+    !(editableProperty(property.status) && onboarding.checklist.readyToSubmit),
   );
   updateEditorWorkspaceProgress(onboarding);
   renderAccommodation(editable);
   renderAssets(editable);
+}
+
+function renderOwnerResponsibility() {
+  const card = byId("ownerResponsibilityCard");
+  const form = byId("ownerResponsibilityForm");
+  const terms = state.ownerResponsibility?.currentTerms;
+  const relevant = ["APPROVED", "LIVE"].includes(state.property.status);
+  card.classList.toggle("hidden", !relevant || !terms);
+  if (!relevant || !terms) return;
+
+  byId("ownerResponsibilityText").textContent = terms.text;
+  const accepted = Boolean(state.ownerResponsibility.accepted);
+  form.classList.toggle("hidden", accepted);
+  form.elements.accepted.checked = false;
+  byId("ownerResponsibilityTitle").textContent = accepted
+    ? "Editing enabled"
+    : "Accept responsibility to manage this live listing";
+  byId("ownerResponsibilityStatus").textContent = accepted
+    ? `Accepted on ${new Date(
+        state.ownerResponsibility.acceptance.acceptedAt,
+      ).toLocaleString(
+        "en-IN",
+      )}. You can update the property, room categories and rooms.`
+    : "Editing is temporarily locked until the property owner accepts these terms.";
+  card.classList.toggle("accepted", accepted);
 }
 
 function renderRoomCategoryMedia(editable, categories) {
@@ -1743,8 +1805,6 @@ byId("commercialRulesForm").elements.feeBasis.addEventListener(
 byId("commercialRulesForm").addEventListener("submit", (event) => {
   event.preventDefault();
   run(async () => {
-    await refreshCommercialConfiguration();
-
     const form = event.currentTarget;
     const infantMaxAge = Number(form.elements.infantMaxAge.value);
     const childMaxAge = Number(form.elements.childMaxAge.value);

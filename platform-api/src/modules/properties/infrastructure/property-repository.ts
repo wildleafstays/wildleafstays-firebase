@@ -97,7 +97,7 @@ export class PropertyRepository {
       .where("organization_id", "=", input.organizationId)
       .where("id", "=", input.propertyId)
       .where("version", "=", input.expectedVersion)
-      .where("status", "in", ["DRAFT", "CHANGES_REQUIRED"])
+      .where("status", "in", ["DRAFT", "CHANGES_REQUIRED", "APPROVED", "LIVE"])
       .returningAll()
       .executeTakeFirst();
   }

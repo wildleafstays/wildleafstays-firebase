@@ -4,7 +4,7 @@ import type { ActorContext } from "../../access/domain/actor-context.js";
 import { AuthorizationService } from "../../access/domain/authorization-service.js";
 import { Permissions } from "../../access/domain/permissions.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
-import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
+import { NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import type {
@@ -27,6 +27,7 @@ import {
   type RoomCategoryView,
   type StructureView
 } from "./property-setup-presenter.js";
+import { assertOwnerPropertyEditable } from "../../properties/application/owner-responsibility-service.js";
 
 type DbExecutor = Kysely<Database> | Transaction<Database>;
 
@@ -85,12 +86,11 @@ export class PropertySetupService {
     if (!status) {
       throw new NotFoundError("Property not found");
     }
-    if (status !== "DRAFT" && status !== "CHANGES_REQUIRED") {
-      throw new ConflictError("Property setup cannot be edited in its current state", {
-        propertyId,
-        status
-      });
-    }
+    await assertOwnerPropertyEditable(db, {
+      id: propertyId,
+      organization_id: organizationId,
+      status
+    });
   }
 
   private assertManage(actor: ActorContext, organizationId: string, propertyId: string): void {

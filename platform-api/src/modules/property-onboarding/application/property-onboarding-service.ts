@@ -7,6 +7,7 @@ import { AuditService } from "../../../shared/audit/audit-service.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
+import { assertOwnerPropertyEditable } from "../../properties/application/owner-responsibility-service.js";
 import type {
   AddDocumentInput,
   AddMediaInput,
@@ -203,7 +204,7 @@ export class PropertyOnboardingService {
       propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(db, property);
   }
 
   async getPlatformDocumentStorageKey(
@@ -260,13 +261,8 @@ export class PropertyOnboardingService {
     return property;
   }
 
-  private assertOwnerEditable(property: PropertyRecord): void {
-    if (property.status !== "DRAFT" && property.status !== "CHANGES_REQUIRED") {
-      throw new ConflictError("Property onboarding content cannot be edited in its current state", {
-        propertyId: property.id,
-        status: property.status
-      });
-    }
+  private async assertOwnerEditable(db: DbExecutor, property: PropertyRecord): Promise<void> {
+    await assertOwnerPropertyEditable(db, property);
   }
 
   private async requirePlatformProperty(
@@ -391,7 +387,7 @@ export class PropertyOnboardingService {
       input.propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(trx, property);
 
     const before = await this.repository.getPolicies(trx, input.organizationId, input.propertyId);
     const after = await this.repository.upsertPolicies(trx, input);
@@ -433,7 +429,7 @@ export class PropertyOnboardingService {
       propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(trx, property);
 
     const normalized = amenities.map((amenity) => ({
       code: amenity.code.trim().toUpperCase(),
@@ -489,7 +485,7 @@ export class PropertyOnboardingService {
       input.propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(trx, property);
 
     if (input.isCover && input.mediaType !== "IMAGE") {
       throw new ValidationError("Only an image can be used as the cover");
@@ -540,7 +536,7 @@ export class PropertyOnboardingService {
       propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(trx, property);
 
     const before = await this.repository.findMedia(trx, organizationId, propertyId, mediaId);
     if (!before) {
@@ -592,7 +588,7 @@ export class PropertyOnboardingService {
       propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(trx, property);
 
     const before = await this.repository.findMedia(trx, organizationId, propertyId, mediaId);
     if (!before) {
@@ -639,7 +635,7 @@ export class PropertyOnboardingService {
       input.propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(trx, property);
 
     const document = await this.repository.addDocument(trx, actor.userId, input);
     const view = documentView(document);
@@ -690,7 +686,7 @@ export class PropertyOnboardingService {
       propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(trx, property);
 
     const beforeDocuments = await this.repository.listDocuments(trx, organizationId, propertyId);
     const before = beforeDocuments.find((document) => document.id === documentId);
@@ -755,7 +751,7 @@ export class PropertyOnboardingService {
       propertyId,
       Permissions.PROPERTY_MANAGE
     );
-    this.assertOwnerEditable(property);
+    await this.assertOwnerEditable(trx, property);
 
     if (property.version !== expectedVersion) {
       throw new ConflictError("Property was changed by another request", {

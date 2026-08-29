@@ -142,6 +142,40 @@ test("Wildleaf controls GST while hotel owners consent and manage other booking 
   assert.match(form[0], /Room rates continue to come from your inventory/);
 });
 
+test("GST consent is read before any commercial configuration refresh", () => {
+  const start = js.indexOf(
+    'byId("commercialRulesForm").addEventListener("submit"',
+  );
+  const end = js.indexOf(
+    'byId("roomCategoryImageUploadForm").addEventListener',
+    start,
+  );
+
+  assert.ok(start >= 0 && end > start, "commercial submit handler must exist");
+  const handler = js.slice(start, end);
+  const acceptanceRead = handler.indexOf(
+    "form.elements.gstRulesAccepted.checked",
+  );
+  const firstRefresh = handler.indexOf("await refreshCommercialConfiguration()");
+
+  assert.ok(acceptanceRead >= 0, "GST acceptance must be read from the submitted form");
+  assert.ok(
+    firstRefresh === -1 || firstRefresh > acceptanceRead,
+    "the form must not be refreshed before reading GST acceptance",
+  );
+});
+
+test("approved and live owners can accept responsibility and regain editing", () => {
+  assert.match(html, /id="ownerResponsibilityCard"/);
+  assert.match(html, /id="ownerResponsibilityForm"/);
+  assert.match(html, /name="accepted"/);
+  assert.match(js, /\/owner-responsibility/);
+  assert.match(js, /termsVersionId: state\.ownerResponsibility\.currentTerms\.id/);
+  assert.match(js, /\["APPROVED", "LIVE"\]/);
+  assert.match(js, /state\.ownerResponsibility\?\.editable/);
+  assert.match(js, /Property editing is enabled/);
+});
+
 test("physical room setup uses owner language and supports floors", () => {
   const match = html.match(
     /<form\b[^>]*id="physicalUnitForm"[^>]*>[\s\S]*?<\/form>/,

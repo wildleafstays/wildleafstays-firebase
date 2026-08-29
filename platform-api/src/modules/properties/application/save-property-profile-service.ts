@@ -9,6 +9,7 @@ import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import type { SavePropertyProfileInput } from "../domain/property-profile.js";
 import { PropertyRepository, type PropertyRecord } from "../infrastructure/property-repository.js";
+import { assertOwnerPropertyEditable } from "./owner-responsibility-service.js";
 import { presentProperty, type PropertyView } from "./property-presenter.js";
 
 export interface SavePropertyProfileResult extends JsonObject {
@@ -64,12 +65,7 @@ export class SavePropertyProfileService {
       throw new NotFoundError("Property not found");
     }
 
-    if (before.status !== "DRAFT" && before.status !== "CHANGES_REQUIRED") {
-      throw new ConflictError("Property profile cannot be edited in its current state", {
-        propertyId: input.propertyId,
-        status: before.status
-      });
-    }
+    await assertOwnerPropertyEditable(trx, before);
 
     if (before.version !== input.expectedVersion) {
       throw new ConflictError("Property was changed by another request", {

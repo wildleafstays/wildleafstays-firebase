@@ -1602,6 +1602,38 @@ label small {
   z-index: 3;
 }
 
+.owner-responsibility-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+  border-color: #d8b66a;
+  background: #fffaf0;
+}
+
+.owner-responsibility-card.accepted {
+  grid-template-columns: 1fr;
+  border-color: #bcd7c7;
+  background: #f1f8f3;
+}
+
+.owner-responsibility-card h3,
+.owner-responsibility-card p {
+  margin-top: 0;
+}
+
+.owner-responsibility-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .owner-responsibility-card {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Compact owner workspace: the calendar is the primary tool. */
 .owner-calendar-titlebar {
   display: flex;
