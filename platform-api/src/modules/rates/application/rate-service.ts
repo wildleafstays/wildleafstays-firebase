@@ -246,6 +246,114 @@ export class RateService {
 
     return this.propertyContext(trx, organizationId, propertyId);
   }
+
+  private async ensureOwnerFullPropertyShell(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      saleMode: string | null;
+      preferredRatePlanId: string;
+    },
+    request: RequestMetadata
+  ): Promise<void> {
+    if (input.saleMode !== "BOTH" && input.saleMode !== "FULL_PROPERTY_ONLY") {
+      return;
+    }
+
+    const [categories, plans, products] = await Promise.all([
+      this.rates.listActiveRoomCategoryPricingSources(trx, input.organizationId, input.propertyId),
+      this.rates.listPlans(trx, input.organizationId, input.propertyId),
+      this.rates.listProducts(trx, input.organizationId, input.propertyId)
+    ]);
+
+    const planById = new Map(plans.map((plan) => [plan.id, plan]));
+    const activeFullPropertyProducts = products.filter((product) => {
+      const plan = planById.get(product.rate_plan_id);
+
+      return (
+        product.product_type === "FULL_PROPERTY" &&
+        product.status === "ACTIVE" &&
+        plan?.status === "ACTIVE" &&
+        plan.meal_plan_code === "EP"
+      );
+    });
+
+    if (activeFullPropertyProducts.length > 1) {
+      throw new ConflictError(
+        "More than one active full-property rate identity exists; review the rate setup before continuing"
+      );
+    }
+
+    if (activeFullPropertyProducts.length === 1) {
+      return;
+    }
+
+    const activeCategories = categories.filter((category) => category.physical_capacity > 0);
+    if (activeCategories.length === 0) {
+      return;
+    }
+
+    let derivedBaseRateMinor = 0;
+    for (const category of activeCategories) {
+      const candidates = products.filter((product) => {
+        const plan = planById.get(product.rate_plan_id);
+
+        return (
+          product.product_type === "ROOM_CATEGORY" &&
+          product.room_category_id === category.room_category_id &&
+          product.status === "ACTIVE" &&
+          plan?.status === "ACTIVE" &&
+          plan.meal_plan_code === "EP"
+        );
+      });
+
+      // The shell becomes public only after every physical-room category has
+      // one unambiguous EP source. Until then the owner can keep completing setup.
+      if (candidates.length !== 1) {
+        return;
+      }
+
+      derivedBaseRateMinor += candidates[0]!.base_rate_minor * category.physical_capacity;
+    }
+
+    const preferredPlan = planById.get(input.preferredRatePlanId);
+    if (
+      !preferredPlan ||
+      preferredPlan.status !== "ACTIVE" ||
+      preferredPlan.meal_plan_code !== "EP"
+    ) {
+      throw new ConflictError("The full-property identity requires an active EP rate plan");
+    }
+
+    // FULL_PROPERTY is an identity only. Public availability, occupancy,
+    // pricing and extra-guest charges are always derived from room categories.
+    await this.configureRateProduct(
+      trx,
+      actor,
+      {
+        organizationId: input.organizationId,
+        propertyId: input.propertyId,
+        ratePlanId: input.preferredRatePlanId,
+        productType: "FULL_PROPERTY",
+        roomCategoryId: null,
+        baseRateMinor: Math.min(MAX_MONEY_MINOR, derivedBaseRateMinor),
+        floorRateMinor: null,
+        ceilingRateMinor: null,
+        includedAdults: 1,
+        includedChildren: 0,
+        maxAdults: 1,
+        maxChildren: 0,
+        maxOccupancy: 1,
+        extraAdultMinor: 0,
+        extraChildMinor: 0,
+        expectedVersion: null
+      },
+      request
+    );
+  }
+
   async createRatePlan(
     trx: Transaction<Database>,
     actor: ActorContext,
@@ -350,7 +458,7 @@ export class RateService {
     },
     request: RequestMetadata
   ): Promise<{ rateProduct: RateProductView }> {
-    await this.property(
+    const ownerProperty = await this.property(
       trx,
       actor,
       input.organizationId,
@@ -502,7 +610,7 @@ export class RateService {
       );
     }
 
-    return this.configureRateProduct(
+    const configured = await this.configureRateProduct(
       trx,
       actor,
       {
@@ -525,6 +633,20 @@ export class RateService {
       },
       request
     );
+
+    await this.ensureOwnerFullPropertyShell(
+      trx,
+      actor,
+      {
+        organizationId: input.organizationId,
+        propertyId: input.propertyId,
+        saleMode: ownerProperty.sale_mode,
+        preferredRatePlanId: ratePlanId
+      },
+      request
+    );
+
+    return configured;
   }
 
   async configureRateProduct(

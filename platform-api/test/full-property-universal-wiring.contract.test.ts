@@ -45,6 +45,12 @@ describe("universal full-property booking wiring", () => {
     expect(rateService).toContain("fullPropertyCategoryRates:");
   });
 
+  it("automatically provisions the full-property quote identity from owner EP setup", () => {
+    expect(rateService).toContain("ensureOwnerFullPropertyShell");
+    expect(rateService).toContain('productType: "FULL_PROPERTY"');
+    expect(rateService).toContain("derivedBaseRateMinor");
+  });
+
   it("does not load stored full-property calendar rows for public pricing", () => {
     expect(publicAvailability).toContain('offer.product_type === "ROOM_CATEGORY"');
     expect(publicAvailability).toContain("buildPublicFullPropertySource(");
