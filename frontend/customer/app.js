@@ -100,6 +100,11 @@ function renderProperties(properties) {
   const visibleProperties = properties.filter((property) =>
     saleModeAllows(property.saleMode, state.mode),
   );
+  updateHero(visibleProperties);
+  results.classList.toggle(
+    "single-property-grid",
+    visibleProperties.length === 1,
+  );
   results.replaceChildren();
   if (!visibleProperties.length) {
     resultsStatus.textContent =
@@ -131,6 +136,15 @@ function propertyCard(property, index) {
     `property-card property-card-${state.mode}`,
   );
   const visual = element("div", `property-visual visual-${(index % 4) + 1}`);
+  if (property.coverMediaId) {
+    const image = element("img", "property-card-image");
+    image.src = propertyMediaUrl(property.publicSlug, property.coverMediaId);
+    image.alt = property.name;
+    image.loading = index === 0 ? "eager" : "lazy";
+    image.decoding = "async";
+    visual.classList.add("has-image");
+    visual.append(image);
+  }
   visual.append(
     element(
       "span",
@@ -182,6 +196,26 @@ function propertyCard(property, index) {
 
   article.append(visual, body);
   return article;
+}
+
+function updateHero(properties) {
+  const hero = document.querySelector(".home-hero");
+  const featured = properties.find((property) => property.coverMediaId);
+  if (!hero || !featured) {
+    hero?.classList.remove("has-property-image");
+    hero?.style.removeProperty("--home-hero-image");
+    return;
+  }
+
+  hero.style.setProperty(
+    "--home-hero-image",
+    `url("${propertyMediaUrl(featured.publicSlug, featured.coverMediaId)}")`,
+  );
+  hero.classList.add("has-property-image");
+}
+
+function propertyMediaUrl(publicSlug, mediaId) {
+  return `/v1/public/properties/${encodeURIComponent(publicSlug)}/media/${encodeURIComponent(mediaId)}`;
 }
 
 function propertyUrl(publicSlug) {
