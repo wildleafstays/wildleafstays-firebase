@@ -547,7 +547,8 @@ export class VerifiedPaymentProcessor {
       reservation.id,
       reservation.inventory_hold_id,
       reservation.reservation_reference,
-      request
+      request,
+      input.providerCapturedAt
     );
 
     const succeededIntent = await this.transitionPaymentToSucceeded(trx, intent);

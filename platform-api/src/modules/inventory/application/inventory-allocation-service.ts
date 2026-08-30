@@ -143,7 +143,8 @@ export class InventoryAllocationService {
     normalizedReference: string,
     actor: ActorContext | null,
     actorType: "USER" | "PROVIDER",
-    request: RequestMetadata
+    request: RequestMetadata,
+    effectiveConfirmationAt: Date = this.now()
   ): Promise<InventoryAllocationResult> {
     const existingForHold = await this.allocations.findByHold(
       trx,
@@ -172,7 +173,7 @@ export class InventoryAllocationService {
         holdStatus: hold.status
       });
     }
-    if (hold.expires_at <= this.now()) {
+    if (hold.expires_at <= effectiveConfirmationAt) {
       throw new ConflictError("Inventory hold has expired and cannot be confirmed", {
         expiresAt: hold.expires_at.toISOString()
       });
@@ -356,7 +357,8 @@ export class InventoryAllocationService {
     reservationId: string,
     holdId: string,
     confirmationReference: string,
-    request: RequestMetadata
+    request: RequestMetadata,
+    providerCapturedAt?: Date
   ): Promise<InventoryAllocationResult> {
     const normalizedReference = this.normalizedReference(confirmationReference);
     const hold = await this.holds.findHoldForUpdate(trx, organizationId, propertyId, holdId);
@@ -408,7 +410,8 @@ export class InventoryAllocationService {
       normalizedReference,
       null,
       "PROVIDER",
-      request
+      request,
+      providerCapturedAt ?? this.now()
     );
   }
 
