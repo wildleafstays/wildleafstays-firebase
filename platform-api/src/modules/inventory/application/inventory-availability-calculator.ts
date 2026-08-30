@@ -168,6 +168,7 @@ export function calculateInventoryAvailability(
         activeRoomCategories.some(
           (room) =>
             room.inventoryCapacity <= 0 ||
+            room.sellableQuantity < room.physicalCapacity ||
             room.heldQuantity > 0 ||
             room.confirmedQuantity > 0 ||
             room.blockedQuantity > 0 ||

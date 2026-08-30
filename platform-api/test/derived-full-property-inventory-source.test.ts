@@ -17,6 +17,7 @@ function roomBucket(
   capacityOptions: {
     held?: number;
     confirmed?: number;
+    capacityOverride?: number;
     overbooking?: number;
     stopSell?: boolean;
   } = {}
@@ -27,6 +28,7 @@ function roomBucket(
     stayDate: DATE,
     heldQuantity: capacityOptions.held ?? 0,
     confirmedQuantity: capacityOptions.confirmed ?? 0,
+    capacityOverride: capacityOptions.capacityOverride ?? null,
     overbookingLimit: capacityOptions.overbooking ?? 0,
     stopSell: capacityOptions.stopSell ?? false
   };
@@ -134,6 +136,20 @@ describe("derived full-property universal inventory source", () => {
       result.days[0]?.roomCategories.find((item) => item.roomCategoryId === "suite")
         ?.sellableQuantity
     ).toBe(1);
+  });
+
+  it("closes the full property when an inventory override leaves fewer rooms than physical capacity", () => {
+    const result = calculate(
+      "BOTH",
+      [category("deluxe", 2)],
+      [roomBucket("deluxe", { capacityOverride: 1 })]
+    );
+
+    expect(result.days[0]?.fullProperty).toMatchObject({
+      roomInventoryConflict: true,
+      sellableQuantity: 0
+    });
+    expect(result.days[0]?.roomCategories[0]?.sellableQuantity).toBe(1);
   });
 
   it("ignores stale legacy full-property buckets completely", () => {
