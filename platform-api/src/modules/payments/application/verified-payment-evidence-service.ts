@@ -106,6 +106,37 @@ function assertSame(
   }
 }
 
+function assertSamePayment(
+  row: {
+    payment_intent_id: string;
+    organization_id: string;
+    property_id: string;
+    reservation_id: string;
+    provider: string;
+    provider_payment_id: string;
+    provider_order_id: string | null;
+    amount_minor: number;
+    currency_code: string;
+  },
+  input: EvidenceInput
+): void {
+  if (!(
+    row.payment_intent_id === input.paymentIntentId &&
+    row.organization_id === input.organizationId &&
+    row.property_id === input.propertyId &&
+    row.reservation_id === input.reservationId &&
+    row.provider === input.provider &&
+    row.provider_payment_id === input.providerPaymentId &&
+    row.provider_order_id === input.providerOrderId &&
+    row.amount_minor === input.amountMinor &&
+    row.currency_code === input.currencyCode
+  )) {
+    throw new ConflictError(
+      "Provider payment identifier is already attached to different verified evidence"
+    );
+  }
+}
+
 export class VerifiedPaymentEvidenceService {
   constructor(
     private readonly evidence = new PaymentEvidenceRepository(),
@@ -166,11 +197,15 @@ export class VerifiedPaymentEvidenceService {
       this.evidence.findByProviderEvent(trx, input.provider, input.providerEventId),
       this.evidence.findByProviderPayment(trx, input.provider, input.providerPaymentId)
     ]);
-    const existing = byEvent ?? byPayment;
-    if (existing) {
-      assertSame(existing, input);
-      await this.ensureFinancialLedger(trx, existing, request);
-      return { created: false, evidence: this.evidence.view(existing) };
+    if (byEvent) {
+      assertSame(byEvent, input);
+      await this.ensureFinancialLedger(trx, byEvent, request);
+      return { created: false, evidence: this.evidence.view(byEvent) };
+    }
+    if (byPayment) {
+      assertSamePayment(byPayment, input);
+      await this.ensureFinancialLedger(trx, byPayment, request);
+      return { created: false, evidence: this.evidence.view(byPayment) };
     }
 
     const reservation = await this.reservations.findById(
@@ -187,7 +222,8 @@ export class VerifiedPaymentEvidenceService {
         (await this.evidence.findByProviderEvent(trx, input.provider, input.providerEventId)) ??
         (await this.evidence.findByProviderPayment(trx, input.provider, input.providerPaymentId));
       if (!raced) throw new ConflictError("Verified provider evidence could not be persisted");
-      assertSame(raced, input);
+      if (raced.provider_event_id === input.providerEventId) assertSame(raced, input);
+      else assertSamePayment(raced, input);
       await this.ensureFinancialLedger(trx, raced, request);
       return { created: false, evidence: this.evidence.view(raced) };
     }

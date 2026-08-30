@@ -14,6 +14,10 @@ import {
 import { requestMetadata } from "../../../shared/http/request-metadata.js";
 import { IdempotencyService } from "../../../shared/idempotency/idempotency-service.js";
 import type { RazorpayOrderGateway } from "../../payments/application/razorpay-order-service.js";
+import {
+  RazorpayPaymentRecoveryService,
+  type RazorpayPaymentRecoveryGateway
+} from "../../payments/application/razorpay-payment-recovery-service.js";
 import { PublicAvailabilityService } from "../application/public-availability-service.js";
 import { PublicCatalogService } from "../application/public-catalog-service.js";
 import { PublicCheckoutStatusService } from "../application/public-checkout-status-service.js";
@@ -28,6 +32,7 @@ export interface PublicCatalogRouteDependencies {
   db: Kysely<Database>;
   authentication?: AuthenticationDependencies;
   razorpayOrderGateway?: RazorpayOrderGateway | null;
+  razorpayPaymentRecoveryGateway?: RazorpayPaymentRecoveryGateway | null;
   propertyAssetStorage?: PropertyAssetStorage;
 }
 
@@ -888,7 +893,11 @@ export async function registerPublicCatalogRoutes(
   const catalogRepository = new PublicCatalogRepository();
   const availabilityService = new PublicAvailabilityService();
   const publicQuoteService = new PublicQuoteService();
-  const publicCheckoutStatusService = new PublicCheckoutStatusService();
+  const publicCheckoutStatusService = new PublicCheckoutStatusService(
+    deps.razorpayPaymentRecoveryGateway
+      ? new RazorpayPaymentRecoveryService(deps.db, deps.razorpayPaymentRecoveryGateway)
+      : null
+  );
   const publicCheckoutService = new PublicCheckoutService(
     deps.db,
     deps.razorpayOrderGateway ?? null
@@ -1348,7 +1357,7 @@ export async function registerPublicCatalogRoutes(
         tags: ["Public Booking"],
         summary: "Read canonical public checkout status",
         description:
-          "Returns a minimal non-PII status view for a public-api reservation and its payment intent. It never confirms payment or reservation state.",
+          "Returns a minimal non-PII status view and securely reconciles a pending Razorpay payment when provider confirmation is available.",
         params: {
           type: "object",
           additionalProperties: false,
@@ -1373,7 +1382,8 @@ export async function registerPublicCatalogRoutes(
       return publicCheckoutStatusService.getStatus(
         deps.db,
         request.params.publicSlug,
-        request.body
+        request.body,
+        requestMetadata(request, "public-api")
       );
     }
   );

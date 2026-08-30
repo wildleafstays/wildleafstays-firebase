@@ -1647,6 +1647,7 @@ function phase5b3cRawBody(
     currencyCode?: string;
     status?: string;
     captured?: boolean;
+    createdAt?: number;
   } = {}
 ): Buffer {
   return Buffer.from(
@@ -1664,7 +1665,8 @@ function phase5b3cRawBody(
             currency: options.currencyCode ?? ready.payment.paymentIntent.currencyCode,
             status: options.status ?? "captured",
             order_id: options.providerOrderId ?? ready.checkout.checkout.orderId,
-            captured: options.captured ?? true
+            captured: options.captured ?? true,
+            created_at: options.createdAt ?? Math.floor(Date.now() / 1000)
           }
         }
       }
@@ -1898,8 +1900,10 @@ describe("Phase 5B3C Razorpay webhook verification and canonical processing", ()
 
   it("acknowledges verified money after hold expiry while canonical processing opens refund reconciliation", async () => {
     const ready = await phase5b3cReadyCheckout();
-    const rawBody = phase5b3cRawBody(ready);
     const afterExpiry = new Date(new Date(ready.payment.paymentIntent.expiresAt).getTime() + 1_000);
+    const rawBody = phase5b3cRawBody(ready, {
+      createdAt: Math.floor(afterExpiry.getTime() / 1000)
+    });
     const result = await phase5b3cHandle(
       ready,
       rawBody,

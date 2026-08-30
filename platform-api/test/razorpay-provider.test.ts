@@ -121,6 +121,45 @@ describe("RazorpayProvider", () => {
     expect(orders[0]?.id).toBe("order_recovered");
   });
 
+  it("reads captured payments for an existing provider order", async () => {
+    const fetchFn: RazorpayFetch = async (input, init) => {
+      expect(String(input)).toBe("https://api.razorpay.com/v1/orders/order_test_123/payments");
+      expect(init?.method).toBe("GET");
+      return new Response(
+        JSON.stringify({
+          entity: "collection",
+          count: 1,
+          items: [
+            {
+              id: "pay_test_123",
+              entity: "payment",
+              order_id: "order_test_123",
+              amount: 756000,
+              currency: "INR",
+              status: "captured",
+              captured: true,
+              created_at: 1788059106
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+    const provider = new RazorpayProvider(config, fetchFn);
+
+    await expect(provider.findPaymentsByOrder("order_test_123")).resolves.toEqual([
+      {
+        id: "pay_test_123",
+        orderId: "order_test_123",
+        amount: 756000,
+        currency: "INR",
+        status: "captured",
+        captured: true,
+        createdAt: 1788059106
+      }
+    ]);
+  });
+
   it("rejects a provider response that changes the requested economics", async () => {
     const fetchFn: RazorpayFetch = async () =>
       new Response(

@@ -183,7 +183,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       userRepository,
       accessRepository
     },
-    razorpayOrderGateway: razorpayProvider
+    razorpayOrderGateway: razorpayProvider,
+    razorpayPaymentRecoveryGateway: razorpayProvider
   });
 
   await registerSessionRoutes(app, {

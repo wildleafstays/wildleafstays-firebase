@@ -13,9 +13,11 @@ import { AccessRepository } from "../src/modules/access/infrastructure/access-re
 import { CommercialRuleService } from "../src/modules/commercial/application/commercial-rule-service.js";
 import { PromotionRuleService } from "../src/modules/commercial/application/promotion-rule-service.js";
 import type { RazorpayOrderGateway } from "../src/modules/payments/application/razorpay-order-service.js";
+import type { RazorpayPaymentRecoveryGateway } from "../src/modules/payments/application/razorpay-payment-recovery-service.js";
 import type {
   RazorpayCreateOrderInput,
-  RazorpayOrder
+  RazorpayOrder,
+  RazorpayPayment
 } from "../src/modules/payments/infrastructure/razorpay-provider.js";
 import { registerGuestSelfServiceRoutes } from "../src/modules/guest/transport/guest-self-service-routes.js";
 import { UserRepository } from "../src/modules/identity/infrastructure/user-repository.js";
@@ -49,8 +51,9 @@ let identityVerifier: FakeIdentityVerifier;
 let userRepository: UserRepository;
 let accessRepository: AccessRepository;
 
-class FakeRazorpayGateway implements RazorpayOrderGateway {
+class FakeRazorpayGateway implements RazorpayOrderGateway, RazorpayPaymentRecoveryGateway {
   private readonly orders = new Map<string, RazorpayOrder>();
+  private readonly payments = new Map<string, RazorpayPayment[]>();
   createCalls = 0;
 
   publicKeyId(): string {
@@ -82,6 +85,26 @@ class FakeRazorpayGateway implements RazorpayOrderGateway {
   async findOrdersByReceipt(receipt: string): Promise<RazorpayOrder[]> {
     const order = this.orders.get(receipt);
     return order ? [order] : [];
+  }
+
+  async findPaymentsByOrder(providerOrderId: string): Promise<RazorpayPayment[]> {
+    return this.payments.get(providerOrderId) ?? [];
+  }
+
+  capturePayment(providerOrderId: string): RazorpayPayment {
+    const order = [...this.orders.values()].find((candidate) => candidate.id === providerOrderId);
+    if (!order) throw new Error("Fake Razorpay order was not found");
+    const payment: RazorpayPayment = {
+      id: `pay_${randomUUID().replaceAll("-", "")}`,
+      orderId: providerOrderId,
+      amount: order.amount,
+      currency: order.currency,
+      status: "captured",
+      captured: true,
+      createdAt: Math.floor(Date.now() / 1000)
+    };
+    this.payments.set(providerOrderId, [payment]);
+    return payment;
   }
 }
 
@@ -578,7 +601,8 @@ beforeAll(async () => {
   await registerPublicCatalogRoutes(app, {
     db,
     authentication,
-    razorpayOrderGateway: razorpayGateway
+    razorpayOrderGateway: razorpayGateway,
+    razorpayPaymentRecoveryGateway: razorpayGateway
   });
 
   await registerSessionRoutes(app, authentication);
@@ -1270,6 +1294,7 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
     const prepared = checkout.json() as {
       reservation: { id: string; reservationReference: string };
       paymentIntent: { id: string };
+      checkout: { orderId: string };
     };
     const status = await app.inject({
       method: "POST",
@@ -1299,6 +1324,22 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
     expect(serialized).not.toContain(fixture.organizationId);
     expect(serialized).not.toContain(fixture.propertyId);
     expect(serialized).not.toContain("status.guest@example.com");
+
+    razorpayGateway.capturePayment(prepared.checkout.orderId);
+    const recovered = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/checkout-status`,
+      payload: {
+        reservationId: prepared.reservation.id,
+        paymentIntentId: prepared.paymentIntent.id
+      }
+    });
+    expect(recovered.statusCode).toBe(200);
+    expect(recovered.json()).toMatchObject({
+      outcome: "CONFIRMED",
+      reservation: { status: "CONFIRMED" },
+      paymentIntent: { status: "SUCCEEDED" }
+    });
 
     const mismatched = await app.inject({
       method: "POST",
@@ -1332,17 +1373,6 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
         .where("id", "=", fixture.propertyId)
         .execute();
     }
-
-    await db
-      .updateTable("payment_intents")
-      .set({ status: "SUCCEEDED" })
-      .where("id", "=", prepared.paymentIntent.id)
-      .execute();
-    await db
-      .updateTable("reservations")
-      .set({ status: "CONFIRMED" })
-      .where("id", "=", prepared.reservation.id)
-      .execute();
 
     const confirmed = await app.inject({
       method: "POST",

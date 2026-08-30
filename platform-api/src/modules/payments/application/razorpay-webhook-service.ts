@@ -44,6 +44,7 @@ interface CapturedPayment {
   providerOrderId: string;
   amountMinor: number;
   currencyCode: string;
+  capturedAt: Date;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -113,11 +114,16 @@ function parseCapturedPayment(root: Record<string, unknown>): CapturedPayment {
     );
   }
 
+  if (!Number.isSafeInteger(payment["created_at"]) || (payment["created_at"] as number) <= 0) {
+    throw new ValidationError("payment.created_at must be a positive Unix timestamp");
+  }
+
   return {
     providerPaymentId,
     providerOrderId,
     amountMinor: payment["amount"] as number,
-    currencyCode
+    currencyCode,
+    capturedAt: new Date((payment["created_at"] as number) * 1000)
   };
 }
 
@@ -270,7 +276,8 @@ export class RazorpayWebhookService {
           propertyId: providerOrder.property_id,
           reservationId: providerOrder.reservation_id,
           paymentIntentId: providerOrder.payment_intent_id,
-          paymentEvidenceId: evidence.evidence.id
+          paymentEvidenceId: evidence.evidence.id,
+          providerCapturedAt: payment.capturedAt
         },
         request
       );

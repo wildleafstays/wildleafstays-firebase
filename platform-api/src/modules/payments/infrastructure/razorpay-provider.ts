@@ -26,6 +26,16 @@ export interface RazorpayOrder {
   createdAt: number;
 }
 
+export interface RazorpayPayment {
+  id: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  status: "created" | "authorized" | "captured" | "refunded" | "failed";
+  captured: boolean;
+  createdAt: number;
+}
+
 export interface RazorpayCreateRefundInput {
   providerPaymentId: string;
   amountMinor: number;
@@ -73,6 +83,17 @@ interface RazorpayRefundWire {
   currency?: unknown;
   payment_id?: unknown;
   status?: unknown;
+  created_at?: unknown;
+}
+
+interface RazorpayPaymentWire {
+  id?: unknown;
+  entity?: unknown;
+  order_id?: unknown;
+  amount?: unknown;
+  currency?: unknown;
+  status?: unknown;
+  captured?: unknown;
   created_at?: unknown;
 }
 
@@ -215,6 +236,46 @@ function parseRefund(value: unknown): RazorpayRefund {
   };
 }
 
+function parsePayment(value: unknown): RazorpayPayment {
+  if (typeof value !== "object" || value === null) {
+    throw new RazorpayProviderError("Razorpay returned an invalid payment response");
+  }
+  const row = value as RazorpayPaymentWire;
+  if (
+    typeof row.id !== "string" ||
+    row.id.trim().length < 1 ||
+    row.entity !== "payment" ||
+    typeof row.order_id !== "string" ||
+    row.order_id.trim().length < 1 ||
+    typeof row.amount !== "number" ||
+    !Number.isSafeInteger(row.amount) ||
+    row.amount <= 0 ||
+    typeof row.currency !== "string" ||
+    !["created", "authorized", "captured", "refunded", "failed"].includes(String(row.status)) ||
+    typeof row.captured !== "boolean" ||
+    typeof row.created_at !== "number" ||
+    !Number.isSafeInteger(row.created_at) ||
+    row.created_at <= 0
+  ) {
+    throw new RazorpayProviderError("Razorpay returned an incomplete payment response");
+  }
+
+  const currency = row.currency.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new RazorpayProviderError("Razorpay returned an invalid payment currency");
+  }
+
+  return {
+    id: row.id.trim(),
+    orderId: row.order_id.trim(),
+    amount: row.amount,
+    currency,
+    status: row.status as RazorpayPayment["status"],
+    captured: row.captured,
+    createdAt: row.created_at
+  };
+}
+
 function verifyHexSignature(message: string | Buffer, received: string, secret: string): boolean {
   const normalized = received.trim().toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(normalized)) return false;
@@ -340,6 +401,22 @@ export class RazorpayProvider {
       throw new RazorpayProviderError("Razorpay returned an invalid order collection");
     }
     return items.map(parseOrder);
+  }
+
+  async findPaymentsByOrder(providerOrderIdInput: string): Promise<RazorpayPayment[]> {
+    const providerOrderId = normalizedProviderIdentifier(providerOrderIdInput, "providerOrderId");
+    const result = await this.request(
+      `/v1/orders/${encodeURIComponent(providerOrderId)}/payments`,
+      { method: "GET" }
+    );
+    if (typeof result !== "object" || result === null) {
+      throw new RazorpayProviderError("Razorpay returned an invalid payment collection");
+    }
+    const items = (result as { items?: unknown }).items;
+    if (!Array.isArray(items)) {
+      throw new RazorpayProviderError("Razorpay returned an invalid payment collection");
+    }
+    return items.map(parsePayment);
   }
 
   async createRefund(input: RazorpayCreateRefundInput): Promise<RazorpayRefund> {

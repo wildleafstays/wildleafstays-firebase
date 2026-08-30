@@ -38,6 +38,7 @@ interface ProcessInput {
   reservationId: string;
   paymentIntentId: string;
   paymentEvidenceId: string;
+  providerCapturedAt?: Date;
 }
 
 export class VerifiedPaymentProcessor {
@@ -454,7 +455,10 @@ export class VerifiedPaymentProcessor {
         holdStatus: hold.status,
         holdExpiresAt: hold.expires_at.toISOString()
       };
-    } else if (hold.expires_at <= this.now()) {
+    } else if (
+      hold.expires_at <= this.now() &&
+      (!input.providerCapturedAt || input.providerCapturedAt > hold.expires_at)
+    ) {
       reconciliationReason = PaymentReconciliationReasons.INVENTORY_HOLD_EXPIRED;
       reconciliationDetails = {
         inventoryHoldId: hold.id,
