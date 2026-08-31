@@ -114,6 +114,23 @@ test("property editor uses one-at-a-time sections without replacing existing for
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.editor-progress-card/);
 });
 
+test("a new property draft opens before its sale mode and rates are configured", () => {
+  const openProperty = js.match(
+    /async function openProperty\(organizationId, propertyId\) \{[\s\S]*?\n\}/,
+  );
+
+  assert.ok(openProperty, "property editor loader must exist");
+  const loader = openProperty[0];
+  const profileRead = loader.indexOf("state.property = profile.property");
+  const saleModeGuard = loader.indexOf("state.property.saleMode");
+  const ratePlansRead = loader.indexOf("api(`${base}/rates/plans`)");
+
+  assert.ok(profileRead >= 0, "the draft profile must be loaded first");
+  assert.ok(saleModeGuard > profileRead, "rate loading must inspect the profile");
+  assert.ok(ratePlansRead > saleModeGuard, "rates must load only after the guard");
+  assert.match(loader, /Promise\.resolve\(\{ ratePlans: \[\] \}\)/);
+});
+
 test("Wildleaf controls GST while hotel owners consent and manage other booking rules", () => {
   const form = html.match(
     /<form\b[^>]*id="commercialRulesForm"[^>]*>[\s\S]*?<\/form>/,

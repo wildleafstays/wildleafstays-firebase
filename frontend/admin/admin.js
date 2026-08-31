@@ -908,19 +908,25 @@ byId("ownerResponsibilityForm").addEventListener("submit", (event) => {
 
 async function openProperty(organizationId, propertyId) {
   const base = `/v1/partner/organizations/${organizationId}/properties/${propertyId}`;
+  // A new draft intentionally has no sale mode until the owner completes the
+  // Property profile section. Load that profile first so opening registration
+  // never depends on a rates workspace that cannot exist yet.
+  const profile = await api(
+    `/v1/partner/organizations/${organizationId}/properties/${propertyId}`,
+  );
+  state.property = profile.property;
+
   // Reading GST consent also materializes Wildleaf's active statutory tax
   // policies for an accepted property. Complete that transaction before the
   // commercial snapshot is loaded so readiness never observes a stale gap.
   const hotelGst = await api(`${base}/commercial/hotel-gst-consent`);
   const [
-    profile,
     onboarding,
     layout,
     commercial,
     ratePlans,
     ownerResponsibility,
   ] = await Promise.all([
-    api(`/v1/partner/organizations/${organizationId}/properties/${propertyId}`),
     api(
       `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
     ),
@@ -928,10 +934,11 @@ async function openProperty(organizationId, propertyId) {
       `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
     ),
     api(`${base}/commercial`),
-    api(`${base}/rates/plans`),
+    state.property.saleMode
+      ? api(`${base}/rates/plans`)
+      : Promise.resolve({ ratePlans: [] }),
     api(`${base}/owner-responsibility`),
   ]);
-  state.property = profile.property;
   state.onboarding = onboarding;
   state.layout = layout;
   state.commercial = commercial;
