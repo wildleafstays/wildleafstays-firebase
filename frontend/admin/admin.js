@@ -1905,19 +1905,11 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       throw new Error("Enter valid cancellation and no-show rules.");
     }
 
-    await refreshCommercialConfiguration();
-
-    const activeRatePlans = state.editorRatePlans.filter(
-      (plan) => plan.status === "ACTIVE",
-    );
-    if (!activeRatePlans.length) {
-      throw new Error(
-        "Set a base room rate in Rates & inventory before enabling online booking.",
-      );
-    }
-
     const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/commercial`;
 
+    // GST consent is an independent, one-time acknowledgement. Persist it
+    // before refreshing the form or validating later booking prerequisites so
+    // a new property without rate plans does not lose the owner's acceptance.
     if (!state.hotelGst?.accepted) {
       state.hotelGst = await idempotent(
         `${base}/hotel-gst-consent`,
@@ -1927,6 +1919,17 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
           ruleVersionId: state.hotelGst.currentRule.id,
           accepted: true,
         },
+      );
+    }
+
+    await refreshCommercialConfiguration();
+
+    const activeRatePlans = state.editorRatePlans.filter(
+      (plan) => plan.status === "ACTIVE",
+    );
+    if (!activeRatePlans.length) {
+      throw new Error(
+        "GST rules were accepted. Set a base room rate in Rates & inventory before enabling online booking.",
       );
     }
 

@@ -185,6 +185,20 @@ test("GST consent is read before any commercial configuration refresh", () => {
     firstRefresh === -1 || firstRefresh > acceptanceRead,
     "the form must not be refreshed before reading GST acceptance",
   );
+
+  const consentWrite = handler.indexOf(
+    '`${base}/hotel-gst-consent`,\n        "PUT"',
+  );
+  const ratePlanValidation = handler.indexOf("if (!activeRatePlans.length)");
+  assert.ok(consentWrite >= 0, "accepted GST consent must be persisted");
+  assert.ok(
+    firstRefresh > consentWrite,
+    "GST consent must be persisted before the form is refreshed",
+  );
+  assert.ok(
+    ratePlanValidation > consentWrite,
+    "missing rate plans must not prevent GST consent from being saved",
+  );
 });
 
 test("guest age rules explain free infants and paid occupancy-counted children", () => {
