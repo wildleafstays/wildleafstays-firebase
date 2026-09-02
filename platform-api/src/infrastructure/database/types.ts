@@ -363,6 +363,23 @@ export interface RoomCategoryMediaTable {
   updated_at: Generated<Date>;
 }
 
+export interface PhysicalUnitMediaTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  physical_unit_id: string;
+  storage_provider: string;
+  storage_key: string;
+  mime_type: string | null;
+  alt_text: string | null;
+  caption: string | null;
+  sort_order: Generated<number>;
+  status: Generated<string>;
+  created_by_user_id: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
 export interface PropertyPoliciesTable {
   property_id: string;
   organization_id: string;
@@ -499,6 +516,7 @@ export interface Database {
   room_amenity_catalog: RoomAmenityCatalogTable;
   room_category_amenities: RoomCategoryAmenitiesTable;
   room_category_media: RoomCategoryMediaTable;
+  physical_unit_media: PhysicalUnitMediaTable;
   property_policies: PropertyPoliciesTable;
   property_media: PropertyMediaTable;
   property_documents: PropertyDocumentsTable;

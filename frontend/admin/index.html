@@ -1194,6 +1194,38 @@
                     Can the guest reach this room without using stairs?
                   </label>
 
+                  <fieldset class="room-photo-picker span-two">
+                    <legend>Room photos</legend>
+                    <label>
+                      Select photos
+                      <input
+                        name="photos"
+                        type="file"
+                        accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                        multiple
+                      />
+                      <small>
+                        Optional. Choose several JPG or PNG images at once. They
+                        are resized and converted to storage-efficient WebP
+                        before upload whenever that produces a smaller file.
+                      </small>
+                    </label>
+                    <div class="form-grid two-column">
+                      <label
+                        >Image description (optional)<input
+                          name="photoAltText"
+                          maxlength="500"
+                          placeholder="e.g. Deluxe room with valley view"
+                      /></label>
+                      <label
+                        >Caption (optional)<input
+                          name="photoCaption"
+                          maxlength="1000"
+                          placeholder="Shown with these room photos"
+                      /></label>
+                    </div>
+                  </fieldset>
+
                   <button class="span-two" type="submit">Add room</button>
                 </form>
               </div>
@@ -1318,6 +1350,16 @@
 
               <fieldset class="commercial-rule-group span-two">
                 <legend>Cancellation and no-show</legend>
+                <div id="cancellationPolicyList" class="cancellation-policy-list span-two"></div>
+                <div class="span-two cancellation-rule-actions">
+                  <button id="addCancellationRuleButton" type="button" class="button-secondary">
+                    Add another rule
+                  </button>
+                  <button id="deleteCancellationRuleButton" type="button" class="danger-button hidden">
+                    Delete selected rule
+                  </button>
+                </div>
+                <input name="cancellationPolicyId" type="hidden" />
                 <label
                   >Free cancellation until<input
                     name="freeCancellationDays"

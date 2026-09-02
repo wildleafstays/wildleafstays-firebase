@@ -510,6 +510,32 @@ export class CommercialRuleRepository {
       .executeTakeFirstOrThrow();
   }
 
+  async listCancellationAssignmentsForProperty(
+    trx: Trx,
+    propertyId: string
+  ): Promise<CancellationAssignmentRecord[]> {
+    return trx
+      .selectFrom("rate_plan_cancellation_assignments")
+      .selectAll()
+      .where("property_id", "=", propertyId)
+      .orderBy("rate_plan_id")
+      .orderBy("effective_from")
+      .execute();
+  }
+
+  async archiveCancellationPolicy(
+    trx: Trx,
+    policyId: string,
+    userId: string
+  ): Promise<CancellationPolicyRecord> {
+    return trx
+      .updateTable("cancellation_policies")
+      .set({ status: "INACTIVE", updated_by_user_id: userId, updated_at: new Date() })
+      .where("id", "=", policyId)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  }
+
   async ensureAndLockGuestAgePolicy(
     trx: Trx,
     organizationId: string,

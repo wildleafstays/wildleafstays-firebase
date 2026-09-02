@@ -3,6 +3,7 @@ import type { Kysely, Selectable, Transaction } from "kysely";
 import type {
   Database,
   PhysicalUnitsTable,
+  PhysicalUnitMediaTable,
   PropertyFloorsTable,
   PropertyStructuresTable,
   RoomCategoriesTable,
@@ -22,6 +23,7 @@ export type FloorRecord = Selectable<PropertyFloorsTable>;
 export type RoomCategoryRecord = Selectable<RoomCategoriesTable>;
 export type PhysicalUnitRecord = Selectable<PhysicalUnitsTable>;
 export type RoomCategoryMediaRecord = Selectable<RoomCategoryMediaTable>;
+export type PhysicalUnitMediaRecord = Selectable<PhysicalUnitMediaTable>;
 
 export class PropertySetupRepository {
   async getPropertyStatus(
@@ -189,6 +191,22 @@ export class PropertySetupRepository {
       .executeTakeFirst();
   }
 
+  async findPhysicalUnit(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    physicalUnitId: string
+  ): Promise<PhysicalUnitRecord | undefined> {
+    return db
+      .selectFrom("physical_units")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("id", "=", physicalUnitId)
+      .where("status", "<>", "RETIRED")
+      .executeTakeFirst();
+  }
+
   async listStructures(db: DbExecutor, organizationId: string, propertyId: string) {
     return db
       .selectFrom("property_structures")
@@ -324,6 +342,95 @@ export class PropertySetupRepository {
       .where("property_id", "=", propertyId)
       .where("status", "=", "ACTIVE")
       .orderBy("room_category_id")
+      .orderBy("sort_order")
+      .orderBy("created_at")
+      .execute();
+  }
+
+  async addPhysicalUnitMedia(
+    db: DbExecutor,
+    actorUserId: string,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      physicalUnitId: string;
+      storageProvider: string;
+      storageKey: string;
+      mimeType: string | null;
+      altText: string | null;
+      caption: string | null;
+      sortOrder: number;
+    }
+  ): Promise<PhysicalUnitMediaRecord> {
+    return db
+      .insertInto("physical_unit_media")
+      .values({
+        id: randomUUID(),
+        organization_id: input.organizationId,
+        property_id: input.propertyId,
+        physical_unit_id: input.physicalUnitId,
+        storage_provider: input.storageProvider,
+        storage_key: input.storageKey,
+        mime_type: input.mimeType,
+        alt_text: input.altText,
+        caption: input.caption,
+        sort_order: input.sortOrder,
+        status: "ACTIVE",
+        created_by_user_id: actorUserId
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  }
+
+  async findPhysicalUnitMedia(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    physicalUnitId: string,
+    mediaId: string
+  ): Promise<PhysicalUnitMediaRecord | undefined> {
+    return db
+      .selectFrom("physical_unit_media")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("physical_unit_id", "=", physicalUnitId)
+      .where("id", "=", mediaId)
+      .where("status", "=", "ACTIVE")
+      .executeTakeFirst();
+  }
+
+  async archivePhysicalUnitMedia(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    physicalUnitId: string,
+    mediaId: string
+  ): Promise<PhysicalUnitMediaRecord | undefined> {
+    return db
+      .updateTable("physical_unit_media")
+      .set({ status: "ARCHIVED", updated_at: new Date() })
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("physical_unit_id", "=", physicalUnitId)
+      .where("id", "=", mediaId)
+      .where("status", "=", "ACTIVE")
+      .returningAll()
+      .executeTakeFirst();
+  }
+
+  async listPhysicalUnitMedia(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string
+  ): Promise<PhysicalUnitMediaRecord[]> {
+    return db
+      .selectFrom("physical_unit_media")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("status", "=", "ACTIVE")
+      .orderBy("physical_unit_id")
       .orderBy("sort_order")
       .orderBy("created_at")
       .execute();

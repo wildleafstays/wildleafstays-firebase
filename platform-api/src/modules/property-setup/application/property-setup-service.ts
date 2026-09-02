@@ -15,6 +15,7 @@ import type {
 } from "../domain/property-setup.js";
 import {
   PropertySetupRepository,
+  type PhysicalUnitMediaRecord,
   type RoomCategoryMediaRecord
 } from "../infrastructure/property-setup-repository.js";
 import {
@@ -57,6 +58,32 @@ function presentRoomCategoryMedia(row: RoomCategoryMediaRecord): RoomCategoryMed
   };
 }
 
+export interface PhysicalUnitMediaView extends JsonObject {
+  id: string;
+  physicalUnitId: string;
+  storageProvider: string;
+  storageKey: string;
+  mimeType: string | null;
+  altText: string | null;
+  caption: string | null;
+  sortOrder: number;
+  status: string;
+}
+
+function presentPhysicalUnitMedia(row: PhysicalUnitMediaRecord): PhysicalUnitMediaView {
+  return {
+    id: row.id,
+    physicalUnitId: row.physical_unit_id,
+    storageProvider: row.storage_provider,
+    storageKey: row.storage_key,
+    mimeType: row.mime_type,
+    altText: row.alt_text,
+    caption: row.caption,
+    sortOrder: row.sort_order,
+    status: row.status
+  };
+}
+
 export interface RoomCategoryAmenityView extends JsonObject {
   roomCategoryId: string;
   amenityCode: string;
@@ -69,6 +96,7 @@ export interface PropertyLayoutResult extends JsonObject {
   physicalUnits: PhysicalUnitView[];
   roomCategoryAmenities: RoomCategoryAmenityView[];
   roomCategoryMedia: RoomCategoryMediaView[];
+  physicalUnitMedia: PhysicalUnitMediaView[];
 }
 
 export class PropertySetupService {
@@ -120,6 +148,27 @@ export class PropertySetupService {
 
     if (!category) {
       throw new NotFoundError("Room category not found");
+    }
+  }
+
+  async assertPhysicalUnitEditable(
+    db: DbExecutor,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    physicalUnitId: string
+  ): Promise<void> {
+    this.assertManage(actor, organizationId, propertyId);
+    await this.assertEditable(db, organizationId, propertyId);
+
+    const unit = await this.repository.findPhysicalUnit(
+      db,
+      organizationId,
+      propertyId,
+      physicalUnitId
+    );
+    if (!unit) {
+      throw new NotFoundError("Physical room not found");
     }
   }
 
@@ -386,6 +435,112 @@ export class PropertySetupService {
     return { media: view };
   }
 
+  async addPhysicalUnitMedia(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      physicalUnitId: string;
+      storageProvider: string;
+      storageKey: string;
+      mimeType: string | null;
+      altText: string | null;
+      caption: string | null;
+      sortOrder: number;
+    },
+    request: RequestMetadata
+  ): Promise<{ media: PhysicalUnitMediaView }> {
+    await this.assertPhysicalUnitEditable(
+      trx,
+      actor,
+      input.organizationId,
+      input.propertyId,
+      input.physicalUnitId
+    );
+
+    const media = await this.repository.addPhysicalUnitMedia(trx, actor.userId, input);
+    const view = presentPhysicalUnitMedia(media);
+
+    await new AuditService(trx).record({
+      actor,
+      organizationId: input.organizationId,
+      propertyId: input.propertyId,
+      action: "property.physical_unit.media.added",
+      entityType: "physical_unit_media",
+      entityId: media.id,
+      before: null,
+      after: view,
+      request
+    });
+
+    await new OutboxService(trx).enqueue({
+      aggregateType: "physical_unit",
+      aggregateId: input.physicalUnitId,
+      eventType: "property.physical_unit.media.added.v1",
+      payload: {
+        propertyId: input.propertyId,
+        physicalUnitId: input.physicalUnitId,
+        mediaId: media.id
+      }
+    });
+
+    return { media: view };
+  }
+
+  async archivePhysicalUnitMedia(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    physicalUnitId: string,
+    mediaId: string,
+    request: RequestMetadata
+  ): Promise<{ media: PhysicalUnitMediaView }> {
+    await this.assertPhysicalUnitEditable(trx, actor, organizationId, propertyId, physicalUnitId);
+
+    const before = await this.repository.findPhysicalUnitMedia(
+      trx,
+      organizationId,
+      propertyId,
+      physicalUnitId,
+      mediaId
+    );
+    if (!before) throw new NotFoundError("Room image not found");
+
+    const archived = await this.repository.archivePhysicalUnitMedia(
+      trx,
+      organizationId,
+      propertyId,
+      physicalUnitId,
+      mediaId
+    );
+    if (!archived) throw new NotFoundError("Room image not found");
+
+    const beforeView = presentPhysicalUnitMedia(before);
+    const afterView = presentPhysicalUnitMedia(archived);
+    await new AuditService(trx).record({
+      actor,
+      organizationId,
+      propertyId,
+      action: "property.physical_unit.media.archived",
+      entityType: "physical_unit_media",
+      entityId: mediaId,
+      before: beforeView,
+      after: afterView,
+      request
+    });
+
+    await new OutboxService(trx).enqueue({
+      aggregateType: "physical_unit",
+      aggregateId: physicalUnitId,
+      eventType: "property.physical_unit.media.archived.v1",
+      payload: { propertyId, physicalUnitId, mediaId }
+    });
+
+    return { media: afterView };
+  }
+
   async archiveRoomCategoryMedia(
     trx: Transaction<Database>,
     actor: ActorContext,
@@ -574,14 +729,16 @@ export class PropertySetupService {
       roomCategories,
       physicalUnits,
       roomCategoryAmenities,
-      roomCategoryMedia
+      roomCategoryMedia,
+      physicalUnitMedia
     ] = await Promise.all([
       this.repository.listStructures(db, organizationId, propertyId),
       this.repository.listFloors(db, organizationId, propertyId),
       this.repository.listRoomCategories(db, organizationId, propertyId),
       this.repository.listPhysicalUnits(db, organizationId, propertyId),
       this.repository.listRoomCategoryAmenities(db, organizationId, propertyId),
-      this.repository.listRoomCategoryMedia(db, organizationId, propertyId)
+      this.repository.listRoomCategoryMedia(db, organizationId, propertyId),
+      this.repository.listPhysicalUnitMedia(db, organizationId, propertyId)
     ]);
 
     return {
@@ -593,7 +750,8 @@ export class PropertySetupService {
         roomCategoryId: row.room_category_id,
         amenityCode: row.amenity_code
       })),
-      roomCategoryMedia: roomCategoryMedia.map(presentRoomCategoryMedia)
+      roomCategoryMedia: roomCategoryMedia.map(presentRoomCategoryMedia),
+      physicalUnitMedia: physicalUnitMedia.map(presentPhysicalUnitMedia)
     };
   }
 }

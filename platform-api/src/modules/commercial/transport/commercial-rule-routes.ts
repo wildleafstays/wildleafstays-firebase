@@ -505,6 +505,45 @@ export async function registerCommercialRuleRoutes(
   createPolicyRoute("fee-policies", "fee");
   createPolicyRoute("cancellation-policies", "cancellation");
 
+  app.delete<{ Params: PolicyParams }>(
+    `${base}/cancellation-policies/:policyId`,
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Commercial Rules"],
+        summary: "Archive an unused cancellation policy",
+        security: [{ bearerAuth: [] }],
+        params: policyParamsSchema,
+        headers: idempotencyHeaders
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      const key = requireIdempotencyKey(request.headers);
+      const result = await idempotency.execute(
+        {
+          scopeKey: `commercial.cancellation.policy.archive:${request.params.policyId}:user:${actor.userId}`,
+          key,
+          requestBody: {}
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await service.archiveCancellationPolicy(
+            trx,
+            actor,
+            request.params.organizationId,
+            request.params.propertyId,
+            request.params.policyId,
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
   app.post<{ Params: PolicyParams; Body: TaxVersionBody }>(
     `${base}/tax-policies/:policyId/versions`,
     {

@@ -1346,6 +1346,80 @@ label small {
   font-size: 0.85rem;
 }
 
+.room-photo-picker {
+  margin: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: #fff;
+}
+
+.room-photo-picker legend {
+  padding: 0 0.4rem;
+  font-weight: 700;
+}
+
+.physical-room-photo-manager {
+  margin-top: 0.35rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.55rem;
+}
+
+.physical-room-photo-manager summary {
+  cursor: pointer;
+  color: var(--forest);
+  font-weight: 700;
+}
+
+.physical-room-photo-form {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.physical-room-photo-form button {
+  min-height: 2.4rem;
+}
+
+.cancellation-policy-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.cancellation-policy-row {
+  padding: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: #fff;
+}
+
+.cancellation-policy-row.selected {
+  border-color: var(--forest);
+  box-shadow: inset 3px 0 var(--forest);
+}
+
+.cancellation-policy-row small {
+  display: block;
+  margin-top: 0.2rem;
+}
+
+.cancellation-policy-row button,
+.cancellation-rule-actions button {
+  width: auto;
+  min-height: 2.4rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.cancellation-rule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .room-category-media-list {
   margin-top: 0.25rem;
 }

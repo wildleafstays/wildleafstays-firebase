@@ -41,11 +41,21 @@ interface RoomCategoryMediaParams extends RoomCategoryParams {
   mediaId: string;
 }
 
+interface PhysicalUnitParams extends PropertyParams {
+  physicalUnitId: string;
+}
+
+interface PhysicalUnitMediaParams extends PhysicalUnitParams {
+  mediaId: string;
+}
+
 interface UploadRoomCategoryImageQuery {
   altText?: string;
   caption?: string;
   sortOrder?: number;
 }
+
+type UploadPhysicalUnitImageQuery = UploadRoomCategoryImageQuery;
 
 interface ManagedUploadHeaders {
   "idempotency-key": string;
@@ -150,6 +160,27 @@ const roomCategoryMediaParamsSchema = {
     organizationId: { type: "string", format: "uuid" },
     propertyId: { type: "string", format: "uuid" },
     roomCategoryId: { type: "string", format: "uuid" },
+    mediaId: { type: "string", format: "uuid" }
+  }
+} as const;
+
+const physicalUnitParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["organizationId", "propertyId", "physicalUnitId"],
+  properties: {
+    organizationId: { type: "string", format: "uuid" },
+    propertyId: { type: "string", format: "uuid" },
+    physicalUnitId: { type: "string", format: "uuid" }
+  }
+} as const;
+
+const physicalUnitMediaParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["organizationId", "propertyId", "physicalUnitId", "mediaId"],
+  properties: {
+    ...physicalUnitParamsSchema.properties,
     mediaId: { type: "string", format: "uuid" }
   }
 } as const;
@@ -703,6 +734,149 @@ export async function registerPropertySetupRoutes(
         void reply.header("idempotency-replayed", "true");
       }
 
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{
+    Params: PhysicalUnitParams;
+    Querystring: UploadPhysicalUnitImageQuery;
+    Headers: ManagedUploadHeaders;
+  }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/units/:physicalUnitId/uploads/images",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Property Setup"],
+        summary: "Upload an optimized photo for a physical room",
+        security: [{ bearerAuth: [] }],
+        params: physicalUnitParamsSchema,
+        headers: managedUploadHeaders,
+        consumes: ["multipart/form-data"],
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            altText: { type: "string", maxLength: 500 },
+            caption: { type: "string", maxLength: 1000 },
+            sortOrder: { type: "integer", minimum: 0, default: 0 }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      await service.assertPhysicalUnitEditable(
+        deps.db,
+        actor,
+        request.params.organizationId,
+        request.params.propertyId,
+        request.params.physicalUnitId
+      );
+
+      const key = requireIdempotencyKey(request.headers);
+      const part = await request.file();
+      if (!part || part.fieldname !== "file") {
+        throw new ValidationError("A single multipart file field named 'file' is required");
+      }
+
+      const contentSha256 = request.headers["x-content-sha256"];
+      const stored = await uploads.storePhysicalUnitImage({
+        actor,
+        organizationId: request.params.organizationId,
+        propertyId: request.params.propertyId,
+        physicalUnitId: request.params.physicalUnitId,
+        idempotencyKey: key,
+        contentType: part.mimetype,
+        contentSha256,
+        stream: part.file
+      });
+
+      if (part.file.truncated) {
+        throw new ValidationError("Uploaded image is too large", {
+          maxBytes: MAX_PROPERTY_IMAGE_BYTES
+        });
+      }
+
+      const fingerprint = {
+        physicalUnitId: request.params.physicalUnitId,
+        contentSha256,
+        contentType: part.mimetype,
+        altText: request.query.altText ?? null,
+        caption: request.query.caption ?? null,
+        sortOrder: request.query.sortOrder ?? 0
+      };
+      const result = await idempotency.execute(
+        {
+          scopeKey: `property.physical-unit.media.upload:${request.params.physicalUnitId}:user:${actor.userId}`,
+          key,
+          requestBody: fingerprint
+        },
+        async (trx) => ({
+          statusCode: 201,
+          body: await service.addPhysicalUnitMedia(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              physicalUnitId: request.params.physicalUnitId,
+              storageProvider: "GCS",
+              storageKey: stored.objectKey,
+              mimeType: stored.contentType,
+              altText: request.query.altText?.trim() || null,
+              caption: request.query.caption?.trim() || null,
+              sortOrder: request.query.sortOrder ?? 0
+            },
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      void reply.header("cache-control", "no-store");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.delete<{ Params: PhysicalUnitMediaParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/units/:physicalUnitId/media/:mediaId",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Property Setup"],
+        summary: "Archive a physical room photo",
+        security: [{ bearerAuth: [] }],
+        params: physicalUnitMediaParamsSchema,
+        headers: idempotencyHeaders
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      const key = requireIdempotencyKey(request.headers);
+      const result = await idempotency.execute(
+        {
+          scopeKey: `property.physical-unit.media.archive:${request.params.mediaId}:user:${actor.userId}`,
+          key,
+          requestBody: {}
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await service.archivePhysicalUnitMedia(
+            trx,
+            actor,
+            request.params.organizationId,
+            request.params.propertyId,
+            request.params.physicalUnitId,
+            request.params.mediaId,
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
       return reply.status(result.statusCode).send(result.body);
     }
   );

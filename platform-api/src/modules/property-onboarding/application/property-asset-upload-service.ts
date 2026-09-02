@@ -88,6 +88,10 @@ export interface ManagedRoomCategoryImageUploadInput extends ManagedImageUploadI
   roomCategoryId: string;
 }
 
+export interface ManagedPhysicalUnitImageUploadInput extends ManagedImageUploadInput {
+  physicalUnitId: string;
+}
+
 export interface ManagedDocumentUploadInput extends ManagedImageUploadInput {
   documentType: DocumentType;
   originalFilename: string;
@@ -186,6 +190,32 @@ export class PropertyAssetUploadService {
     const objectKey = `properties/${input.organizationId}/${input.propertyId}/room-categories/${input.roomCategoryId}/media/${stableObjectId(
       input,
       `room-category-image:${input.roomCategoryId}`
+    )}.${extension}`;
+
+    return translateStorageErrors(() =>
+      this.storage.store({
+        objectKey,
+        contentType: input.contentType,
+        expectedSha256: sha256,
+        maxBytes: MAX_PROPERTY_IMAGE_BYTES,
+        stream: verifyFileSignature(input.stream, input.contentType),
+        cacheControl: "public, max-age=31536000, immutable"
+      })
+    );
+  }
+
+  async storePhysicalUnitImage(
+    input: ManagedPhysicalUnitImageUploadInput
+  ): Promise<StoredPropertyAsset> {
+    const extension = IMAGE_TYPES.get(input.contentType);
+    if (!extension) {
+      throw new ValidationError("Room images must be JPEG, PNG, WebP or AVIF");
+    }
+
+    const sha256 = assertSha256(input.contentSha256);
+    const objectKey = `properties/${input.organizationId}/${input.propertyId}/physical-units/${input.physicalUnitId}/media/${stableObjectId(
+      input,
+      `physical-unit-image:${input.physicalUnitId}`
     )}.${extension}`;
 
     return translateStorageErrors(() =>

@@ -61,11 +61,14 @@ describe("managed property upload route contract", () => {
       "/v1/partner/organizations/{organizationId}/properties/{propertyId}/onboarding/media";
     const legacyDocumentPath =
       "/v1/partner/organizations/{organizationId}/properties/{propertyId}/onboarding/documents";
+    const physicalRoomImagePath =
+      "/v1/partner/organizations/{organizationId}/properties/{propertyId}/units/{physicalUnitId}/uploads/images";
 
     expect(document.paths[imagePath]?.["post"]).toBeDefined();
     expect(document.paths[documentPath]?.["post"]).toBeDefined();
     expect(document.paths[legacyMediaPath]?.["post"]).toBeUndefined();
     expect(document.paths[legacyDocumentPath]?.["post"]).toBeUndefined();
+    expect(document.paths[physicalRoomImagePath]?.["post"]).toBeDefined();
   });
 
   it("requires the file digest and idempotency key before upload handling", async () => {

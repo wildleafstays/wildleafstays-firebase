@@ -436,6 +436,56 @@ export class CommercialRuleService {
     return this.createPolicy(trx, actor, input, "cancellation", request);
   }
 
+  async archiveCancellationPolicy(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    policyId: string,
+    request: RequestMetadata
+  ): Promise<{ policy: CommercialPolicyView }> {
+    await this.property(trx, actor, organizationId, propertyId, Permissions.COMMERCIAL_MANAGE);
+    const policy = await this.rules.lockCancellationPolicy(
+      trx,
+      organizationId,
+      propertyId,
+      policyId
+    );
+    if (!policy) throw new NotFoundError("Cancellation policy not found");
+    if (policy.status !== "ACTIVE") return { policy: policyView(policy) };
+
+    const assignments = await this.rules.listCancellationAssignmentsForProperty(trx, propertyId);
+    const currentByPlan = new Map<string, (typeof assignments)[number]>();
+    for (const assignment of assignments) {
+      currentByPlan.set(assignment.rate_plan_id, assignment);
+    }
+    if (
+      Array.from(currentByPlan.values()).some(
+        (assignment) => assignment.cancellation_policy_id === policyId
+      )
+    ) {
+      throw new ConflictError(
+        "This cancellation rule is currently used by a rate plan. Assign another rule before deleting it."
+      );
+    }
+
+    const archived = await this.rules.archiveCancellationPolicy(trx, policyId, actor.userId);
+    const after = policyView(archived);
+    await this.materialChange(trx, actor, {
+      organizationId,
+      propertyId,
+      entityType: "CANCELLATION_POLICY",
+      entityId: policyId,
+      eventType: "CANCELLATION_POLICY_ARCHIVED",
+      action: "commercial.cancellation.policy.archived",
+      aggregateType: "cancellation_policy",
+      outboxType: "commercial.cancellation.policy.archived.v1",
+      after,
+      request
+    });
+    return { policy: after };
+  }
+
   async createTaxPolicyVersion(
     trx: Transaction<Database>,
     actor: ActorContext,

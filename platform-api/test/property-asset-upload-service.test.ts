@@ -85,6 +85,23 @@ describe("PropertyAssetUploadService", () => {
     expect(storage.bytes).toEqual(bytes);
   });
 
+  it("stores physical room photos in a room-scoped immutable namespace", async () => {
+    const storage = new RecordingStorage();
+    const bytes = Buffer.from("RIFF0000WEBPoptimized-room-image");
+    const physicalUnitId = "4f30c90b-e9d3-4f7a-a151-a98196aee8f7";
+    const result = await new PropertyAssetUploadService(storage).storePhysicalUnitImage({
+      ...baseInput(bytes),
+      physicalUnitId,
+      contentType: "image/webp"
+    });
+
+    expect(result.objectKey).toMatch(
+      new RegExp(`/physical-units/${physicalUnitId}/media/[a-f0-9]{64}\\.webp$`)
+    );
+    expect(storage.input?.maxBytes).toBe(MAX_PROPERTY_IMAGE_BYTES);
+    expect(storage.bytes).toEqual(bytes);
+  });
+
   it("places compliance PDFs in the private namespace and strips supplied paths", async () => {
     const storage = new RecordingStorage();
     const bytes = Buffer.from("%PDF-1.7 safe-test");

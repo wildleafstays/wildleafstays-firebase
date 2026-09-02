@@ -196,9 +196,31 @@ test("GST consent is read before any commercial configuration refresh", () => {
     "GST consent must be persisted before the form is refreshed",
   );
   assert.ok(
-    ratePlanValidation > consentWrite,
-    "missing rate plans must not prevent GST consent from being saved",
+    ratePlanValidation === -1,
+    "missing rate plans must not stop the remaining booking rules from being saved",
   );
+});
+
+test("physical rooms accept bulk optimized photos with optional details", () => {
+  const form = html.match(
+    /<form\b[^>]*id="physicalUnitForm"[^>]*>[\s\S]*?<\/form>/,
+  );
+  assert.ok(form, "physical room form must exist");
+  assert.match(form[0], /name="photos"[\s\S]*multiple/);
+  assert.match(form[0], /photoAltText/);
+  assert.match(form[0], /photoCaption/);
+  assert.match(js, /optimizeRoomPhoto/);
+  assert.match(js, /image\/webp/);
+  assert.match(js, /physicalUnitMedia/);
+});
+
+test("owners can add edit and delete multiple cancellation rules", () => {
+  assert.match(html, /id="addCancellationRuleButton"/);
+  assert.match(html, /id="deleteCancellationRuleButton"/);
+  assert.match(html, /id="cancellationPolicyList"/);
+  assert.match(js, /startNewCancellationRule/);
+  assert.match(js, /archiveSelectedCancellationRule/);
+  assert.match(js, /CANCEL_/);
 });
 
 test("guest age rules explain free infants and paid occupancy-counted children", () => {

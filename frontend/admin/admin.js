@@ -41,6 +41,7 @@ const state = {
   ownerResponsibility: null,
   platformGstRules: [],
   editorRatePlans: [],
+  selectedCancellationPolicyId: null,
   reservations: [],
   reservationCursor: null,
   operationsPropertyId: null,
@@ -195,6 +196,75 @@ async function managedUpload(path, file, operation) {
   });
   pendingUploadKeys.delete(fingerprint);
   return result;
+}
+
+async function optimizeRoomPhoto(file) {
+  if (!["image/jpeg", "image/png"].includes(file.type)) {
+    throw new Error(`"${file.name}" must be a JPG or PNG image.`);
+  }
+
+  const bitmap = await createImageBitmap(file);
+  try {
+    const maximumDimension = 2048;
+    const scale = Math.min(
+      1,
+      maximumDimension / Math.max(bitmap.width, bitmap.height),
+    );
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) throw new Error("This browser cannot optimize room photos.");
+    context.drawImage(bitmap, 0, 0, width, height);
+    const optimizedBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) =>
+          blob
+            ? resolve(blob)
+            : reject(new Error("The room photo could not be optimized.")),
+        "image/webp",
+        0.82,
+      );
+    });
+
+    if (optimizedBlob.size >= file.size && file.size <= 8 * 1024 * 1024) {
+      return file;
+    }
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "room-photo";
+    return new File([optimizedBlob], `${baseName}.webp`, {
+      type: "image/webp",
+      lastModified: file.lastModified,
+    });
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function uploadPhysicalUnitPhotos(
+  physicalUnitId,
+  files,
+  { altText = "", caption = "" } = {},
+) {
+  const query = new URLSearchParams();
+  if (altText) query.set("altText", altText);
+  if (caption) query.set("caption", caption);
+  const queryString = query.toString();
+
+  for (const [index, original] of files.entries()) {
+    const file = await optimizeRoomPhoto(original);
+    if (file.size > 8 * 1024 * 1024) {
+      throw new Error(`"${original.name}" remains larger than 8 MB.`);
+    }
+    const perPhotoQuery = new URLSearchParams(query);
+    perPhotoQuery.set("sortOrder", String(index));
+    await managedUpload(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/units/${physicalUnitId}/uploads/images?${perPhotoQuery.toString() || queryString}`,
+      file,
+      `physical-room-image-${physicalUnitId}-${index}`,
+    );
+  }
 }
 
 function textElement(tag, className, text) {
@@ -432,10 +502,21 @@ function commercialConfigurationMissing(configuration = state.commercial) {
   const activePlans = state.editorRatePlans.filter(
     (plan) => plan.status === "ACTIVE",
   );
+  const activeCancellationPolicyIds = new Set(
+    (configuration.cancellationPolicies || [])
+      .filter((policy) => policy.status === "ACTIVE")
+      .map((policy) => policy.id),
+  );
+  const latestCancellationByPlan = new Map();
+  for (const assignment of configuration.cancellationAssignments || []) {
+    latestCancellationByPlan.set(assignment.rate_plan_id, assignment);
+  }
   const assignedPlanIds = new Set(
-    (configuration.cancellationAssignments || []).map(
-      (assignment) => assignment.rate_plan_id,
-    ),
+    Array.from(latestCancellationByPlan.values())
+      .filter((assignment) =>
+        activeCancellationPolicyIds.has(assignment.cancellation_policy_id),
+      )
+      .map((assignment) => assignment.rate_plan_id),
   );
   const hasTax =
     settings?.tax_mode === "POLICIES" &&
@@ -1148,6 +1229,114 @@ function renderHotelGstRule() {
   checkbox.checked = Boolean(gst.accepted);
 }
 
+function currentCancellationAssignments() {
+  const currentByPlan = new Map();
+  for (const assignment of state.commercial?.cancellationAssignments || []) {
+    currentByPlan.set(assignment.rate_plan_id, assignment);
+  }
+  return currentByPlan;
+}
+
+function renderCancellationPolicyList(policies, selectedPolicy) {
+  const list = byId("cancellationPolicyList");
+  list.replaceChildren();
+  const currentAssignments = currentCancellationAssignments();
+
+  if (!policies.length) {
+    list.append(
+      textElement(
+        "p",
+        "muted",
+        "No cancellation rule has been saved yet. Complete the fields below and save booking rules.",
+      ),
+    );
+  }
+
+  for (const policy of policies) {
+    const appliedPlans = state.editorRatePlans.filter(
+      (plan) =>
+        currentAssignments.get(plan.id)?.cancellation_policy_id === policy.id,
+    );
+    const row = document.createElement("div");
+    row.className = "cancellation-policy-row";
+    row.classList.toggle("selected", policy.id === selectedPolicy?.id);
+    const copy = document.createElement("div");
+    copy.append(
+      textElement("strong", "", policy.name),
+      textElement(
+        "small",
+        "muted",
+        appliedPlans.length
+          ? `Used by ${appliedPlans.map((plan) => plan.name).join(", ")}`
+          : "Saved rule · not currently assigned to a rate plan",
+      ),
+    );
+    row.append(
+      copy,
+      button(
+        policy.id === selectedPolicy?.id ? "Editing" : "Edit",
+        () => {
+          state.selectedCancellationPolicyId = policy.id;
+          renderCommercialRules();
+        },
+        "button-secondary",
+      ),
+    );
+    list.append(row);
+  }
+
+  const deleteButton = byId("deleteCancellationRuleButton");
+  const selectedIsAssigned = selectedPolicy
+    ? Array.from(currentAssignments.values()).some(
+        (assignment) =>
+          assignment.cancellation_policy_id === selectedPolicy.id,
+      )
+    : false;
+  deleteButton.classList.toggle("hidden", !selectedPolicy);
+  deleteButton.disabled = !selectedPolicy || selectedIsAssigned;
+  deleteButton.title = selectedIsAssigned
+    ? "Assign a different cancellation rule to the rate plan before deleting this one."
+    : "Delete this saved cancellation rule";
+}
+
+function startNewCancellationRule() {
+  state.selectedCancellationPolicyId = null;
+  const form = byId("commercialRulesForm");
+  form.elements.cancellationPolicyId.value = "";
+  form.elements.cancellationPolicyName.value = "";
+  form.elements.freeCancellationDays.value = "7";
+  form.elements.lateCancellationPercent.value = "100";
+  form.elements.noShowPercent.value = "100";
+  form.elements.cancellationPolicyText.value = "";
+  renderCancellationPolicyList(
+    (state.commercial?.cancellationPolicies || []).filter(
+      (policy) => policy.status === "ACTIVE",
+    ),
+    null,
+  );
+  byId("deleteCancellationRuleButton").classList.add("hidden");
+  form.elements.cancellationPolicyName.focus();
+}
+
+async function archiveSelectedCancellationRule() {
+  const policyId = state.selectedCancellationPolicyId;
+  if (!policyId) return;
+  const policy = (state.commercial?.cancellationPolicies || []).find(
+    (item) => item.id === policyId,
+  );
+  if (!policy) return;
+  if (!window.confirm(`Delete the cancellation rule "${policy.name}"?`)) return;
+
+  const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/commercial`;
+  await api(`${base}/cancellation-policies/${policyId}`, {
+    method: "DELETE",
+    idempotencyKey: newIdempotencyKey("commercial-cancellation-archive"),
+  });
+  state.selectedCancellationPolicyId = null;
+  await refreshCommercialConfiguration();
+  showMessage(`Cancellation rule "${policy.name}" deleted.`);
+}
+
 function renderCommercialRules() {
   const form = byId("commercialRulesForm");
   form.reset();
@@ -1167,10 +1356,15 @@ function renderCommercialRules() {
   }
   renderGuestAgeExplanation();
 
+  const activeCancellationPolicies = (
+    configuration.cancellationPolicies || []
+  ).filter((policy) => policy.status === "ACTIVE");
   const cancellationPolicy =
-    configuration.cancellationPolicies?.find(
-      (policy) => policy.code === "STANDARD",
-    ) || configuration.cancellationPolicies?.[0];
+    activeCancellationPolicies.find(
+      (policy) => policy.id === state.selectedCancellationPolicyId,
+    ) || activeCancellationPolicies[0];
+  state.selectedCancellationPolicyId = cancellationPolicy?.id || null;
+  form.elements.cancellationPolicyId.value = cancellationPolicy?.id || "";
   const cancellationVersion = latestCommercialRow(
     configuration.cancellationVersions,
     "cancellation_policy_id",
@@ -1213,6 +1407,7 @@ function renderCommercialRules() {
       Number(noShowTier?.penalty_value || 0) / 100,
     );
   }
+  renderCancellationPolicyList(activeCancellationPolicies, cancellationPolicy);
 
   const feeEnabled = settings?.fee_mode === "POLICIES";
   form.elements.feeEnabled.checked = feeEnabled;
@@ -1421,6 +1616,78 @@ function renderRoomCategoryMedia(editable, categories) {
 
     list.append(row);
   }
+}
+
+function physicalUnitPhotoManager(unit, editable) {
+  const media = (state.layout?.physicalUnitMedia || []).filter(
+    (item) => item.physicalUnitId === unit.id,
+  );
+  const panel = document.createElement("details");
+  panel.className = "physical-room-photo-manager";
+  const summary = textElement(
+    "summary",
+    "",
+    `${media.length} room photo${media.length === 1 ? "" : "s"}`,
+  );
+  panel.append(summary);
+
+  const list = document.createElement("div");
+  list.className = "compact-list";
+  for (const item of media) {
+    const row = document.createElement("div");
+    row.className = "asset-row";
+    const copy = document.createElement("div");
+    copy.append(
+      textElement("strong", "", item.altText || "Room photo"),
+      textElement("small", "muted", item.caption || item.mimeType || "image"),
+    );
+    row.append(copy);
+    if (editable) {
+      row.append(
+        button(
+          "Remove",
+          () => archivePhysicalUnitMedia(unit.id, item.id),
+          "danger-button",
+        ),
+      );
+    }
+    list.append(row);
+  }
+  if (!media.length) {
+    list.append(textElement("p", "muted", "No photos added to this room."));
+  }
+  panel.append(list);
+
+  if (editable) {
+    const form = document.createElement("form");
+    form.className = "physical-room-photo-form";
+    form.innerHTML = `
+      <label>Add photos
+        <input name="photos" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple required />
+      </label>
+      <label>Description <input name="altText" maxlength="500" placeholder="Optional" /></label>
+      <label>Caption <input name="caption" maxlength="1000" placeholder="Optional" /></label>
+      <button type="submit">Upload selected photos</button>
+      <small>JPG/PNG images are optimized before upload.</small>
+    `;
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void run(async () => {
+        const files = Array.from(form.elements.photos.files || []);
+        if (!files.length) throw new Error("Choose one or more room photos.");
+        await uploadPhysicalUnitPhotos(unit.id, files, {
+          altText: form.elements.altText.value.trim(),
+          caption: form.elements.caption.value.trim(),
+        });
+        await refreshEditorData();
+        showMessage(
+          `${files.length} photo${files.length === 1 ? "" : "s"} added to ${unit.displayName || unit.unitCode}.`,
+        );
+      });
+    });
+    panel.append(form);
+  }
+  return panel;
 }
 
 function renderAccommodation(editable) {
@@ -1675,6 +1942,7 @@ function renderAccommodation(editable) {
         "muted",
         details.length ? details.join(" · ") : "No additional details",
       ),
+      physicalUnitPhotoManager(unit, editable),
     );
     physicalRoomList.append(roomCard);
   }
@@ -1848,6 +2116,13 @@ for (const name of ["infantMaxAge", "childMaxAge"]) {
     renderGuestAgeExplanation,
   );
 }
+byId("addCancellationRuleButton").addEventListener(
+  "click",
+  startNewCancellationRule,
+);
+byId("deleteCancellationRuleButton").addEventListener("click", () => {
+  void run(archiveSelectedCancellationRule);
+});
 
 byId("commercialRulesForm").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1870,6 +2145,8 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     const gstRulesAccepted = form.elements.gstRulesAccepted.checked;
     const cancellationPolicyNameInput =
       form.elements.cancellationPolicyName.value.trim();
+    const cancellationPolicyIdInput =
+      form.elements.cancellationPolicyId.value.trim();
     const cancellationPolicyTextInput =
       form.elements.cancellationPolicyText.value.trim();
     const feeNameInput = form.elements.feeName.value.trim();
@@ -1927,11 +2204,6 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     const activeRatePlans = state.editorRatePlans.filter(
       (plan) => plan.status === "ACTIVE",
     );
-    if (!activeRatePlans.length) {
-      throw new Error(
-        "GST rules were accepted. Set a base room rate in Rates & inventory before enabling online booking.",
-      );
-    }
 
     const currentGuestAge = latestCommercialRow(
       state.commercial?.guestAgeVersions,
@@ -1968,13 +2240,32 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
 
     const cancellationPolicyName =
       cancellationPolicyNameInput || "Standard cancellation";
-    const cancellationPolicy = await ensureCommercialPolicy({
-      collection: "cancellationPolicies",
-      suffix: "cancellation-policies",
-      code: "STANDARD",
-      name: cancellationPolicyName,
-      description: "Owner-managed cancellation and no-show terms.",
-    });
+    let cancellationPolicy = (
+      state.commercial?.cancellationPolicies || []
+    ).find(
+      (policy) =>
+        policy.id === cancellationPolicyIdInput &&
+        policy.status === "ACTIVE",
+    );
+    if (!cancellationPolicy) {
+      const code = `CANCEL_${Date.now().toString(36).toUpperCase()}`.slice(
+        0,
+        40,
+      );
+      const result = await idempotent(
+        `${base}/cancellation-policies`,
+        "POST",
+        `commercial-${code.toLowerCase()}-create`,
+        {
+          code,
+          name: cancellationPolicyName,
+          description: "Owner-managed cancellation and no-show terms.",
+        },
+      );
+      cancellationPolicy = result.policy;
+      state.selectedCancellationPolicyId = cancellationPolicy.id;
+      form.elements.cancellationPolicyId.value = cancellationPolicy.id;
+    }
     const generatedCancellationText = freeCancellationDays
       ? `Free cancellation until ${freeCancellationDays} day${freeCancellationDays === 1 ? "" : "s"} before check-in. Later cancellations are charged at ${lateCancellationPercent}% of the stay. No-shows are charged at ${noShowPercent}%.`
       : `Cancellations are charged at ${lateCancellationPercent}% of the stay. No-shows are charged at ${noShowPercent}%.`;
@@ -2141,7 +2432,9 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
 
     await refreshCommercialConfiguration();
     showMessage(
-      "Booking rules saved. Online-booking readiness has been refreshed.",
+      activeRatePlans.length
+        ? "Booking rules saved. Online-booking readiness has been refreshed."
+        : "Booking rules saved. Add a base room rate in Rates & inventory to finish online-booking setup.",
     );
   }).finally(() => {
     delete saveButton.dataset.saving;
@@ -2373,6 +2666,18 @@ async function archiveRoomCategoryMedia(roomCategoryId, mediaId) {
   showMessage("Room category photo removed.");
 }
 
+async function archivePhysicalUnitMedia(physicalUnitId, mediaId) {
+  await api(
+    `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/units/${physicalUnitId}/media/${mediaId}`,
+    {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey("physical-room-media-archive"),
+    },
+  );
+  await refreshEditorData();
+  showMessage("Room photo removed.");
+}
+
 byId("structureForm").addEventListener("submit", (event) => {
   event.preventDefault();
 
@@ -2494,6 +2799,9 @@ byId("physicalUnitForm").addEventListener("submit", (event) => {
   run(async () => {
     const form = event.currentTarget;
     const values = Object.fromEntries(new FormData(form));
+    const photos = Array.from(form.elements.photos.files || []);
+    const photoAltText = form.elements.photoAltText.value.trim();
+    const photoCaption = form.elements.photoCaption.value.trim();
     const roomName = values.roomName.trim();
     const viewLabel = values.viewLabel?.trim() || "";
     const floorId = values.floorId || "";
@@ -2527,7 +2835,7 @@ byId("physicalUnitForm").addEventListener("submit", (event) => {
 
     pendingPhysicalUnitCreateKeys.set(fingerprint, key);
 
-    await api(
+    const result = await api(
       `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/units`,
       {
         method: "POST",
@@ -2552,12 +2860,25 @@ byId("physicalUnitForm").addEventListener("submit", (event) => {
       },
     );
 
+    const physicalUnitId = result?.physicalUnit?.id;
+    if (!physicalUnitId) {
+      throw new Error("The room was created but its identifier was not returned.");
+    }
+    if (photos.length) {
+      await uploadPhysicalUnitPhotos(physicalUnitId, photos, {
+        altText: photoAltText,
+        caption: photoCaption,
+      });
+    }
+
     await refreshEditorData();
 
     form.reset();
     pendingPhysicalUnitCreateKeys.delete(fingerprint);
 
-    showMessage(`Room "${roomName}" added.`);
+    showMessage(
+      `Room "${roomName}" added${photos.length ? ` with ${photos.length} optimized photo${photos.length === 1 ? "" : "s"}` : ""}.`,
+    );
   });
 });
 
