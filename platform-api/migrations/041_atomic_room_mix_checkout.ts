@@ -111,11 +111,13 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 
   for (const table of ["room_mix_quotes", "room_mix_quote_items", "room_mix_inventory_holds"]) {
     await sql
-      .raw(`
+      .raw(
+        `
         create trigger ${table}_no_mutation
           before update or delete on ${table}
           for each row execute function prevent_quote_snapshot_mutation()
-      `)
+      `
+      )
       .execute(db);
   }
 }
