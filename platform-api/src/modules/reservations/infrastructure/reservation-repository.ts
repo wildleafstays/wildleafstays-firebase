@@ -4,17 +4,21 @@ import type { Database } from "../../../infrastructure/database/types.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import type {
   ReservationFinancialSnapshotView,
+  ReservationRoomMixFinancialSnapshotView,
   ReservationStatus,
   ReservationView
 } from "../domain/reservation.js";
 import type {
   ReservationFinancialSnapshotsTable,
+  ReservationRoomMixFinancialSnapshotsTable,
   ReservationLeadGuestSnapshotsTable,
   ReservationsTable
 } from "./reservation-database-types.js";
 
 export type ReservationRecord = Selectable<ReservationsTable>;
 export type ReservationFinancialSnapshotRecord = Selectable<ReservationFinancialSnapshotsTable>;
+export type ReservationRoomMixFinancialSnapshotRecord =
+  Selectable<ReservationRoomMixFinancialSnapshotsTable>;
 export type ReservationLeadGuestSnapshotRecord = Selectable<ReservationLeadGuestSnapshotsTable>;
 type DbExecutor = Kysely<Database> | Transaction<Database>;
 
@@ -91,6 +95,34 @@ function financialView(row: ReservationFinancialSnapshotRecord): ReservationFina
   };
 }
 
+function roomMixFinancialView(
+  row: ReservationRoomMixFinancialSnapshotRecord
+): ReservationRoomMixFinancialSnapshotView {
+  return {
+    roomMixReference: row.room_mix_reference,
+    productType: "ROOM_MIX",
+    productLabel: row.product_label,
+    arrivalDate: row.arrival_date,
+    departureDate: row.departure_date,
+    quantity: row.quantity,
+    currencyCode: row.currency_code,
+    grossAccommodationMinor: row.gross_accommodation_minor,
+    grossExtraGuestMinor: row.gross_extra_guest_minor,
+    accommodationDiscountMinor: row.accommodation_discount_minor,
+    extraGuestDiscountMinor: row.extra_guest_discount_minor,
+    discountMinor: row.discount_minor,
+    discountedAccommodationMinor: row.discounted_accommodation_minor,
+    discountedExtraGuestMinor: row.discounted_extra_guest_minor,
+    inclusiveFeeMinor: row.inclusive_fee_minor,
+    exclusiveFeeMinor: row.exclusive_fee_minor,
+    feeMinor: row.fee_minor,
+    inclusiveTaxMinor: row.inclusive_tax_minor,
+    exclusiveTaxMinor: row.exclusive_tax_minor,
+    taxMinor: row.tax_minor,
+    totalMinor: row.total_minor
+  };
+}
+
 export class ReservationRepository {
   async listForProperty(
     db: DbExecutor,
@@ -111,9 +143,14 @@ export class ReservationRepository {
         "guest.reservation_id",
         "reservation.id"
       )
-      .innerJoin(
+      .leftJoin(
         "reservation_financial_snapshots as financial",
         "financial.reservation_id",
+        "reservation.id"
+      )
+      .leftJoin(
+        "reservation_room_mix_financial_snapshots as room_mix_financial",
+        "room_mix_financial.reservation_id",
         "reservation.id"
       )
       .select([
@@ -125,7 +162,9 @@ export class ReservationRepository {
         "reservation.arrival_date",
         "reservation.departure_date",
         "reservation.product_type",
-        "financial.product_label",
+        sql<string>`coalesce(financial.product_label, room_mix_financial.product_label)`.as(
+          "product_label"
+        ),
         "reservation.room_category_id",
         "reservation.quantity",
         "reservation.currency_code",
@@ -184,9 +223,14 @@ export class ReservationRepository {
         "guest.reservation_id",
         "reservation.id"
       )
-      .innerJoin(
+      .leftJoin(
         "reservation_financial_snapshots as financial",
         "financial.reservation_id",
+        "reservation.id"
+      )
+      .leftJoin(
+        "reservation_room_mix_financial_snapshots as room_mix_financial",
+        "room_mix_financial.reservation_id",
         "reservation.id"
       )
       .select([
@@ -200,7 +244,9 @@ export class ReservationRepository {
         "reservation.arrival_date",
         "reservation.departure_date",
         "reservation.product_type",
-        "financial.product_label",
+        sql<string>`coalesce(financial.product_label, room_mix_financial.product_label)`.as(
+          "product_label"
+        ),
         "reservation.room_category_id",
         "reservation.quantity",
         "reservation.currency_code",
@@ -320,6 +366,21 @@ export class ReservationRepository {
       .where("organization_id", "=", organizationId)
       .where("property_id", "=", propertyId)
       .where("quote_id", "=", quoteId)
+      .executeTakeFirst();
+  }
+
+  async findByRoomMixQuote(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    roomMixQuoteId: string
+  ): Promise<ReservationRecord | undefined> {
+    return trx
+      .selectFrom("reservations")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("room_mix_quote_id", "=", roomMixQuoteId)
       .executeTakeFirst();
   }
 
@@ -446,6 +507,7 @@ export class ReservationRepository {
         reservation_reference: input.reservationReference,
         quote_id: input.quoteId,
         quote_inventory_hold_id: input.quoteInventoryHoldId,
+        room_mix_quote_id: null,
         inventory_hold_id: input.inventoryHoldId,
         status: "HELD",
         hold_expires_at: input.holdExpiresAt,
@@ -466,12 +528,73 @@ export class ReservationRepository {
       .executeTakeFirst();
   }
 
+  async createRoomMixReservation(
+    trx: Transaction<Database>,
+    input: {
+      organizationId: string;
+      propertyId: string;
+      reservationReference: string;
+      roomMixQuoteId: string;
+      inventoryHoldId: string;
+      holdExpiresAt: Date;
+      arrivalDate: string;
+      departureDate: string;
+      quantity: number;
+      currencyCode: string;
+      totalMinor: number;
+      createdByUserId: string | null;
+      request: RequestMetadata;
+    }
+  ): Promise<ReservationRecord | undefined> {
+    return trx
+      .insertInto("reservations")
+      .values({
+        id: randomUUID(),
+        organization_id: input.organizationId,
+        property_id: input.propertyId,
+        reservation_reference: input.reservationReference,
+        quote_id: null,
+        quote_inventory_hold_id: null,
+        room_mix_quote_id: input.roomMixQuoteId,
+        inventory_hold_id: input.inventoryHoldId,
+        status: "HELD",
+        hold_expires_at: input.holdExpiresAt,
+        arrival_date: input.arrivalDate,
+        departure_date: input.departureDate,
+        product_type: "ROOM_MIX",
+        room_category_id: null,
+        quantity: input.quantity,
+        currency_code: input.currencyCode,
+        total_minor: input.totalMinor,
+        created_by_user_id: input.createdByUserId,
+        source: input.request.source,
+        request_id: input.request.requestId,
+        correlation_id: input.request.correlationId
+      })
+      .onConflict((conflict) => conflict.doNothing())
+      .returningAll()
+      .executeTakeFirst();
+  }
+
   async createFinancialSnapshot(
     trx: Transaction<Database>,
     input: Omit<ReservationFinancialSnapshotRecord, "id" | "created_at">
   ): Promise<void> {
     await trx
       .insertInto("reservation_financial_snapshots")
+      .values({
+        id: randomUUID(),
+        ...input
+      })
+      .execute();
+  }
+
+  async createRoomMixFinancialSnapshot(
+    trx: Transaction<Database>,
+    input: Omit<ReservationRoomMixFinancialSnapshotRecord, "id" | "created_at">
+  ): Promise<void> {
+    await trx
+      .insertInto("reservation_room_mix_financial_snapshots")
       .values({
         id: randomUUID(),
         ...input
@@ -544,6 +667,17 @@ export class ReservationRepository {
       .executeTakeFirstOrThrow();
   }
 
+  async roomMixFinancial(
+    trx: Transaction<Database>,
+    reservationId: string
+  ): Promise<ReservationRoomMixFinancialSnapshotRecord> {
+    return trx
+      .selectFrom("reservation_room_mix_financial_snapshots")
+      .selectAll()
+      .where("reservation_id", "=", reservationId)
+      .executeTakeFirstOrThrow();
+  }
+
   async leadGuest(
     trx: Transaction<Database>,
     reservationId: string
@@ -560,10 +694,11 @@ export class ReservationRepository {
     reservation: ReservationRecord,
     now: Date
   ): Promise<ReservationView> {
-    const [financial, leadGuest] = await Promise.all([
-      this.financial(trx, reservation.id),
-      this.leadGuest(trx, reservation.id)
-    ]);
+    const leadGuest = await this.leadGuest(trx, reservation.id);
+    const financial =
+      reservation.product_type === "ROOM_MIX"
+        ? roomMixFinancialView(await this.roomMixFinancial(trx, reservation.id))
+        : financialView(await this.financial(trx, reservation.id));
 
     return {
       id: reservation.id,
@@ -572,13 +707,14 @@ export class ReservationRepository {
       propertyId: reservation.property_id,
       quoteId: reservation.quote_id,
       quoteInventoryHoldId: reservation.quote_inventory_hold_id,
+      roomMixQuoteId: reservation.room_mix_quote_id,
       inventoryHoldId: reservation.inventory_hold_id,
       status: reservation.status as ReservationStatus,
       holdExpiresAt: reservation.hold_expires_at.toISOString(),
       holdExpired: reservation.hold_expires_at <= now,
       arrivalDate: reservation.arrival_date,
       departureDate: reservation.departure_date,
-      productType: reservation.product_type as "ROOM_CATEGORY" | "FULL_PROPERTY",
+      productType: reservation.product_type as "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX",
       roomCategoryId: reservation.room_category_id,
       quantity: reservation.quantity,
       currencyCode: reservation.currency_code,
@@ -588,7 +724,7 @@ export class ReservationRepository {
         email: leadGuest.email,
         phone: leadGuest.phone_e164
       },
-      financial: financialView(financial),
+      financial,
       createdAt: reservation.created_at.toISOString()
     };
   }
