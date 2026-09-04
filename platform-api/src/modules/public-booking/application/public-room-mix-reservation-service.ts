@@ -127,11 +127,7 @@ export class PublicRoomMixReservationService {
 
     const now = this.now();
     const holdExpiresAt = new Date(hold.expiresAt);
-    if (
-      roomMix.expires_at <= now ||
-      holdExpiresAt <= now ||
-      holdExpiresAt > roomMix.expires_at
-    ) {
+    if (roomMix.expires_at <= now || holdExpiresAt <= now || holdExpiresAt > roomMix.expires_at) {
       throw new ConflictError("The mixed-room quote or inventory hold has expired", {
         roomMixQuoteId: roomMix.id,
         roomMixExpiresAt: roomMix.expires_at.toISOString(),
