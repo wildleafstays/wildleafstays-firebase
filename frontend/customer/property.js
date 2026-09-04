@@ -35,6 +35,8 @@ const state = {
   bookingMode: requestedMode,
   availabilityTimer: null,
   availabilityRequestVersion: 0,
+  galleryMedia: [],
+  galleryIndex: 0,
 };
 
 if (!publicSlug) {
@@ -67,6 +69,24 @@ function wireEvents() {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     void searchAvailability();
+  });
+
+  const photoDialog = document.querySelector("#propertyPhotoDialog");
+  document
+    .querySelector("#photoDialogClose")
+    ?.addEventListener("click", () => photoDialog?.close());
+  document
+    .querySelector("#photoDialogPrev")
+    ?.addEventListener("click", () => stepPropertyPhoto(-1));
+  document
+    .querySelector("#photoDialogNext")
+    ?.addEventListener("click", () => stepPropertyPhoto(1));
+  photoDialog?.addEventListener("click", (event) => {
+    if (event.target === photoDialog) photoDialog.close();
+  });
+  photoDialog?.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") stepPropertyPhoto(-1);
+    if (event.key === "ArrowRight") stepPropertyPhoto(1);
   });
 }
 
@@ -177,6 +197,7 @@ function renderProperty(property) {
     fact("Check-out", formatTime(property.checkOutTime) || "Contact property"),
   );
 
+  renderPropertyGallery(property);
   renderStayConfiguration(property.roomCategories || []);
 
   const amenities = document.querySelector("#amenities");
@@ -202,6 +223,98 @@ function renderProperty(property) {
     );
 
   renderPolicies(property.policies);
+}
+
+
+function renderPropertyGallery(property) {
+  const gallery = document.querySelector("#propertyGallery");
+  if (!gallery) return;
+
+  const media = (property.media || []).filter(
+    (item) => item.mediaType === "IMAGE" && item.id,
+  );
+  state.galleryMedia = media;
+  state.galleryIndex = 0;
+  gallery.replaceChildren();
+
+  if (!media.length) {
+    gallery.classList.add("hidden");
+    return;
+  }
+
+  gallery.classList.remove("hidden");
+  const grid = element("div", "property-gallery-grid");
+
+  media.slice(0, 3).forEach((item, index) => {
+    const tile = element("button", "property-gallery-tile");
+    tile.type = "button";
+    tile.setAttribute(
+      "aria-label",
+      item.caption
+        ? `View photo: ${item.caption}`
+        : `View property photo ${index + 1}`,
+    );
+
+    const image = element("img");
+    image.src = propertyMediaUrl(item.id);
+    image.alt = item.altText || item.caption || `${property.name} photo ${index + 1}`;
+    image.loading = index === 0 ? "eager" : "lazy";
+    image.decoding = "async";
+    tile.append(image);
+    tile.addEventListener("click", () => openPropertyPhoto(index));
+    grid.append(tile);
+  });
+
+  gallery.append(grid);
+
+  const more = element(
+    "button",
+    "property-gallery-more",
+    media.length === 1 ? "View photo" : `View all ${media.length} photos`,
+  );
+  more.type = "button";
+  more.addEventListener("click", () => openPropertyPhoto(0));
+  gallery.append(more);
+}
+
+function openPropertyPhoto(index) {
+  if (!state.galleryMedia.length) return;
+  state.galleryIndex =
+    (index + state.galleryMedia.length) % state.galleryMedia.length;
+  renderPropertyPhotoDialog();
+
+  const dialog = document.querySelector("#propertyPhotoDialog");
+  if (dialog && !dialog.open) dialog.showModal();
+}
+
+function stepPropertyPhoto(direction) {
+  if (!state.galleryMedia.length) return;
+  state.galleryIndex =
+    (state.galleryIndex + direction + state.galleryMedia.length) %
+    state.galleryMedia.length;
+  renderPropertyPhotoDialog();
+}
+
+function renderPropertyPhotoDialog() {
+  const item = state.galleryMedia[state.galleryIndex];
+  if (!item) return;
+
+  const image = document.querySelector("#photoDialogImage");
+  const counter = document.querySelector("#photoDialogCounter");
+  const caption = document.querySelector("#photoDialogCaption");
+  if (!image || !counter || !caption) return;
+
+  image.src = propertyMediaUrl(item.id);
+  image.alt =
+    item.altText ||
+    item.caption ||
+    `${state.property?.name || "Wildleaf property"} photo ${state.galleryIndex + 1}`;
+  counter.textContent = `${state.galleryIndex + 1} / ${state.galleryMedia.length}`;
+  caption.textContent = item.caption || item.altText || "";
+}
+
+function propertyMediaUrl(mediaId) {
+  return `/v1/public/properties/${encodeURIComponent(publicSlug)}/media/${encodeURIComponent(mediaId)}`;
 }
 
 function configureBookingMode(property) {
