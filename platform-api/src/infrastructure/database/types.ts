@@ -65,7 +65,6 @@ import type {
 } from "../../modules/quotes/infrastructure/quote-promotion-database-types.js";
 import type { QuoteInventoryHoldsTable } from "../../modules/quotes/infrastructure/quote-hold-database-types.js";
 import type {
-  ReservationRoomMixItemsTable,
   RoomMixInventoryHoldsTable,
   RoomMixQuoteItemsTable,
   RoomMixQuotesTable
@@ -561,7 +560,6 @@ export interface Database {
   room_mix_quote_items: RoomMixQuoteItemsTable;
   room_mix_inventory_holds: RoomMixInventoryHoldsTable;
   reservations: ReservationsTable;
-  reservation_room_mix_items: ReservationRoomMixItemsTable;
   reservation_financial_snapshots: ReservationFinancialSnapshotsTable;
   reservation_lead_guest_snapshots: ReservationLeadGuestSnapshotsTable;
   reservation_status_history: ReservationStatusHistoryTable;
