@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { PublicAvailabilityOptionView, PublicAvailabilityView } from "../src/modules/public-booking/domain/public-availability.js";
+import type {
+  PublicAvailabilityOptionView,
+  PublicAvailabilityView
+} from "../src/modules/public-booking/domain/public-availability.js";
 import type { PublicPropertyDetailView } from "../src/modules/public-booking/domain/public-catalog.js";
 import { PublicRoomRecommendationService } from "../src/modules/public-booking/application/public-room-recommendation-service.js";
 import type { PublicCatalogService } from "../src/modules/public-booking/application/public-catalog-service.js";
