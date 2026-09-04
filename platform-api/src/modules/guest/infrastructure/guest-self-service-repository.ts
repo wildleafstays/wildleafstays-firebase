@@ -1,4 +1,4 @@
-import type { Insertable, Kysely, Selectable, Transaction } from "kysely";
+import { sql, type Insertable, type Kysely, type Selectable, type Transaction } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import type {
   GuestReservationLinkSource,
@@ -93,9 +93,14 @@ export class GuestSelfServiceRepository {
       .selectFrom("guest_reservation_links as link")
       .innerJoin("reservations as reservation", "reservation.id", "link.reservation_id")
       .innerJoin("properties as property", "property.id", "reservation.property_id")
-      .innerJoin(
+      .leftJoin(
         "reservation_financial_snapshots as financial",
         "financial.reservation_id",
+        "reservation.id"
+      )
+      .leftJoin(
+        "reservation_room_mix_financial_snapshots as room_mix_financial",
+        "room_mix_financial.reservation_id",
         "reservation.id"
       )
       .innerJoin(
@@ -114,7 +119,9 @@ export class GuestSelfServiceRepository {
         "reservation.arrival_date",
         "reservation.departure_date",
         "reservation.product_type",
-        "financial.product_label",
+        sql<string>`coalesce(financial.product_label, room_mix_financial.product_label)`.as(
+          "product_label"
+        ),
         "reservation.room_category_id",
         "reservation.quantity",
         "reservation.currency_code",
@@ -154,9 +161,14 @@ export class GuestSelfServiceRepository {
       .selectFrom("guest_reservation_links as link")
       .innerJoin("reservations as reservation", "reservation.id", "link.reservation_id")
       .innerJoin("properties as property", "property.id", "reservation.property_id")
-      .innerJoin(
+      .leftJoin(
         "reservation_financial_snapshots as financial",
         "financial.reservation_id",
+        "reservation.id"
+      )
+      .leftJoin(
+        "reservation_room_mix_financial_snapshots as room_mix_financial",
+        "room_mix_financial.reservation_id",
         "reservation.id"
       )
       .innerJoin(
@@ -175,7 +187,9 @@ export class GuestSelfServiceRepository {
         "reservation.arrival_date",
         "reservation.departure_date",
         "reservation.product_type",
-        "financial.product_label",
+        sql<string>`coalesce(financial.product_label, room_mix_financial.product_label)`.as(
+          "product_label"
+        ),
         "reservation.room_category_id",
         "reservation.quantity",
         "reservation.currency_code",
