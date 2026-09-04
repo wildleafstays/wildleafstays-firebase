@@ -88,3 +88,15 @@ test("property page presents published property media as an immersive photo tour
   assert.match(propertySource, /View all \$\{media\.length\} photos/);
   assert.match(propertySource, /function propertyMediaUrl\(mediaId\)/);
 });
+
+
+test("hotel property page can present smart mixed-room recommendations without bypassing checkout safety", () => {
+  assert.match(propertyHtml, /id="smartMatchSection"/);
+  assert.match(propertyHtml, /id="smartRecommendations"/);
+  assert.match(propertySource, /room-recommendations/);
+  assert.match(propertySource, /function partyTotals\(\)/);
+  assert.match(propertySource, /function smartRecommendationCard\(/);
+  assert.match(propertySource, /singleCheckoutSupported/);
+  assert.match(propertySource, /action\.disabled = !singleCheckoutSupported/);
+  assert.match(propertySource, /Estimated room and extra-guest total/);
+});
