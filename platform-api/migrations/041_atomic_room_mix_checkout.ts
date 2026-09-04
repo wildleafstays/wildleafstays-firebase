@@ -129,7 +129,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   `.execute(db);
 
   await sql`
-    do $
+    do $room_mix_constraints$
     declare
       constraint_row record;
     begin
@@ -143,7 +143,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
         execute format('alter table reservations drop constraint %I', constraint_row.conname);
       end loop;
     end
-    $
+    $room_mix_constraints$
   `.execute(db);
 
   await sql`
@@ -256,7 +256,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     create or replace function protect_reservation_identity()
     returns trigger
     language plpgsql
-    as $
+    as $room_mix_identity$
     begin
       if tg_op = 'DELETE' then
         raise exception 'reservations cannot be deleted';
@@ -310,18 +310,19 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 
       return new;
     end;
-    $
+    $room_mix_identity$
   `.execute(db);
+}
 
 export async function down(db: Kysely<unknown>): Promise<void> {
   await sql`
-    do $
+    do $room_mix_rollback$
     begin
       if exists (select 1 from reservations where product_type = 'ROOM_MIX') then
         raise exception 'cannot roll back room-mix checkout while ROOM_MIX reservations exist';
       end if;
     end
-    $
+    $room_mix_rollback$
   `.execute(db);
 
   await sql`
@@ -359,7 +360,7 @@ export async function down(db: Kysely<unknown>): Promise<void> {
     create or replace function protect_reservation_identity()
     returns trigger
     language plpgsql
-    as $
+    as $reservation_identity_restore$
     begin
       if tg_op = 'DELETE' then
         raise exception 'reservations cannot be deleted';
@@ -411,7 +412,7 @@ export async function down(db: Kysely<unknown>): Promise<void> {
 
       return new;
     end;
-    $
+    $reservation_identity_restore$
   `.execute(db);
 
   for (const table of ["room_mix_inventory_holds", "room_mix_quote_items", "room_mix_quotes"]) {
