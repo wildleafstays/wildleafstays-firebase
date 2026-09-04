@@ -137,6 +137,25 @@ export class RevenueRecognitionScheduleService {
     },
     request: RequestMetadata
   ): Promise<RevenueRecognitionScheduleResult> {
+    const reservationIdentity = await trx
+      .selectFrom("reservations")
+      .select(["id", "product_type"])
+      .where("organization_id", "=", input.organizationId)
+      .where("property_id", "=", input.propertyId)
+      .where("id", "=", input.reservationId)
+      .executeTakeFirst();
+
+    if (!reservationIdentity) throw new NotFoundError("Reservation not found");
+    if (reservationIdentity.product_type === "ROOM_MIX") {
+      throw new ConflictError(
+        "Room-mix revenue recognition requires the mixed-booking accounting schedule",
+        {
+          reservationId: input.reservationId,
+          manualReviewRequired: true
+        }
+      );
+    }
+
     const source = await this.revenue.sourceForReservation(
       trx,
       input.organizationId,
