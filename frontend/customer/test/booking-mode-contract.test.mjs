@@ -78,3 +78,13 @@ test("available rates use OTA-style room facts and calendar-backed totals", () =
   assert.match(propertySource, /option\.estimatedTotalMinor/);
   assert.match(propertySource, /GST and any additional fees shown before payment/);
 });
+
+
+test("property page presents published property media as an immersive photo tour", () => {
+  assert.match(propertyHtml, /id="propertyGallery"/);
+  assert.match(propertyHtml, /id="propertyPhotoDialog"/);
+  assert.match(propertySource, /function renderPropertyGallery\(property\)/);
+  assert.match(propertySource, /property\.media \|\| \[\]/);
+  assert.match(propertySource, /View all \$\{media\.length\} photos/);
+  assert.match(propertySource, /function propertyMediaUrl\(mediaId\)/);
+});
