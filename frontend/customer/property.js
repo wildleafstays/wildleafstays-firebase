@@ -19,6 +19,10 @@ const availabilityMessage = document.querySelector("#availabilityMessage");
 const quoteSection = document.querySelector("#quoteSection");
 const guestSection = document.querySelector("#guestSection");
 const statusSection = document.querySelector("#statusSection");
+const smartMatchSection = document.querySelector("#smartMatchSection");
+const smartMatchIntro = document.querySelector("#smartMatchIntro");
+const smartMatchMessage = document.querySelector("#smartMatchMessage");
+const smartRecommendations = document.querySelector("#smartRecommendations");
 const requestedMode = query.get("mode") === "villa" ? "villa" : "hotel";
 
 const state = {
@@ -37,6 +41,7 @@ const state = {
   availabilityRequestVersion: 0,
   galleryMedia: [],
   galleryIndex: 0,
+  recommendationRequestVersion: 0,
 };
 
 if (!publicSlug) {
@@ -136,7 +141,10 @@ async function loadProperty() {
     configureBookingMode(data.property);
     renderProperty(data.property);
     propertyContent.classList.remove("hidden");
-    await searchAvailability({ resetBooking: false });
+    await Promise.allSettled([
+      searchAvailability({ resetBooking: false }),
+      searchRoomRecommendations(),
+    ]);
 
     if (
       state.session.activeCheckout?.reservationId &&
@@ -332,6 +340,7 @@ function configureBookingMode(property) {
 
   const villa = state.bookingMode === "villa";
   document.querySelector("#unitCountField").classList.toggle("hidden", villa);
+  smartMatchSection?.classList.toggle("hidden", villa);
   document.querySelector("#backToResults").href =
     `/customer/?mode=${state.bookingMode}`;
   if (villa && state.units.length !== 1) setUnitCount(1);
@@ -473,6 +482,212 @@ function renderOccupancyUnits() {
       }
       return card;
     }),
+  );
+}
+
+function partyTotals() {
+  return state.units.reduce(
+    (totals, unit) => ({
+      adults: totals.adults + unit.adults,
+      children: totals.children + unit.childAges.length,
+    }),
+    { adults: 0, children: 0 },
+  );
+}
+
+async function searchRoomRecommendations() {
+  if (state.bookingMode !== "hotel" || !state.property) {
+    smartMatchSection?.classList.add("hidden");
+    return;
+  }
+
+  const requestVersion = ++state.recommendationRequestVersion;
+  const totals = partyTotals();
+  const nights = Math.max(
+    1,
+    Math.round(
+      (new Date(`${form.departureDate.value}T12:00:00`).getTime() -
+        new Date(`${form.arrivalDate.value}T12:00:00`).getTime()) /
+        86400000,
+    ),
+  );
+
+  smartMatchSection?.classList.remove("hidden");
+  if (smartMatchIntro) {
+    smartMatchIntro.textContent =
+      `${totals.adults} ${totals.adults === 1 ? "adult" : "adults"} · ` +
+      `${totals.children} ${totals.children === 1 ? "child" : "children"} · ` +
+      `${nights} ${nights === 1 ? "night" : "nights"}`;
+  }
+  if (smartMatchMessage) {
+    smartMatchMessage.textContent = "Finding the most suitable room combinations…";
+    smartMatchMessage.className = "inline-message message-info";
+  }
+  smartRecommendations?.replaceChildren();
+
+  try {
+    const data = await apiRequest(
+      `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-recommendations`,
+      {
+        method: "POST",
+        body: {
+          arrivalDate: form.arrivalDate.value,
+          departureDate: form.departureDate.value,
+          adults: totals.adults,
+          children: totals.children,
+        },
+      },
+    );
+    if (requestVersion !== state.recommendationRequestVersion) return;
+    renderRoomRecommendations(data);
+  } catch (error) {
+    if (requestVersion !== state.recommendationRequestVersion) return;
+    if (smartMatchMessage) {
+      smartMatchMessage.textContent = messageFor(
+        error,
+        "Smart room matching is temporarily unavailable.",
+      );
+      smartMatchMessage.className = "inline-message message-warning";
+    }
+  }
+}
+
+function renderRoomRecommendations(data) {
+  if (!smartRecommendations || !smartMatchMessage) return;
+
+  const recommendations = data.recommendations || [];
+  smartRecommendations.replaceChildren();
+
+  if (!recommendations.length) {
+    smartMatchMessage.textContent =
+      "No mixed room combination currently fits this group and these dates.";
+    smartMatchMessage.className = "inline-message message-warning";
+    return;
+  }
+
+  smartMatchMessage.textContent =
+    recommendations.length === 1
+      ? "1 suitable room combination found."
+      : `${recommendations.length} suitable room combinations found.`;
+  smartMatchMessage.className = "inline-message message-success";
+
+  recommendations.forEach((recommendation) => {
+    smartRecommendations.append(
+      smartRecommendationCard(recommendation, data.singleCheckoutSupported),
+    );
+  });
+}
+
+function smartRecommendationCard(recommendation, singleCheckoutSupported) {
+  const card = element(
+    "article",
+    `smart-recommendation-card${recommendation.rank === 1 ? " recommended" : ""}`,
+  );
+
+  const header = element("div", "smart-recommendation-card-head");
+  const heading = element("div");
+  heading.append(
+    element("p", "option-kicker", recommendationReasonLabel(recommendation.reason)),
+    element(
+      "h3",
+      "",
+      `${recommendation.roomCount} ${recommendation.roomCount === 1 ? "room" : "rooms"} for your group`,
+    ),
+  );
+  header.append(
+    heading,
+    element(
+      "strong",
+      "smart-recommendation-total",
+      money(recommendation.estimatedTotalMinor, recommendation.currencyCode),
+    ),
+  );
+
+  const rooms = element("div", "smart-room-mix");
+  recommendation.items.forEach((item) => {
+    const room = element("div", "smart-room-item");
+    if (item.coverMediaId) {
+      const image = element("img", "smart-room-image");
+      image.src = propertyMediaUrl(item.coverMediaId);
+      image.alt = item.roomCategoryName;
+      image.loading = "lazy";
+      image.decoding = "async";
+      room.append(image);
+    }
+
+    const copy = element("div", "smart-room-copy");
+    copy.append(
+      element(
+        "strong",
+        "",
+        `${item.quantity} × ${item.roomCategoryName}`,
+      ),
+      element(
+        "span",
+        "smart-room-plan",
+        `${mealPlanLabel(item.mealPlanCode)} · ${item.ratePlanName}`,
+      ),
+    );
+
+    const assignments = element("div", "smart-room-assignments");
+    item.units.forEach((unit, index) => {
+      const parts = [
+        `${unit.adults} ${unit.adults === 1 ? "adult" : "adults"}`,
+      ];
+      if (unit.children) {
+        parts.push(
+          `${unit.children} ${unit.children === 1 ? "child" : "children"}`,
+        );
+      }
+      assignments.append(
+        element(
+          "span",
+          "",
+          `Room ${index + 1}: ${parts.join(" + ")}`,
+        ),
+      );
+    });
+    copy.append(assignments);
+    room.append(copy);
+    rooms.append(room);
+  });
+
+  const footer = element("div", "smart-recommendation-footer");
+  footer.append(
+    element(
+      "small",
+      "tax-note",
+      "Estimated room and extra-guest total. Final GST, fees and promotions are calculated in the exact quote.",
+    ),
+  );
+
+  const action = element(
+    "button",
+    "button button-primary smart-mix-action",
+    singleCheckoutSupported ? "Book this room mix" : "Room mix selected",
+  );
+  action.type = "button";
+  action.disabled = !singleCheckoutSupported;
+  if (!singleCheckoutSupported) {
+    action.setAttribute(
+      "title",
+      "Mixed room categories require one atomic Wildleaf checkout before this option can be booked.",
+    );
+  }
+  footer.append(action);
+
+  card.append(header, rooms, footer);
+  return card;
+}
+
+function recommendationReasonLabel(reason) {
+  return (
+    {
+      BEST_VALUE: "Best value",
+      FEWER_ROOMS: "Fewer rooms",
+      MORE_SPACE: "More space",
+      ALTERNATIVE: "Another good match",
+    }[reason] || "Recommended"
   );
 }
 
@@ -1166,6 +1381,7 @@ function scheduleAvailabilitySearch() {
   state.availabilityTimer = window.setTimeout(() => {
     state.availabilityTimer = null;
     void searchAvailability({ resetBooking: false });
+    void searchRoomRecommendations();
   }, 350);
 }
 
