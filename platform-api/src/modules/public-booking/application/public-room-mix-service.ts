@@ -310,7 +310,7 @@ export class PublicRoomMixService {
       totalMinor: root.total_minor,
       expiresAt: root.expires_at.toISOString(),
       holdEligible: true,
-      checkoutSupported: false,
+      checkoutSupported: true,
       items
     };
 
