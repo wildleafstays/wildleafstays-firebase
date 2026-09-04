@@ -50,7 +50,7 @@ export interface PublicRoomMixQuoteView extends JsonObject {
   totalMinor: number;
   expiresAt: string;
   holdEligible: true;
-  checkoutSupported: false;
+  checkoutSupported: true;
   items: PublicRoomMixQuoteItemView[];
 }
 
