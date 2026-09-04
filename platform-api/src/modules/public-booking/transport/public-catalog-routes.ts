@@ -23,11 +23,13 @@ import { PublicCatalogService } from "../application/public-catalog-service.js";
 import { PublicCheckoutStatusService } from "../application/public-checkout-status-service.js";
 import { PublicCheckoutService } from "../application/public-checkout-service.js";
 import { PublicQuoteService } from "../application/public-quote-service.js";
+import { PublicRoomRecommendationService } from "../application/public-room-recommendation-service.js";
 import { PublicCatalogRepository } from "../infrastructure/public-catalog-repository.js";
 import type { PublicAvailabilityRequest } from "../domain/public-availability.js";
 import type { PublicCheckoutRequest } from "../domain/public-checkout.js";
 import type { PublicCheckoutStatusRequest } from "../domain/public-checkout-status.js";
 import type { PublicQuoteRequest } from "../domain/public-quote.js";
+import type { PublicRoomRecommendationRequest } from "../domain/public-room-recommendation.js";
 export interface PublicCatalogRouteDependencies {
   db: Kysely<Database>;
   authentication?: AuthenticationDependencies;
@@ -339,6 +341,133 @@ const publicAvailabilityResponseSchema = {
     options: {
       type: "array",
       items: publicAvailabilityOptionSchema
+    }
+  }
+} as const;
+
+const publicRecommendationUnitSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["adults", "children"],
+  properties: {
+    adults: { type: "integer", minimum: 1, maximum: 20 },
+    children: { type: "integer", minimum: 0, maximum: 20 }
+  }
+} as const;
+
+const publicRecommendationItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "roomCategoryId",
+    "roomCategoryName",
+    "coverMediaId",
+    "rateProductId",
+    "ratePlanCode",
+    "ratePlanName",
+    "mealPlanCode",
+    "quantity",
+    "maxOccupancy",
+    "units",
+    "estimatedTotalMinor"
+  ],
+  properties: {
+    roomCategoryId: { type: "string", format: "uuid" },
+    roomCategoryName: { type: "string" },
+    coverMediaId: nullableUuid,
+    rateProductId: { type: "string", format: "uuid" },
+    ratePlanCode: { type: "string" },
+    ratePlanName: { type: "string" },
+    mealPlanCode: { type: "string" },
+    quantity: { type: "integer", minimum: 1, maximum: 6 },
+    maxOccupancy: { type: "integer", minimum: 1 },
+    units: {
+      type: "array",
+      minItems: 1,
+      maxItems: 6,
+      items: publicRecommendationUnitSchema
+    },
+    estimatedTotalMinor: { type: "integer", minimum: 0 }
+  }
+} as const;
+
+const publicRecommendationSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "recommendationId",
+    "rank",
+    "reason",
+    "roomCount",
+    "adults",
+    "children",
+    "currencyCode",
+    "estimatedTotalMinor",
+    "occupancySlack",
+    "items"
+  ],
+  properties: {
+    recommendationId: { type: "string" },
+    rank: { type: "integer", minimum: 1 },
+    reason: {
+      type: "string",
+      enum: ["BEST_VALUE", "FEWER_ROOMS", "MORE_SPACE", "ALTERNATIVE"]
+    },
+    roomCount: { type: "integer", minimum: 1, maximum: 6 },
+    adults: { type: "integer", minimum: 1, maximum: 20 },
+    children: { type: "integer", minimum: 0, maximum: 20 },
+    currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+    estimatedTotalMinor: { type: "integer", minimum: 0 },
+    occupancySlack: { type: "integer", minimum: 0 },
+    items: {
+      type: "array",
+      minItems: 1,
+      maxItems: 6,
+      items: publicRecommendationItemSchema
+    }
+  }
+} as const;
+
+const publicRecommendationResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "property",
+    "search",
+    "pricingScope",
+    "exactCommercialPriceIncluded",
+    "singleCheckoutSupported",
+    "recommendations"
+  ],
+  properties: {
+    property: {
+      type: "object",
+      additionalProperties: false,
+      required: ["publicSlug", "name"],
+      properties: {
+        publicSlug: { type: "string" },
+        name: { type: "string" }
+      }
+    },
+    search: {
+      type: "object",
+      additionalProperties: false,
+      required: ["arrivalDate", "departureDate", "adults", "children", "maxRooms"],
+      properties: {
+        arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        adults: { type: "integer", minimum: 1, maximum: 20 },
+        children: { type: "integer", minimum: 0, maximum: 20 },
+        maxRooms: { type: "integer", minimum: 1, maximum: 6 }
+      }
+    },
+    pricingScope: { type: "string", const: "BASE_RATE_AND_EXTRA_GUEST_ONLY" },
+    exactCommercialPriceIncluded: { type: "boolean", const: false },
+    singleCheckoutSupported: { type: "boolean", const: false },
+    recommendations: {
+      type: "array",
+      maxItems: 5,
+      items: publicRecommendationSchema
     }
   }
 } as const;
@@ -893,6 +1022,7 @@ export async function registerPublicCatalogRoutes(
   const catalogRepository = new PublicCatalogRepository();
   const availabilityService = new PublicAvailabilityService();
   const publicQuoteService = new PublicQuoteService();
+  const roomRecommendationService = new PublicRoomRecommendationService();
   const publicCheckoutStatusService = new PublicCheckoutStatusService(
     deps.razorpayPaymentRecoveryGateway
       ? new RazorpayPaymentRecoveryService(deps.db, deps.razorpayPaymentRecoveryGateway)
@@ -1108,6 +1238,58 @@ export async function registerPublicCatalogRoutes(
     async (request, reply) => {
       setPublicNoStore(reply);
       return availabilityService.search(deps.db, request.params.publicSlug, request.body);
+    }
+  );
+
+  app.post<{ Params: PublicPropertyParams; Body: PublicRoomRecommendationRequest }>(
+    "/v1/public/properties/:publicSlug/room-recommendations",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Recommend mixed room-category combinations for a guest party",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            }
+          }
+        },
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["arrivalDate", "departureDate", "adults", "children"],
+          properties: {
+            arrivalDate: {
+              type: "string",
+              pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            departureDate: {
+              type: "string",
+              pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            adults: { type: "integer", minimum: 1, maximum: 20 },
+            children: { type: "integer", minimum: 0, maximum: 20 },
+            maxRooms: { type: "integer", minimum: 1, maximum: 6 }
+          }
+        },
+        response: {
+          200: publicRecommendationResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      return roomRecommendationService.recommend(
+        deps.db,
+        request.params.publicSlug,
+        request.body
+      );
     }
   );
 
