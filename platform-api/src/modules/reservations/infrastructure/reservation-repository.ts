@@ -65,7 +65,7 @@ function financialView(row: ReservationFinancialSnapshotRecord): ReservationFina
     mealPlanCode: row.meal_plan_code,
     rateProductId: row.rate_product_id,
     rateProductVersion: row.rate_product_version,
-    productType: row.product_type as "ROOM_CATEGORY" | "FULL_PROPERTY",
+    productType: row.product_type as "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX",
     productLabel: row.product_label,
     roomCategoryId: row.room_category_id,
     arrivalDate: row.arrival_date,
@@ -323,6 +323,21 @@ export class ReservationRepository {
       .executeTakeFirst();
   }
 
+  async findByRoomMixQuote(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    roomMixQuoteId: string
+  ): Promise<ReservationRecord | undefined> {
+    return trx
+      .selectFrom("reservations")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("room_mix_quote_id", "=", roomMixQuoteId)
+      .executeTakeFirst();
+  }
+
   async findById(
     trx: Transaction<Database>,
     organizationId: string,
@@ -422,13 +437,15 @@ export class ReservationRepository {
       organizationId: string;
       propertyId: string;
       reservationReference: string;
-      quoteId: string;
-      quoteInventoryHoldId: string;
+      quoteId: string | null;
+      quoteInventoryHoldId: string | null;
+      roomMixQuoteId?: string | null;
+      roomMixInventoryHoldId?: string | null;
       inventoryHoldId: string;
       holdExpiresAt: Date;
       arrivalDate: string;
       departureDate: string;
-      productType: "ROOM_CATEGORY" | "FULL_PROPERTY";
+      productType: "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX";
       roomCategoryId: string | null;
       quantity: number;
       currencyCode: string;
@@ -446,6 +463,8 @@ export class ReservationRepository {
         reservation_reference: input.reservationReference,
         quote_id: input.quoteId,
         quote_inventory_hold_id: input.quoteInventoryHoldId,
+        room_mix_quote_id: input.roomMixQuoteId ?? null,
+        room_mix_inventory_hold_id: input.roomMixInventoryHoldId ?? null,
         inventory_hold_id: input.inventoryHoldId,
         status: "HELD",
         hold_expires_at: input.holdExpiresAt,
@@ -572,13 +591,15 @@ export class ReservationRepository {
       propertyId: reservation.property_id,
       quoteId: reservation.quote_id,
       quoteInventoryHoldId: reservation.quote_inventory_hold_id,
+      roomMixQuoteId: reservation.room_mix_quote_id,
+      roomMixInventoryHoldId: reservation.room_mix_inventory_hold_id,
       inventoryHoldId: reservation.inventory_hold_id,
       status: reservation.status as ReservationStatus,
       holdExpiresAt: reservation.hold_expires_at.toISOString(),
       holdExpired: reservation.hold_expires_at <= now,
       arrivalDate: reservation.arrival_date,
       departureDate: reservation.departure_date,
-      productType: reservation.product_type as "ROOM_CATEGORY" | "FULL_PROPERTY",
+      productType: reservation.product_type as "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX",
       roomCategoryId: reservation.room_category_id,
       quantity: reservation.quantity,
       currencyCode: reservation.currency_code,
