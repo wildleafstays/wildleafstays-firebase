@@ -56,15 +56,3 @@ export interface RoomMixInventoryHoldsTable {
   correlation_id: string;
   created_at: Generated<Date>;
 }
-
-export interface ReservationRoomMixItemsTable {
-  id: Generated<string>;
-  reservation_id: string;
-  room_mix_quote_id: string;
-  room_mix_quote_item_id: string;
-  quote_id: string;
-  organization_id: string;
-  property_id: string;
-  item_index: number;
-  created_at: Generated<Date>;
-}
