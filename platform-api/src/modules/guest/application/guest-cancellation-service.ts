@@ -93,6 +93,16 @@ export class GuestCancellationService {
       throw new NotFoundError("Reservation not found");
     }
 
+    if (reservation.product_type === "ROOM_MIX") {
+      throw new ConflictError(
+        "Mixed-room self-service cancellation is not available yet; please contact Wildleaf support",
+        {
+          reservationId: reservation.id,
+          manualReviewRequired: true
+        }
+      );
+    }
+
     if (reservation.status !== "CONFIRMED") {
       throw new ConflictError("Guest cancellation is available only for a confirmed reservation", {
         reservationId: reservation.id,
