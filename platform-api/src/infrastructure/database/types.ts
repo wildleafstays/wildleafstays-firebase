@@ -71,6 +71,7 @@ import type {
 } from "../../modules/public-booking/infrastructure/room-mix-database-types.js";
 import type {
   ReservationFinancialSnapshotsTable,
+  ReservationRoomMixFinancialSnapshotsTable,
   ReservationLeadGuestSnapshotsTable,
   ReservationsTable,
   ReservationStatusHistoryTable
@@ -561,6 +562,7 @@ export interface Database {
   room_mix_inventory_holds: RoomMixInventoryHoldsTable;
   reservations: ReservationsTable;
   reservation_financial_snapshots: ReservationFinancialSnapshotsTable;
+  reservation_room_mix_financial_snapshots: ReservationRoomMixFinancialSnapshotsTable;
   reservation_lead_guest_snapshots: ReservationLeadGuestSnapshotsTable;
   reservation_status_history: ReservationStatusHistoryTable;
   guest_reservation_links: GuestReservationLinksTable;
