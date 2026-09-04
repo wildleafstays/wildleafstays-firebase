@@ -340,7 +340,9 @@ export class PublicRoomRecommendationService {
 
       priced.push({
         candidate,
-        items: items.sort((left, right) => left.roomCategoryName.localeCompare(right.roomCategoryName)),
+        items: items.sort((left, right) =>
+          left.roomCategoryName.localeCompare(right.roomCategoryName)
+        ),
         currencyCode,
         estimatedTotalMinor: totalMinor
       });
