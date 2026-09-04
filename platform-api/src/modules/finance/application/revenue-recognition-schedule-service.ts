@@ -169,10 +169,13 @@ export class RevenueRecognitionScheduleService {
 
     const quoteId = source.reservation.quote_id;
     if (quoteId === null) {
-      throw new ConflictError("Standard revenue recognition is missing its canonical quote identity", {
-        reservationId: source.reservation.id,
-        manualReviewRequired: true
-      });
+      throw new ConflictError(
+        "Standard revenue recognition is missing its canonical quote identity",
+        {
+          reservationId: source.reservation.id,
+          manualReviewRequired: true
+        }
+      );
     }
 
     const build = this.build(source, source.financial);
