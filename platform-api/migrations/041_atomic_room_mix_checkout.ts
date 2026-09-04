@@ -109,11 +109,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     )
   `.execute(db);
 
-  for (const table of [
-    "room_mix_quotes",
-    "room_mix_quote_items",
-    "room_mix_inventory_holds"
-  ]) {
+  for (const table of ["room_mix_quotes", "room_mix_quote_items", "room_mix_inventory_holds"]) {
     await sql
       .raw(`
         create trigger ${table}_no_mutation
@@ -125,11 +121,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 }
 
 export async function down(db: Kysely<unknown>): Promise<void> {
-  for (const table of [
-    "room_mix_inventory_holds",
-    "room_mix_quote_items",
-    "room_mix_quotes"
-  ]) {
+  for (const table of ["room_mix_inventory_holds", "room_mix_quote_items", "room_mix_quotes"]) {
     await sql
       .raw(`drop trigger if exists ${table}_no_mutation on ${table}`)
       .execute(db);
