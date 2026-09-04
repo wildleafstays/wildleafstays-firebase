@@ -28,7 +28,11 @@ function linkView(record: GuestReservationLinkRecord): GuestReservationLinkView 
 }
 
 function reservationView(record: GuestReservationSelfServiceRecord): GuestReservationView {
-  if (record.product_type !== "ROOM_CATEGORY" && record.product_type !== "FULL_PROPERTY") {
+  if (
+    record.product_type !== "ROOM_CATEGORY" &&
+    record.product_type !== "FULL_PROPERTY" &&
+    record.product_type !== "ROOM_MIX"
+  ) {
     throw new ConflictError("Guest reservation has an unsupported product type", {
       reservationId: record.id,
       productType: record.product_type
