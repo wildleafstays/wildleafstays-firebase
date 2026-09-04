@@ -1285,11 +1285,7 @@ export async function registerPublicCatalogRoutes(
     },
     async (request, reply) => {
       setPublicNoStore(reply);
-      return roomRecommendationService.recommend(
-        deps.db,
-        request.params.publicSlug,
-        request.body
-      );
+      return roomRecommendationService.recommend(deps.db, request.params.publicSlug, request.body);
     }
   );
 
