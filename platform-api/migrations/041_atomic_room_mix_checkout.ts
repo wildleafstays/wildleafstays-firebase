@@ -122,9 +122,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 
 export async function down(db: Kysely<unknown>): Promise<void> {
   for (const table of ["room_mix_inventory_holds", "room_mix_quote_items", "room_mix_quotes"]) {
-    await sql
-      .raw(`drop trigger if exists ${table}_no_mutation on ${table}`)
-      .execute(db);
+    await sql.raw(`drop trigger if exists ${table}_no_mutation on ${table}`).execute(db);
   }
 
   await sql`drop table if exists room_mix_inventory_holds`.execute(db);
