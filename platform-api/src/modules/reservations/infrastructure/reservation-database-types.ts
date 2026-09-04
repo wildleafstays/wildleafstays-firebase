@@ -5,8 +5,10 @@ export interface ReservationsTable {
   organization_id: string;
   property_id: string;
   reservation_reference: string;
-  quote_id: string;
-  quote_inventory_hold_id: string;
+  quote_id: string | null;
+  quote_inventory_hold_id: string | null;
+  room_mix_quote_id: string | null;
+  room_mix_inventory_hold_id: string | null;
   inventory_hold_id: string;
   status: Generated<string>;
   hold_expires_at: Date;
@@ -29,16 +31,16 @@ export interface ReservationsTable {
 export interface ReservationFinancialSnapshotsTable {
   id: Generated<string>;
   reservation_id: string;
-  quote_id: string;
+  quote_id: string | null;
   organization_id: string;
   property_id: string;
   quote_reference: string;
-  rate_plan_id: string;
-  rate_plan_code: string;
-  rate_plan_name: string;
-  meal_plan_code: string;
-  rate_product_id: string;
-  rate_product_version: number;
+  rate_plan_id: string | null;
+  rate_plan_code: string | null;
+  rate_plan_name: string | null;
+  meal_plan_code: string | null;
+  rate_product_id: string | null;
+  rate_product_version: number | null;
   product_type: string;
   product_label: string;
   room_category_id: string | null;
