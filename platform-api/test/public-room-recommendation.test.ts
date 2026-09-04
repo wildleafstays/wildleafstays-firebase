@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PublicAvailabilityView } from "../src/modules/public-booking/domain/public-availability.js";
+import type { PublicAvailabilityOptionView, PublicAvailabilityView } from "../src/modules/public-booking/domain/public-availability.js";
 import type { PublicPropertyDetailView } from "../src/modules/public-booking/domain/public-catalog.js";
 import { PublicRoomRecommendationService } from "../src/modules/public-booking/application/public-room-recommendation-service.js";
 import type { PublicCatalogService } from "../src/modules/public-booking/application/public-catalog-service.js";
@@ -70,7 +70,7 @@ function option(
   available: boolean,
   requestedUnits: number,
   estimatedTotalMinor: number
-) {
+): PublicAvailabilityOptionView {
   return {
     rateProductId,
     productType: "ROOM_CATEGORY" as const,
@@ -83,7 +83,7 @@ function option(
     currencyCode: "INR",
     requestedUnits,
     available,
-    unavailableReasons: available ? [] : (["OCCUPANCY_EXCEEDED"] as const),
+    unavailableReasons: available ? [] : ["OCCUPANCY_EXCEEDED"],
     nightlyFromMinor: Math.floor(estimatedTotalMinor / Math.max(1, requestedUnits)),
     accommodationMinor: estimatedTotalMinor,
     extraGuestMinor: 0,
