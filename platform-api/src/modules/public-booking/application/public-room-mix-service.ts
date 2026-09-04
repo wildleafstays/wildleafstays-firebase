@@ -197,9 +197,7 @@ export class PublicRoomMixService {
         "Mixed-room extra guest charges"
       ),
       accommodationDiscountMinor: safeSum(
-        childQuotes.map(
-          (quote) => quote.accommodationMinor - quote.discountedAccommodationMinor
-        ),
+        childQuotes.map((quote) => quote.accommodationMinor - quote.discountedAccommodationMinor),
         "Mixed-room accommodation discount"
       ),
       extraGuestDiscountMinor: safeSum(
@@ -226,7 +224,10 @@ export class PublicRoomMixService {
         childQuotes.map((quote) => quote.exclusiveFeeMinor),
         "Mixed-room exclusive fees"
       ),
-      feeMinor: safeSum(childQuotes.map((quote) => quote.feeMinor), "Mixed-room fees"),
+      feeMinor: safeSum(
+        childQuotes.map((quote) => quote.feeMinor),
+        "Mixed-room fees"
+      ),
       inclusiveTaxMinor: safeSum(
         childQuotes.map((quote) => quote.inclusiveTaxMinor),
         "Mixed-room inclusive tax"
@@ -235,8 +236,14 @@ export class PublicRoomMixService {
         childQuotes.map((quote) => quote.exclusiveTaxMinor),
         "Mixed-room exclusive tax"
       ),
-      taxMinor: safeSum(childQuotes.map((quote) => quote.taxMinor), "Mixed-room tax"),
-      totalMinor: safeSum(childQuotes.map((quote) => quote.totalMinor), "Mixed-room total")
+      taxMinor: safeSum(
+        childQuotes.map((quote) => quote.taxMinor),
+        "Mixed-room tax"
+      ),
+      totalMinor: safeSum(
+        childQuotes.map((quote) => quote.totalMinor),
+        "Mixed-room total"
+      )
     };
 
     const root = await this.roomMixes.createQuote(trx, {
