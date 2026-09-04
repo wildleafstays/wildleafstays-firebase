@@ -21,6 +21,7 @@ import type {
   PublicRazorpayCheckoutView
 } from "../domain/public-checkout.js";
 import { PublicAvailabilityRepository } from "../infrastructure/public-availability-repository.js";
+import { PublicRoomMixReservationService } from "./public-room-mix-reservation-service.js";
 
 function reservationView(reservation: ReservationView): PublicCheckoutReservationView {
   if (reservation.status !== "PAYMENT_PENDING") {
@@ -30,10 +31,22 @@ function reservationView(reservation: ReservationView): PublicCheckoutReservatio
     });
   }
 
+  if (
+    reservation.productType === "ROOM_MIX"
+      ? reservation.roomMixQuoteId === null || reservation.quoteId !== null
+      : reservation.quoteId === null || reservation.roomMixQuoteId !== null
+  ) {
+    throw new ConflictError("Public checkout reservation source identity is inconsistent", {
+      reservationId: reservation.id,
+      productType: reservation.productType
+    });
+  }
+
   return {
     id: reservation.id,
     reservationReference: reservation.reservationReference,
     quoteId: reservation.quoteId,
+    roomMixQuoteId: reservation.roomMixQuoteId,
     status: "PAYMENT_PENDING",
     holdExpiresAt: reservation.holdExpiresAt,
     arrivalDate: reservation.arrivalDate,
@@ -91,6 +104,7 @@ export class PublicCheckoutService {
     razorpayGateway: RazorpayOrderGateway | null,
     private readonly properties = new PublicAvailabilityRepository(),
     private readonly reservations = new HeldReservationService(),
+    private readonly roomMixReservations = new PublicRoomMixReservationService(),
     private readonly payments = new BeginPaymentService(),
     private readonly guestSelfService = new GuestSelfService(db)
   ) {
@@ -160,11 +174,76 @@ export class PublicCheckoutService {
 
     if (
       payment.reservation.id !== held.reservation.id ||
+      payment.reservation.productType === "ROOM_MIX" ||
       payment.reservation.quoteId !== quoteId ||
+      payment.reservation.roomMixQuoteId !== null ||
       payment.paymentIntent.reservationId !== held.reservation.id
     ) {
       throw new ConflictError("Public checkout canonical identity mismatch", {
         quoteId,
+        reservationId: held.reservation.id,
+        paymentIntentId: payment.paymentIntent.id
+      });
+    }
+
+    if (actor) {
+      await this.guestSelfService.linkAuthenticatedCheckout(trx, {
+        actor,
+        reservationId: held.reservation.id,
+        organizationId: property.organization_id,
+        propertyId: property.id,
+        request
+      });
+    }
+
+    return {
+      reservation: reservationView(payment.reservation),
+      paymentIntent: paymentIntentView(payment.paymentIntent)
+    };
+  }
+
+  async createRoomMixReservationPayment(
+    trx: Transaction<Database>,
+    publicSlug: string,
+    roomMixQuoteId: string,
+    input: PublicCheckoutRequest,
+    request: RequestMetadata,
+    actor: ActorContext | null
+  ): Promise<PublicCheckoutPreparation> {
+    const property = await this.liveProperty(trx, publicSlug);
+
+    const held = await this.roomMixReservations.create(
+      trx,
+      publicSlug,
+      roomMixQuoteId,
+      {
+        name: input.leadGuest.name,
+        email: input.leadGuest.email ?? null,
+        phone: input.leadGuest.phone ?? null
+      },
+      request,
+      actor?.userId ?? null
+    );
+
+    const payment = await this.payments.beginPaymentSystem(
+      trx,
+      {
+        organizationId: property.organization_id,
+        propertyId: property.id,
+        reservationId: held.reservation.id
+      },
+      request
+    );
+
+    if (
+      payment.reservation.id !== held.reservation.id ||
+      payment.reservation.productType !== "ROOM_MIX" ||
+      payment.reservation.quoteId !== null ||
+      payment.reservation.roomMixQuoteId !== roomMixQuoteId ||
+      payment.paymentIntent.reservationId !== held.reservation.id
+    ) {
+      throw new ConflictError("Public mixed-room checkout canonical identity mismatch", {
+        roomMixQuoteId,
         reservationId: held.reservation.id,
         paymentIntentId: payment.paymentIntent.id
       });
