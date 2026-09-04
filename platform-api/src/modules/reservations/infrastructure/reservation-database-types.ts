@@ -5,8 +5,9 @@ export interface ReservationsTable {
   organization_id: string;
   property_id: string;
   reservation_reference: string;
-  quote_id: string;
-  quote_inventory_hold_id: string;
+  quote_id: string | null;
+  quote_inventory_hold_id: string | null;
+  room_mix_quote_id: string | null;
   inventory_hold_id: string;
   status: Generated<string>;
   hold_expires_at: Date;
@@ -47,6 +48,35 @@ export interface ReservationFinancialSnapshotsTable {
   quantity: number;
   commercial_status: string;
   promotion_status: string;
+  currency_code: string;
+  gross_accommodation_minor: number;
+  gross_extra_guest_minor: number;
+  accommodation_discount_minor: number;
+  extra_guest_discount_minor: number;
+  discount_minor: number;
+  discounted_accommodation_minor: number;
+  discounted_extra_guest_minor: number;
+  inclusive_fee_minor: number;
+  exclusive_fee_minor: number;
+  fee_minor: number;
+  inclusive_tax_minor: number;
+  exclusive_tax_minor: number;
+  tax_minor: number;
+  total_minor: number;
+  created_at: Generated<Date>;
+}
+
+export interface ReservationRoomMixFinancialSnapshotsTable {
+  id: Generated<string>;
+  reservation_id: string;
+  room_mix_quote_id: string;
+  organization_id: string;
+  property_id: string;
+  room_mix_reference: string;
+  product_label: string;
+  arrival_date: string;
+  departure_date: string;
+  quantity: number;
   currency_code: string;
   gross_accommodation_minor: number;
   gross_extra_guest_minor: number;
