@@ -52,9 +52,7 @@ function validateRequest(input: PublicRoomRecommendationRequest): number {
     requestedMaxRooms < 1 ||
     requestedMaxRooms > MAX_RECOMMENDATION_ROOMS
   ) {
-    throw new ValidationError(
-      `maxRooms must be between 1 and ${MAX_RECOMMENDATION_ROOMS}`
-    );
+    throw new ValidationError(`maxRooms must be between 1 and ${MAX_RECOMMENDATION_ROOMS}`);
   }
 
   return Math.min(requestedMaxRooms, input.adults);
@@ -129,8 +127,7 @@ function enumerateCandidates(
           choices: [...selected],
           key,
           occupancySlack: selected.reduce(
-            (sum, choice) =>
-              sum + choice.category.maxOccupancy - choice.adults - choice.children,
+            (sum, choice) => sum + choice.category.maxOccupancy - choice.adults - choice.children,
             0
           )
         });
@@ -145,12 +142,7 @@ function enumerateCandidates(
       if (choice.adults > remainingAdults || choice.children > remainingChildren) continue;
 
       selected.push(choice);
-      visit(
-        remainingAdults - choice.adults,
-        remainingChildren - choice.children,
-        index,
-        selected
-      );
+      visit(remainingAdults - choice.adults, remainingChildren - choice.children, index, selected);
       selected.pop();
 
       if (candidates.length >= MAX_RECOMMENDATION_CANDIDATES) return;
@@ -229,9 +221,7 @@ export class PublicRoomRecommendationService {
     const { property } = await this.catalog.getProperty(db, publicSlug);
 
     const allowsRooms =
-      !property.saleMode ||
-      property.saleMode === "ROOMS_ONLY" ||
-      property.saleMode === "BOTH";
+      !property.saleMode || property.saleMode === "ROOMS_ONLY" || property.saleMode === "BOTH";
 
     if (!allowsRooms || property.roomCategories.length === 0) {
       return {
