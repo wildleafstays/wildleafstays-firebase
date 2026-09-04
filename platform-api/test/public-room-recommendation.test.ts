@@ -103,16 +103,12 @@ function availabilityFor(
     (unit) => unit.adults <= 2 && unit.children === 0 && unit.adults <= 2
   );
   const superAvailable = units.every(
-    (unit) =>
-      unit.adults <= 2 &&
-      unit.children <= 2 &&
-      unit.adults + unit.children <= 3
+    (unit) => unit.adults <= 2 && unit.children <= 2 && unit.adults + unit.children <= 3
   );
 
   const deluxePrice = 400_000 * units.length;
   const superPrice =
-    550_000 * units.length +
-    units.reduce((sum, unit) => sum + unit.children * 50_000, 0);
+    550_000 * units.length + units.reduce((sum, unit) => sum + unit.children * 50_000, 0);
 
   return {
     property: {
@@ -129,22 +125,8 @@ function availabilityFor(
     pricingScope: "BASE_RATE_AND_EXTRA_GUEST_ONLY",
     exactCommercialPriceIncluded: false,
     options: [
-      option(
-        deluxeId,
-        "Deluxe Room",
-        deluxeRateId,
-        deluxeAvailable,
-        units.length,
-        deluxePrice
-      ),
-      option(
-        superId,
-        "Super Deluxe",
-        superRateId,
-        superAvailable,
-        units.length,
-        superPrice
-      )
+      option(deluxeId, "Deluxe Room", deluxeRateId, deluxeAvailable, units.length, deluxePrice),
+      option(superId, "Super Deluxe", superRateId, superAvailable, units.length, superPrice)
     ]
   };
 }
@@ -165,17 +147,13 @@ describe("PublicRoomRecommendationService", () => {
 
     const service = new PublicRoomRecommendationService(catalog, availability);
 
-    const result = await service.recommend(
-      {} as never,
-      property.publicSlug,
-      {
-        arrivalDate: "2032-04-10",
-        departureDate: "2032-04-11",
-        adults: 3,
-        children: 2,
-        maxRooms: 2
-      }
-    );
+    const result = await service.recommend({} as never, property.publicSlug, {
+      arrivalDate: "2032-04-10",
+      departureDate: "2032-04-11",
+      adults: 3,
+      children: 2,
+      maxRooms: 2
+    });
 
     expect(result.singleCheckoutSupported).toBe(false);
     expect(result.recommendations.length).toBeGreaterThan(0);
@@ -219,17 +197,13 @@ describe("PublicRoomRecommendationService", () => {
     } as unknown as PublicAvailabilityService;
 
     const service = new PublicRoomRecommendationService(catalog, availability);
-    const result = await service.recommend(
-      {} as never,
-      property.publicSlug,
-      {
-        arrivalDate: "2032-04-10",
-        departureDate: "2032-04-11",
-        adults: 3,
-        children: 2,
-        maxRooms: 2
-      }
-    );
+    const result = await service.recommend({} as never, property.publicSlug, {
+      arrivalDate: "2032-04-10",
+      departureDate: "2032-04-11",
+      adults: 3,
+      children: 2,
+      maxRooms: 2
+    });
 
     for (const recommendation of result.recommendations) {
       for (const item of recommendation.items) {
@@ -239,9 +213,7 @@ describe("PublicRoomRecommendationService", () => {
         for (const unit of item.units) {
           expect(unit.adults).toBeLessThanOrEqual(category.maxAdults);
           expect(unit.children).toBeLessThanOrEqual(category.maxChildren);
-          expect(unit.adults + unit.children).toBeLessThanOrEqual(
-            category.maxOccupancy
-          );
+          expect(unit.adults + unit.children).toBeLessThanOrEqual(category.maxOccupancy);
         }
       }
     }
