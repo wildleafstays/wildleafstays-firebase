@@ -23,10 +23,15 @@ import type {
 import { PublicAvailabilityRepository } from "../infrastructure/public-availability-repository.js";
 
 function reservationView(reservation: ReservationView): PublicCheckoutReservationView {
-  if (reservation.status !== "PAYMENT_PENDING") {
-    throw new ConflictError("Public checkout requires a PAYMENT_PENDING reservation", {
+  if (
+    reservation.status !== "PAYMENT_PENDING" ||
+    reservation.quoteId === null ||
+    reservation.productType === "ROOM_MIX"
+  ) {
+    throw new ConflictError("Standard public checkout requires a single-quote reservation", {
       reservationId: reservation.id,
-      reservationStatus: reservation.status
+      reservationStatus: reservation.status,
+      productType: reservation.productType
     });
   }
 
