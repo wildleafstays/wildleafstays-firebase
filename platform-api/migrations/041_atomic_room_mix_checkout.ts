@@ -142,7 +142,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       loop
         execute format('alter table reservations drop constraint %I', constraint_row.conname);
       end loop;
-    end
+    end;
     $room_mix_constraints$
   `.execute(db);
 
@@ -321,7 +321,7 @@ export async function down(db: Kysely<unknown>): Promise<void> {
       if exists (select 1 from reservations where product_type = 'ROOM_MIX') then
         raise exception 'cannot roll back room-mix checkout while ROOM_MIX reservations exist';
       end if;
-    end
+    end;
     $room_mix_rollback$
   `.execute(db);
 
