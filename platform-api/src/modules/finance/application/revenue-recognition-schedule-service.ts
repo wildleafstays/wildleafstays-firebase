@@ -167,6 +167,14 @@ export class RevenueRecognitionScheduleService {
       throw new ConflictError("Reservation is missing its immutable accepted financial snapshot");
     }
 
+    const quoteId = source.reservation.quote_id;
+    if (quoteId === null) {
+      throw new ConflictError("Standard revenue recognition is missing its canonical quote identity", {
+        reservationId: source.reservation.id,
+        manualReviewRequired: true
+      });
+    }
+
     const build = this.build(source, source.financial);
     const existing = await this.revenue.findByReservation(trx, source.reservation.id);
     if (existing) {
@@ -179,7 +187,7 @@ export class RevenueRecognitionScheduleService {
       propertyId: source.reservation.property_id,
       reservationId: source.reservation.id,
       reservationFinancialSnapshotId: source.financial.id,
-      quoteId: source.reservation.quote_id,
+      quoteId,
       build,
       request
     });
