@@ -2,13 +2,14 @@ export interface PublicRoomRecommendationRequest {
   arrivalDate: string;
   departureDate: string;
   adults: number;
-  children: number;
+  childAges: number[];
   maxRooms?: number;
 }
 
 export interface PublicRecommendedRoomUnit {
   adults: number;
   children: number;
+  childAges: number[];
 }
 
 export interface PublicRecommendedRoomItem {
@@ -48,10 +49,11 @@ export interface PublicRoomRecommendationView {
     departureDate: string;
     adults: number;
     children: number;
+    childAges: number[];
     maxRooms: number;
   };
   pricingScope: "BASE_RATE_AND_EXTRA_GUEST_ONLY";
   exactCommercialPriceIncluded: false;
-  singleCheckoutSupported: false;
+  singleCheckoutSupported: true;
   recommendations: PublicRoomRecommendation[];
 }
