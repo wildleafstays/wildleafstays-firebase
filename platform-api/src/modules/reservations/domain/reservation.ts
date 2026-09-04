@@ -119,7 +119,7 @@ export interface ReservationSummaryView extends JsonObject {
   status: ReservationStatus;
   arrivalDate: string;
   departureDate: string;
-  productType: "ROOM_CATEGORY" | "FULL_PROPERTY";
+  productType: "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX";
   productLabel: string;
   roomCategoryId: string | null;
   quantity: number;
