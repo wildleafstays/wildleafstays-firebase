@@ -90,7 +90,7 @@ function summary(row: ReservationListRecord): ReservationSummaryView {
     status: row.status as ReservationStatus,
     arrivalDate: row.arrival_date,
     departureDate: row.departure_date,
-    productType: row.product_type as "ROOM_CATEGORY" | "FULL_PROPERTY",
+    productType: row.product_type as "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX",
     productLabel: row.product_label,
     roomCategoryId: row.room_category_id,
     quantity: row.quantity,
