@@ -267,7 +267,7 @@ const publicAvailabilityOptionSchema = {
     rateProductId: { type: "string", format: "uuid" },
     productType: {
       type: "string",
-      enum: ["ROOM_CATEGORY", "FULL_PROPERTY"]
+      enum: ["ROOM_CATEGORY", "FULL_PROPERTY", "ROOM_MIX"]
     },
     roomCategoryId: nullableUuid,
     roomCategoryCode: nullableString,
@@ -586,7 +586,7 @@ const publicRoomMixQuoteViewSchema = {
     totalMinor: { type: "integer", minimum: 0 },
     expiresAt: { type: "string" },
     holdEligible: { type: "boolean", const: true },
-    checkoutSupported: { type: "boolean", const: false },
+    checkoutSupported: { type: "boolean", const: true },
     items: {
       type: "array",
       minItems: 2,
@@ -973,6 +973,7 @@ const publicCheckoutReservationSchema = {
     "id",
     "reservationReference",
     "quoteId",
+    "roomMixQuoteId",
     "status",
     "holdExpiresAt",
     "arrivalDate",
@@ -987,7 +988,8 @@ const publicCheckoutReservationSchema = {
   properties: {
     id: { type: "string", format: "uuid" },
     reservationReference: { type: "string" },
-    quoteId: { type: "string", format: "uuid" },
+    quoteId: nullableUuid,
+    roomMixQuoteId: nullableUuid,
     status: { type: "string", const: "PAYMENT_PENDING" },
     holdExpiresAt: { type: "string" },
     arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
@@ -1583,6 +1585,92 @@ export async function registerPublicCatalogRoutes(
 
       if (result.replayed) void reply.header("idempotency-replayed", "true");
       return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{ Params: PublicRoomMixParams; Body: PublicCheckoutRequest }>(
+    "/v1/public/properties/:publicSlug/room-mixes/:roomMixQuoteId/checkout",
+    {
+      preHandler: optionalAuthentication,
+      schema: {
+        tags: ["Public Booking"],
+        security: [{}, { bearerAuth: [] }],
+        summary: "Create one reservation and Razorpay checkout for a mixed-room hold",
+        description:
+          "Creates one canonical ROOM_MIX reservation and one payment intent from the active multi-category inventory hold. The existing payment confirmation path later confirms the entire hold atomically.",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug", "roomMixQuoteId"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            },
+            roomMixQuoteId: { type: "string", format: "uuid" }
+          }
+        },
+        headers: publicIdempotencyHeaders,
+        body: publicCheckoutRequestSchema,
+        response: {
+          201: publicCheckoutResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      publicCheckoutService.assertProviderAvailable();
+
+      const key = requirePublicIdempotencyKey(request.headers);
+      const metadata = requestMetadata(request, "public-api");
+      const body: PublicCheckoutRequest = {
+        leadGuest: {
+          name: request.body.leadGuest.name,
+          email: request.body.leadGuest.email ?? null,
+          phone: request.body.leadGuest.phone ?? null
+        }
+      };
+      const idempotencyRequestBody = {
+        ...body,
+        guestAccountUserId: request.actor?.userId ?? null
+      };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey:
+            `public.room-mix.checkout:${request.params.publicSlug.toLowerCase()}:` +
+            request.params.roomMixQuoteId,
+          key,
+          requestBody: idempotencyRequestBody
+        },
+        async (trx) => ({
+          statusCode: 201,
+          body: await publicCheckoutService.createRoomMixReservationPayment(
+            trx,
+            request.params.publicSlug,
+            request.params.roomMixQuoteId,
+            body,
+            metadata,
+            request.actor
+          )
+        })
+      );
+
+      const checkout = await publicCheckoutService.prepareCheckout(
+        request.params.publicSlug,
+        result.body.reservation.id,
+        result.body.paymentIntent.id,
+        metadata
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+
+      return reply.status(result.statusCode).send({
+        ...result.body,
+        checkout
+      });
     }
   );
 
