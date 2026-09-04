@@ -33,7 +33,7 @@ export interface GuestReservationView {
   arrivalDate: string;
   departureDate: string;
   product: {
-    type: "ROOM_CATEGORY" | "FULL_PROPERTY";
+    type: "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX";
     label: string;
     roomCategoryId: string | null;
     quantity: number;
