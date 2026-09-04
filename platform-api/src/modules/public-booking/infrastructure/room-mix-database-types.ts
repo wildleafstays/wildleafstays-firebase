@@ -60,6 +60,7 @@ export interface RoomMixInventoryHoldsTable {
 export interface ReservationRoomMixItemsTable {
   id: Generated<string>;
   reservation_id: string;
+  room_mix_quote_id: string;
   room_mix_quote_item_id: string;
   quote_id: string;
   organization_id: string;
