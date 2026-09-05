@@ -30,6 +30,7 @@ const state = {
   units: [],
   availability: null,
   quote: null,
+  roomMixQuote: null,
   hold: null,
   session: publicSlug ? loadBookingSession(publicSlug) : {},
   countdownTimer: null,
@@ -534,7 +535,7 @@ async function searchRoomRecommendations() {
           arrivalDate: form.arrivalDate.value,
           departureDate: form.departureDate.value,
           adults: totals.adults,
-          children: totals.children,
+          childAges: state.units.flatMap((unit) => [...unit.childAges]),
         },
       },
     );
@@ -664,20 +665,230 @@ function smartRecommendationCard(recommendation, singleCheckoutSupported) {
   const action = element(
     "button",
     "button button-primary smart-mix-action",
-    singleCheckoutSupported ? "Book this room mix" : "Room mix selected",
+    singleCheckoutSupported ? "Book this recommendation" : "Booking unavailable",
   );
   action.type = "button";
   action.disabled = !singleCheckoutSupported;
-  if (!singleCheckoutSupported) {
+  if (singleCheckoutSupported) {
+    action.addEventListener("click", () =>
+      void startRecommendedBooking(recommendation, action),
+    );
+  } else {
     action.setAttribute(
       "title",
-      "Mixed room categories require one atomic Wildleaf checkout before this option can be booked.",
+      "This recommendation cannot currently be completed in one secure checkout.",
     );
   }
   footer.append(action);
 
   card.append(header, rooms, footer);
   return card;
+}
+
+async function startRecommendedBooking(recommendation, button) {
+  if (!recommendation?.items?.length) return;
+
+  clearQuoteAndLater();
+  setBusy(button, true, "Checking exact price…");
+
+  try {
+    if (recommendation.items.length === 1) {
+      const item = recommendation.items[0];
+      const body = {
+        rateProductId: item.rateProductId,
+        arrivalDate: form.arrivalDate.value,
+        departureDate: form.departureDate.value,
+        promotionCode: form.promotionCode.value.trim() || null,
+        units: item.units.map((unit) => ({
+          adults: unit.adults,
+          childAges: [...unit.childAges],
+        })),
+      };
+      const key = operationKey(
+        state.session,
+        "recommended-quote",
+        JSON.stringify(body),
+      );
+      const data = await apiRequest(
+        `/v1/public/properties/${encodeURIComponent(publicSlug)}/quotes`,
+        {
+          method: "POST",
+          idempotencyKey: key,
+          body,
+        },
+      );
+
+      state.roomMixQuote = null;
+      state.quote = data.quote;
+      state.session.quoteId = data.quote.id;
+      state.session.quote = data.quote;
+      delete state.session.roomMixQuote;
+      delete state.session.holdId;
+      delete state.session.hold;
+      saveBookingSession(publicSlug, state.session);
+
+      renderQuote(data.quote, { showHoldAction: false });
+      await createHold(null, { scrollToGuest: true });
+      return;
+    }
+
+    if (form.promotionCode.value.trim()) {
+      if (smartMatchMessage) {
+        smartMatchMessage.textContent =
+          "Promo codes are not yet supported for a mixed-category checkout. Clear the promo code to book this recommendation, or choose one room category.";
+        smartMatchMessage.className = "inline-message message-warning";
+      }
+      return;
+    }
+
+    const body = {
+      arrivalDate: form.arrivalDate.value,
+      departureDate: form.departureDate.value,
+      items: recommendation.items.map((item) => ({
+        rateProductId: item.rateProductId,
+        units: item.units.map((unit) => ({
+          adults: unit.adults,
+          childAges: [...unit.childAges],
+        })),
+      })),
+    };
+    const key = operationKey(
+      state.session,
+      "room-mix-quote",
+      JSON.stringify(body),
+    );
+    const data = await apiRequest(
+      `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-mixes/quotes`,
+      {
+        method: "POST",
+        idempotencyKey: key,
+        body,
+      },
+    );
+
+    state.quote = null;
+    state.roomMixQuote = data.roomMixQuote;
+    state.session.roomMixQuote = data.roomMixQuote;
+    delete state.session.quoteId;
+    delete state.session.quote;
+    delete state.session.holdId;
+    delete state.session.hold;
+    saveBookingSession(publicSlug, state.session);
+
+    renderRoomMixQuote(data.roomMixQuote);
+    await createRoomMixHold({ scrollToGuest: true });
+  } catch (error) {
+    if (smartMatchMessage) {
+      smartMatchMessage.textContent = messageFor(
+        error,
+        "This recommendation could not be prepared for booking.",
+      );
+      smartMatchMessage.className = "inline-message message-warning";
+    }
+  } finally {
+    setBusy(button, false, "Book this recommendation");
+  }
+}
+
+function renderRoomMixQuote(quote) {
+  quoteSection.classList.remove("hidden");
+  quoteSection.replaceChildren();
+
+  const heading = element("div", "section-heading compact-heading");
+  const headingCopy = element("div");
+  headingCopy.append(
+    element("p", "eyebrow", "Exact Wildleaf quote"),
+    element("h2", "", "Your recommended room mix"),
+  );
+  const expiry = element("span", "expiry-pill");
+  heading.append(headingCopy, expiry);
+
+  const priceBox = element("div", "quote-price-box");
+  const rows = [
+    ["Accommodation", quote.grossAccommodationMinor],
+    ["Extra guests", quote.grossExtraGuestMinor],
+    ["Discount", -quote.discountMinor],
+    ["Fees", quote.feeMinor],
+    ["Taxes", quote.taxMinor],
+  ];
+  const breakdown = element("dl", "price-breakdown");
+  rows.forEach(([label, value]) => {
+    if (value === 0 && !["Fees", "Taxes"].includes(label)) return;
+    breakdown.append(
+      element("dt", "", label),
+      element(
+        "dd",
+        value < 0 ? "discount" : "",
+        `${value < 0 ? "−" : ""}${money(Math.abs(value), quote.currencyCode)}`,
+      ),
+    );
+  });
+  breakdown.append(
+    element("dt", "price-total-label", "Total payable"),
+    element("dd", "price-total", money(quote.totalMinor, quote.currencyCode)),
+  );
+  priceBox.append(breakdown);
+
+  const roomSummary = quote.items
+    .map((item) => `${item.quantity} × ${item.productLabel}`)
+    .join(" · ");
+  const rateSummary = [
+    ...new Set(
+      quote.items.map(
+        (item) => `${item.ratePlanName} · ${mealPlanLabel(item.mealPlanCode)}`,
+      ),
+    ),
+  ].join(" · ");
+
+  const details = element("div", "quote-details");
+  details.append(
+    detailLine(
+      "Stay",
+      `${formatDate(quote.arrivalDate)} – ${formatDate(quote.departureDate)}`,
+    ),
+    detailLine("Rooms", roomSummary),
+    detailLine("Rates", rateSummary),
+  );
+
+  const action = element("div", "quote-action");
+  action.append(
+    element(
+      "p",
+      "fine-print",
+      "This exact total is built from each room's canonical rate, guest ages, GST and applicable fees. The rooms will be held and confirmed together.",
+    ),
+  );
+
+  quoteSection.append(heading, priceBox, details, action);
+  startCountdown(expiry, quote.expiresAt, null, "Quote");
+}
+
+async function createRoomMixHold({ scrollToGuest = true } = {}) {
+  if (!state.roomMixQuote) return;
+
+  const fingerprint = state.roomMixQuote.id;
+  const key = operationKey(state.session, "room-mix-hold", fingerprint);
+  saveBookingSession(publicSlug, state.session);
+
+  try {
+    const data = await apiRequest(
+      `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-mixes/${state.roomMixQuote.id}/hold`,
+      { method: "POST", idempotencyKey: key },
+    );
+    state.hold = data.hold;
+    state.session.holdId = data.hold.id;
+    state.session.hold = data.hold;
+    saveBookingSession(publicSlug, state.session);
+    renderGuestForm();
+    if (scrollToGuest) {
+      guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  } catch (error) {
+    renderSectionError(
+      quoteSection,
+      messageFor(error, "The recommended rooms could not be reserved together."),
+    );
+  }
 }
 
 function recommendationReasonLabel(reason) {
@@ -835,6 +1046,8 @@ function availabilityCard(option, nights) {
 
 async function startBooking(option, button) {
   clearHoldAndLater();
+  state.roomMixQuote = null;
+  delete state.session.roomMixQuote;
   setBusy(button, true, "Preparing booking…");
   const body = {
     rateProductId: option.rateProductId,
@@ -1044,18 +1257,34 @@ async function beginCheckout(guestForm, button) {
     return;
   }
 
+  const roomMixQuoteId = state.roomMixQuote?.id || null;
+  const standardQuoteId = state.quote?.id || null;
+  const checkoutSourceId = roomMixQuoteId || standardQuoteId;
+  if (!checkoutSourceId) {
+    renderSectionError(
+      guestSection,
+      "The exact quote is no longer available. Please choose your rooms again.",
+    );
+    return;
+  }
+
   setBusy(button, true, "Preparing secure payment…");
   const body = { leadGuest };
-  const fingerprint = `${state.quote.id}:${JSON.stringify(body)}`;
+  const sourceLabel = roomMixQuoteId ? "room-mix" : "quote";
+  const fingerprint = `${sourceLabel}:${checkoutSourceId}:${JSON.stringify(body)}`;
   const key = operationKey(state.session, "checkout", fingerprint);
   state.session.leadGuest = leadGuest;
   saveBookingSession(publicSlug, state.session);
 
   try {
-    const data = await apiRequest(
-      `/v1/public/properties/${encodeURIComponent(publicSlug)}/quotes/${state.quote.id}/checkout`,
-      { method: "POST", idempotencyKey: key, body },
-    );
+    const checkoutPath = roomMixQuoteId
+      ? `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-mixes/${roomMixQuoteId}/checkout`
+      : `/v1/public/properties/${encodeURIComponent(publicSlug)}/quotes/${standardQuoteId}/checkout`;
+    const data = await apiRequest(checkoutPath, {
+      method: "POST",
+      idempotencyKey: key,
+      body,
+    });
     state.session.activeCheckout = {
       reservationId: data.reservation.id,
       reservationReference: data.reservation.reservationReference,
@@ -1337,15 +1566,31 @@ function minimizeCheckoutSession(data) {
 
 function restorePreCheckoutSession() {
   const quote = state.session.quote;
+  const roomMixQuote = state.session.roomMixQuote;
   const hold = state.session.hold;
   const holdIsActive =
     hold?.id &&
     hold.status === "ACTIVE" &&
     new Date(hold.expiresAt).getTime() > Date.now();
-  const quoteIsActive =
+  const standardQuoteIsActive =
     quote?.id && new Date(quote.expiresAt).getTime() > Date.now();
-  if (!quote?.id || (!quoteIsActive && !holdIsActive)) return;
+  const roomMixQuoteIsActive =
+    roomMixQuote?.id && new Date(roomMixQuote.expiresAt).getTime() > Date.now();
 
+  if (roomMixQuote?.id && (roomMixQuoteIsActive || holdIsActive)) {
+    state.quote = null;
+    state.roomMixQuote = roomMixQuote;
+    renderRoomMixQuote(roomMixQuote);
+    if (holdIsActive) {
+      state.hold = hold;
+      renderGuestForm();
+    }
+    return;
+  }
+
+  if (!quote?.id || (!standardQuoteIsActive && !holdIsActive)) return;
+
+  state.roomMixQuote = null;
   state.quote = quote;
   renderQuote(quote);
   if (holdIsActive) {
@@ -1394,6 +1639,7 @@ function clearResultsAfterSearchChange() {
 
 function clearQuoteAndLater() {
   state.quote = null;
+  state.roomMixQuote = null;
   quoteSection.classList.add("hidden");
   quoteSection.replaceChildren();
   clearHoldAndLater();
