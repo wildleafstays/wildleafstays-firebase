@@ -64,32 +64,33 @@
             </div>
 
             <form id="availabilityForm" class="availability-form compact-search-form">
-              <div class="date-grid">
-                <label>
-                  <span>Check-in</span>
-                  <input name="arrivalDate" type="date" required />
-                </label>
-                <label>
-                  <span>Check-out</span>
-                  <input name="departureDate" type="date" required />
-                </label>
-                <label id="unitCountField">
-                  <span id="unitCountLabel">Rooms</span>
-                  <input
-                    name="unitCount"
-                    type="number"
-                    min="1"
-                    max="20"
-                    required
-                  />
-                </label>
-              </div>
-              <details class="traveller-disclosure">
-                <summary>Guests & room setup</summary>
+              <label class="compact-search-field">
+                <span>Check-in</span>
+                <input name="arrivalDate" type="date" required />
+              </label>
+              <label class="compact-search-field">
+                <span>Check-out</span>
+                <input name="departureDate" type="date" required />
+              </label>
+              <label id="unitCountField" class="compact-search-field compact-room-field">
+                <span id="unitCountLabel">Rooms</span>
+                <input
+                  name="unitCount"
+                  type="number"
+                  min="1"
+                  max="20"
+                  required
+                />
+              </label>
+              <details class="traveller-disclosure compact-guest-picker">
+                <summary>
+                  <span>Guests</span>
+                  <strong id="guestSummary">2 adults · 0 children</strong>
+                </summary>
                 <div id="occupancyUnits" class="occupancy-units"></div>
               </details>
-              <details class="promo-disclosure">
-                <summary>Add promotion code</summary>
+              <details class="promo-disclosure compact-promo-picker">
+                <summary>+ Promo</summary>
                 <label class="promo-field">
                   <span>Promotion code <small>(optional)</small></span>
                   <input
