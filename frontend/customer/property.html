@@ -23,98 +23,82 @@
         <span class="brand-mark" aria-hidden="true">W</span>
         <span><strong>Wildleaf</strong><small>STAYS</small></span>
       </a>
-      <a id="backToResults" class="back-link" href="/customer/"
-        >← Back to results</a
-      >
+      <a id="backToResults" class="back-link" href="/customer/">← Back to results</a>
     </header>
 
-    <main>
-      <section id="propertyHero" class="property-hero">
-        <div class="property-hero-pattern"></div>
-        <div class="property-hero-content">
-          <span id="bookingModeBadge" class="booking-mode-badge"
-            >Hotel rooms</span
-          >
-          <p id="propertyLocation" class="eyebrow">Loading property…</p>
-          <h1 id="propertyName">Your Wildleaf stay</h1>
-          <p id="propertySummary">Checking the latest property information.</p>
-        </div>
-      </section>
-
+    <main class="property-page">
       <div id="pageError" class="page-message hidden" role="alert"></div>
 
-      <section id="propertyContent" class="property-layout hidden">
+      <section id="propertyContent" class="property-layout property-shopping-shell hidden">
         <section
           id="propertyGallery"
           class="property-gallery hidden"
           aria-label="Property photo tour"
         ></section>
+
+        <section class="property-identity" aria-labelledby="propertyName">
+          <div class="property-identity-copy">
+            <div class="property-identity-meta">
+              <span id="bookingModeBadge" class="booking-mode-badge">Hotel rooms</span>
+              <p id="propertyLocation" class="property-location-line">Loading property…</p>
+            </div>
+            <h1 id="propertyName">Your Wildleaf stay</h1>
+            <p id="propertySummary" class="property-summary">
+              Checking the latest property information.
+            </p>
+          </div>
+          <div id="propertyFacts" class="property-quick-facts"></div>
+          <div id="amenities" class="amenity-list property-key-amenities"></div>
+        </section>
+
         <div class="property-main">
-          <section class="property-overview panel-section">
-            <div class="section-heading compact-heading">
+          <section id="availabilitySection" class="booking-section room-shopping-section">
+            <div class="room-shopping-heading">
               <div>
-                <p class="eyebrow">Property details</p>
-                <h2 id="propertyOverviewHeading">About this hotel</h2>
+                <p class="eyebrow">Live rooms & rates</p>
+                <h2>Choose your room</h2>
+                <p class="muted">
+                  Compare room categories first. Each card keeps all available meal plans together.
+                </p>
               </div>
             </div>
-            <p id="propertyDescription" class="long-copy"></p>
-            <div id="propertyFacts" class="fact-grid"></div>
-            <div id="stayConfiguration" class="stay-configuration"></div>
-            <div id="amenities" class="amenity-list"></div>
-          </section>
 
-          <section
-            id="smartMatchSection"
-            class="smart-match-section hidden"
-            aria-live="polite"
-          >
-            <div class="smart-match-heading">
-              <div>
-                <p class="eyebrow">Smart room match</p>
-                <h2>Recommended for your group</h2>
-                <p id="smartMatchIntro" class="muted"></p>
-              </div>
-              <span class="smart-match-badge">Wildleaf match</span>
-            </div>
-            <div
-              id="smartMatchMessage"
-              class="inline-message hidden"
-              role="status"
-            ></div>
-            <div id="smartRecommendations" class="smart-recommendations"></div>
-          </section>
-
-          <section id="availabilitySection" class="booking-section">
-            <form id="availabilityForm" class="availability-form">
-              <div class="date-grid">
-                <label
-                  ><span>Check-in</span
-                  ><input name="arrivalDate" type="date" required
-                /></label>
-                <label
-                  ><span>Check-out</span
-                  ><input name="departureDate" type="date" required
-                /></label>
-                <label id="unitCountField"
-                  ><span id="unitCountLabel">Rooms</span
-                  ><input
-                    name="unitCount"
-                    type="number"
-                    min="1"
-                    max="20"
-                    required
-                /></label>
-              </div>
-              <div id="occupancyUnits" class="occupancy-units"></div>
-              <details class="promo-disclosure">
-                <summary>Add promotion code</summary>
-                <label class="promo-field"
-                  ><span>Promotion code <small>(optional)</small></span
-                  ><input
+            <form id="availabilityForm" class="availability-form compact-search-form">
+              <label class="compact-search-field">
+                <span>Check-in</span>
+                <input name="arrivalDate" type="date" required />
+              </label>
+              <label class="compact-search-field">
+                <span>Check-out</span>
+                <input name="departureDate" type="date" required />
+              </label>
+              <label id="unitCountField" class="compact-search-field compact-room-field">
+                <span id="unitCountLabel">Rooms</span>
+                <input
+                  name="unitCount"
+                  type="number"
+                  min="1"
+                  max="20"
+                  required
+                />
+              </label>
+              <details class="traveller-disclosure compact-guest-picker">
+                <summary>
+                  <span>Guests</span>
+                  <strong id="guestSummary">2 adults · 0 children</strong>
+                </summary>
+                <div id="occupancyUnits" class="occupancy-units"></div>
+              </details>
+              <details class="promo-disclosure compact-promo-picker">
+                <summary>+ Promo</summary>
+                <label class="promo-field">
+                  <span>Promotion code <small>(optional)</small></span>
+                  <input
                     name="promotionCode"
                     maxlength="40"
                     placeholder="Enter code"
-                /></label>
+                  />
+                </label>
               </details>
             </form>
 
@@ -123,8 +107,30 @@
               class="inline-message hidden"
               role="status"
             ></div>
-            <div id="availabilityResults" class="availability-results"></div>
+            <div id="availabilityResults" class="availability-results room-category-rail"></div>
           </section>
+
+          <details
+            id="smartMatchSection"
+            class="smart-match-section smart-match-disclosure hidden"
+          >
+            <summary class="smart-match-summary">
+              <div>
+                <p class="eyebrow">Wildleaf Match</p>
+                <strong>Want the cheapest suitable room combination?</strong>
+                <span id="smartMatchIntro" class="muted"></span>
+              </div>
+              <span class="smart-match-summary-action">View matches</span>
+            </summary>
+            <div class="smart-match-content" aria-live="polite">
+              <div
+                id="smartMatchMessage"
+                class="inline-message hidden"
+                role="status"
+              ></div>
+              <div id="smartRecommendations" class="smart-recommendations"></div>
+            </div>
+          </details>
 
           <section
             id="quoteSection"
@@ -138,6 +144,17 @@
             aria-live="polite"
           ></section>
 
+          <section class="property-overview panel-section">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">About the stay</p>
+                <h2 id="propertyOverviewHeading">About this hotel</h2>
+              </div>
+            </div>
+            <p id="propertyDescription" class="long-copy"></p>
+            <div id="stayConfiguration" class="stay-configuration"></div>
+          </section>
+
           <section class="panel-section policies-section">
             <div>
               <p class="eyebrow">Before you arrive</p>
@@ -146,18 +163,33 @@
             <div id="policies" class="policy-grid"></div>
           </section>
         </div>
-
-        <aside class="booking-assurance">
-          <p class="eyebrow">Your booking</p>
-          <h3 id="assuranceHeading">Hotel room</h3>
-          <ul>
-            <li><span>✓</span> Live price and availability</li>
-            <li><span>✓</span> Secure online payment</li>
-            <li><span>✓</span> Verified confirmation</li>
-          </ul>
-          <p id="assuranceNote" class="fine-print"></p>
-        </aside>
       </section>
+
+      <div
+        id="selectionRibbon"
+        class="selection-ribbon hidden"
+        aria-live="polite"
+      >
+        <div class="selection-ribbon-inner">
+          <div class="selection-ribbon-copy">
+            <span id="selectionSummary">No rooms selected</span>
+            <small id="selectionAllocation"></small>
+          </div>
+          <div class="selection-ribbon-price">
+            <small>Estimated stay total</small>
+            <strong id="selectionTotal">—</strong>
+            <span>Exact GST, fees and guest pricing confirmed before payment</span>
+          </div>
+          <button
+            id="selectionContinue"
+            class="button button-primary selection-continue"
+            type="button"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+
       <dialog
         id="propertyPhotoDialog"
         class="property-photo-dialog"
