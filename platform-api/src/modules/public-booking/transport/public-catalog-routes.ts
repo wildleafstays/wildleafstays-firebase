@@ -462,14 +462,7 @@ const publicRecommendationResponseSchema = {
     search: {
       type: "object",
       additionalProperties: false,
-      required: [
-        "arrivalDate",
-        "departureDate",
-        "adults",
-        "children",
-        "childAges",
-        "maxRooms"
-      ],
+      required: ["arrivalDate", "departureDate", "adults", "children", "childAges", "maxRooms"],
       properties: {
         arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
         departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
