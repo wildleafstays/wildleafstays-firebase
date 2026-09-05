@@ -90,13 +90,28 @@ test("property page presents published property media as an immersive photo tour
 });
 
 
-test("hotel property page can present smart mixed-room recommendations without bypassing checkout safety", () => {
+test("hotel property page can book smart recommendations through canonical checkout", () => {
   assert.match(propertyHtml, /id="smartMatchSection"/);
   assert.match(propertyHtml, /id="smartRecommendations"/);
   assert.match(propertySource, /room-recommendations/);
   assert.match(propertySource, /function partyTotals\(\)/);
+  assert.match(propertySource, /childAges: state\.units\.flatMap/);
   assert.match(propertySource, /function smartRecommendationCard\(/);
-  assert.match(propertySource, /singleCheckoutSupported/);
-  assert.match(propertySource, /action\.disabled = !singleCheckoutSupported/);
+  assert.match(propertySource, /function startRecommendedBooking\(/);
+  assert.match(propertySource, /Book this recommendation/);
+  assert.match(propertySource, /room-mixes\/quotes/);
+  assert.match(propertySource, /function renderRoomMixQuote\(/);
+  assert.match(propertySource, /function createRoomMixHold\(/);
+  assert.match(propertySource, /room-mixes\/\$\{state\.roomMixQuote\.id\}\/hold/);
+  assert.match(propertySource, /room-mixes\/\$\{roomMixQuoteId\}\/checkout/);
+  assert.match(propertySource, /state\.roomMixQuote/);
   assert.match(propertySource, /Estimated room and extra-guest total/);
+
+  // Same-category recommendations must continue through the mature standard quote path.
+  assert.match(propertySource, /recommendation\.items\.length === 1/);
+  assert.match(propertySource, /\/quotes/);
+
+  // Browser still never verifies Razorpay signatures itself.
+  assert.doesNotMatch(propertySource, /razorpay_payment_id/);
+  assert.doesNotMatch(propertySource, /razorpay_signature/);
 });
