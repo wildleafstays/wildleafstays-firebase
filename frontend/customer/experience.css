@@ -2018,3 +2018,301 @@ body,
     min-height: 48px;
   }
 }
+
+
+/* Compact party + live stock refinement */
+.compact-search-form {
+  position: relative;
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 1fr)
+    minmax(150px, 1fr)
+    86px
+    minmax(190px, 1fr)
+    auto;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px;
+}
+
+.compact-search-field {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid #e4e6e0;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.compact-search-field > span {
+  margin-bottom: 3px;
+  color: #6b756f;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.compact-search-form .compact-search-field input {
+  width: 100%;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: #20342a;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.compact-room-field input {
+  text-align: center;
+}
+
+.compact-guest-picker,
+.compact-promo-picker {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #e4e6e0;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.compact-guest-picker > summary,
+.compact-promo-picker > summary {
+  box-sizing: border-box;
+  min-height: 58px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.compact-guest-picker > summary::-webkit-details-marker,
+.compact-promo-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.compact-guest-picker > summary {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 6px 11px;
+}
+
+.compact-guest-picker > summary > span {
+  color: #6b756f;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.compact-guest-picker > summary > strong {
+  overflow: hidden;
+  color: #20342a;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-promo-picker > summary {
+  display: grid;
+  min-width: 82px;
+  place-items: center;
+  padding: 0 10px;
+  color: #315544;
+  font-size: 0.73rem;
+  font-weight: 800;
+}
+
+.compact-guest-picker .occupancy-units {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 70;
+  width: min(360px, calc(100vw - 28px));
+  padding: 12px;
+  border: 1px solid #dfe3dc;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(22, 36, 29, 0.16);
+}
+
+.compact-promo-picker .promo-field {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 70;
+  width: 260px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #dfe3dc;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(22, 36, 29, 0.16);
+}
+
+.total-party-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.total-party-field {
+  margin: 0;
+}
+
+.total-party-field > span,
+.total-party-ages label > span {
+  display: block;
+  margin-bottom: 4px;
+  color: #69736d;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.total-party-field select,
+.total-party-ages select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 9px;
+  border: 1px solid #d9ddd8;
+  border-radius: 9px;
+  color: #20342a;
+  background: #fff;
+}
+
+.total-party-ages {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 2px;
+  border-top: 1px solid #eceee9;
+}
+
+.total-party-ages > p {
+  grid-column: 1 / -1;
+  margin: 7px 0 0;
+  color: #526059;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.room-stock-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 7px;
+  padding: 0.34rem 0.56rem;
+  border: 1px solid #d9e5db;
+  border-radius: 999px;
+  color: #2e5b45;
+  background: #f1f7f2;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.room-guest-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid #d8ddd8;
+  border-radius: 8px;
+  color: #20342a;
+  background: #fff;
+}
+
+.room-guest-field select:disabled,
+.room-child-ages select option:disabled {
+  color: #9aa19d;
+}
+
+.room-guest-field select:disabled {
+  cursor: not-allowed;
+  background: #f0f1ee;
+}
+
+.room-occupancy-note {
+  grid-column: 1 / -1;
+  color: #758079;
+  font-size: 0.65rem;
+}
+
+.room-stock-limit-note {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 9px;
+  color: #75551f;
+  background: #fff7e8;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.selection-ribbon.has-warning {
+  border-top-color: #e7c778;
+}
+
+.selection-ribbon.has-warning .selection-ribbon-copy > small {
+  color: #8a641c;
+}
+
+.selection-ribbon.has-error {
+  border-top-color: #e0a29c;
+}
+
+.selection-ribbon.has-error .selection-ribbon-copy > small {
+  color: #9a3f37;
+}
+
+@media (max-width: 920px) {
+  .compact-search-form {
+    grid-template-columns: 1fr 1fr 82px;
+  }
+
+  .compact-guest-picker {
+    grid-column: 1 / 3;
+  }
+
+  .compact-promo-picker {
+    grid-column: 3;
+  }
+}
+
+@media (max-width: 620px) {
+  .compact-search-form {
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+
+  .compact-room-field {
+    grid-column: 1;
+  }
+
+  .compact-guest-picker {
+    grid-column: 2;
+  }
+
+  .compact-promo-picker {
+    grid-column: 1 / -1;
+  }
+
+  .compact-promo-picker > summary {
+    min-height: 42px;
+  }
+
+  .compact-promo-picker .promo-field,
+  .compact-guest-picker .occupancy-units {
+    right: auto;
+    left: 0;
+    width: min(340px, calc(100vw - 28px));
+  }
+
+  .total-party-ages {
+    grid-template-columns: 1fr;
+  }
+}
