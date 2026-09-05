@@ -353,10 +353,15 @@ const publicAvailabilityResponseSchema = {
 const publicRecommendationUnitSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["adults", "children"],
+  required: ["adults", "children", "childAges"],
   properties: {
     adults: { type: "integer", minimum: 1, maximum: 20 },
-    children: { type: "integer", minimum: 0, maximum: 20 }
+    children: { type: "integer", minimum: 0, maximum: 20 },
+    childAges: {
+      type: "array",
+      maxItems: 20,
+      items: { type: "integer", minimum: 0, maximum: 17 }
+    }
   }
 } as const;
 
@@ -457,18 +462,30 @@ const publicRecommendationResponseSchema = {
     search: {
       type: "object",
       additionalProperties: false,
-      required: ["arrivalDate", "departureDate", "adults", "children", "maxRooms"],
+      required: [
+        "arrivalDate",
+        "departureDate",
+        "adults",
+        "children",
+        "childAges",
+        "maxRooms"
+      ],
       properties: {
         arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
         departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
         adults: { type: "integer", minimum: 1, maximum: 20 },
         children: { type: "integer", minimum: 0, maximum: 20 },
+        childAges: {
+          type: "array",
+          maxItems: 20,
+          items: { type: "integer", minimum: 0, maximum: 17 }
+        },
         maxRooms: { type: "integer", minimum: 1, maximum: 6 }
       }
     },
     pricingScope: { type: "string", const: "BASE_RATE_AND_EXTRA_GUEST_ONLY" },
     exactCommercialPriceIncluded: { type: "boolean", const: false },
-    singleCheckoutSupported: { type: "boolean", const: false },
+    singleCheckoutSupported: { type: "boolean", const: true },
     recommendations: {
       type: "array",
       maxItems: 5,
@@ -1410,7 +1427,7 @@ export async function registerPublicCatalogRoutes(
         body: {
           type: "object",
           additionalProperties: false,
-          required: ["arrivalDate", "departureDate", "adults", "children"],
+          required: ["arrivalDate", "departureDate", "adults", "childAges"],
           properties: {
             arrivalDate: {
               type: "string",
@@ -1421,7 +1438,11 @@ export async function registerPublicCatalogRoutes(
               pattern: "^\\d{4}-\\d{2}-\\d{2}$"
             },
             adults: { type: "integer", minimum: 1, maximum: 20 },
-            children: { type: "integer", minimum: 0, maximum: 20 },
+            childAges: {
+              type: "array",
+              maxItems: 20,
+              items: { type: "integer", minimum: 0, maximum: 17 }
+            },
             maxRooms: { type: "integer", minimum: 1, maximum: 6 }
           }
         },
