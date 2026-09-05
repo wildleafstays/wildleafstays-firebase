@@ -4,7 +4,10 @@ import type {
   PublicAvailabilityView
 } from "../src/modules/public-booking/domain/public-availability.js";
 import type { PublicPropertyDetailView } from "../src/modules/public-booking/domain/public-catalog.js";
-import { PublicRoomRecommendationService } from "../src/modules/public-booking/application/public-room-recommendation-service.js";
+import {
+  PublicRecommendationGuestAgePolicyReader,
+  PublicRoomRecommendationService
+} from "../src/modules/public-booking/application/public-room-recommendation-service.js";
 import type { PublicCatalogService } from "../src/modules/public-booking/application/public-catalog-service.js";
 import type { PublicAvailabilityService } from "../src/modules/public-booking/application/public-availability-service.js";
 
@@ -131,6 +134,16 @@ function availabilityFor(
   };
 }
 
+const agePolicies = {
+  resolve: async () => ({
+    infantMaxAge: 5,
+    childMaxAge: 12,
+    infantsCountTowardsOccupancy: false,
+    infantsCountTowardsChildLimit: false,
+    infantsChargeAsChildren: false
+  })
+} as unknown as PublicRecommendationGuestAgePolicyReader;
+
 describe("PublicRoomRecommendationService", () => {
   it("recommends a valid mixed room combination for 3 adults and 2 children", async () => {
     const catalog = {
@@ -145,17 +158,17 @@ describe("PublicRoomRecommendationService", () => {
       ) => availabilityFor(request.units)
     } as unknown as PublicAvailabilityService;
 
-    const service = new PublicRoomRecommendationService(catalog, availability);
+    const service = new PublicRoomRecommendationService(catalog, availability, agePolicies);
 
     const result = await service.recommend({} as never, property.publicSlug, {
       arrivalDate: "2032-04-10",
       departureDate: "2032-04-11",
       adults: 3,
-      children: 2,
+      childAges: [8, 10],
       maxRooms: 2
     });
 
-    expect(result.singleCheckoutSupported).toBe(false);
+    expect(result.singleCheckoutSupported).toBe(true);
     expect(result.recommendations.length).toBeGreaterThan(0);
 
     const best = result.recommendations[0]!;
@@ -171,16 +184,46 @@ describe("PublicRoomRecommendationService", () => {
           roomCategoryId: deluxeId,
           roomCategoryName: "Deluxe Room",
           quantity: 1,
-          units: [{ adults: 2, children: 0 }]
+          units: [{ adults: 2, children: 0, childAges: [] }]
         }),
         expect.objectContaining({
           roomCategoryId: superId,
           roomCategoryName: "Super Deluxe",
           quantity: 1,
-          units: [{ adults: 1, children: 2 }]
+          units: [{ adults: 1, children: 2, childAges: [8, 10] }]
         })
       ])
     );
+  });
+
+  it("keeps a free non-occupancy infant's exact age with the recommended room", async () => {
+    const catalog = {
+      getProperty: async () => ({ property })
+    } as unknown as PublicCatalogService;
+
+    const availability = {
+      search: async (
+        _db: unknown,
+        _slug: string,
+        request: { units: Array<{ adults: number; children: number }> }
+      ) => availabilityFor(request.units)
+    } as unknown as PublicAvailabilityService;
+
+    const service = new PublicRoomRecommendationService(catalog, availability, agePolicies);
+    const result = await service.recommend({} as never, property.publicSlug, {
+      arrivalDate: "2032-04-10",
+      departureDate: "2032-04-11",
+      adults: 2,
+      childAges: [4],
+      maxRooms: 1
+    });
+
+    const best = result.recommendations[0]!;
+    expect(best.roomCount).toBe(1);
+    expect(best.items[0]).toMatchObject({
+      roomCategoryId: deluxeId,
+      units: [{ adults: 2, children: 1, childAges: [4] }]
+    });
   });
 
   it("never recommends a room assignment that breaks category occupancy", async () => {
@@ -196,12 +239,12 @@ describe("PublicRoomRecommendationService", () => {
       ) => availabilityFor(request.units)
     } as unknown as PublicAvailabilityService;
 
-    const service = new PublicRoomRecommendationService(catalog, availability);
+    const service = new PublicRoomRecommendationService(catalog, availability, agePolicies);
     const result = await service.recommend({} as never, property.publicSlug, {
       arrivalDate: "2032-04-10",
       departureDate: "2032-04-11",
       adults: 3,
-      children: 2,
+      childAges: [8, 10],
       maxRooms: 2
     });
 
