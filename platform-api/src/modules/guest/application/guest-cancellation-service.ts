@@ -93,6 +93,24 @@ export class GuestCancellationService {
       throw new NotFoundError("Reservation not found");
     }
 
+    if (reservation.product_type === "ROOM_MIX") {
+      throw new ConflictError(
+        "Mixed-room self-service cancellation is not available yet; please contact Wildleaf support",
+        {
+          reservationId: reservation.id,
+          manualReviewRequired: true
+        }
+      );
+    }
+
+    const quoteId = reservation.quote_id;
+    if (quoteId === null) {
+      throw new ConflictError("Standard cancellation is missing its canonical quote identity", {
+        reservationId: reservation.id,
+        manualReviewRequired: true
+      });
+    }
+
     if (reservation.status !== "CONFIRMED") {
       throw new ConflictError("Guest cancellation is available only for a confirmed reservation", {
         reservationId: reservation.id,
@@ -119,7 +137,7 @@ export class GuestCancellationService {
     const booked = await this.cancellations.loadBookedEconomics(trx, {
       organizationId: scope.organizationId,
       propertyId: scope.propertyId,
-      quoteId: reservation.quote_id
+      quoteId
     });
 
     if (!booked) {
@@ -214,7 +232,7 @@ export class GuestCancellationService {
       organizationId: scope.organizationId,
       propertyId: scope.propertyId,
       guestUserId: actor.userId,
-      quoteId: reservation.quote_id,
+      quoteId,
       quoteCancellationSnapshotId: booked.snapshot.id,
       quoteCancellationTierSnapshotId: economics.tierSnapshotId,
       paymentIntentId: proof.paymentIntentId,

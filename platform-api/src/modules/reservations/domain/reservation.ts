@@ -33,7 +33,7 @@ export interface ReservationFinancialSnapshotView extends JsonObject {
   mealPlanCode: string;
   rateProductId: string;
   rateProductVersion: number;
-  productType: "ROOM_CATEGORY" | "FULL_PROPERTY";
+  productType: "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX";
   productLabel: string;
   roomCategoryId: string | null;
   arrivalDate: string;
@@ -58,26 +58,51 @@ export interface ReservationFinancialSnapshotView extends JsonObject {
   totalMinor: number;
 }
 
+export interface ReservationRoomMixFinancialSnapshotView extends JsonObject {
+  roomMixReference: string;
+  productType: "ROOM_MIX";
+  productLabel: string;
+  arrivalDate: string;
+  departureDate: string;
+  quantity: number;
+  currencyCode: string;
+  grossAccommodationMinor: number;
+  grossExtraGuestMinor: number;
+  accommodationDiscountMinor: number;
+  extraGuestDiscountMinor: number;
+  discountMinor: number;
+  discountedAccommodationMinor: number;
+  discountedExtraGuestMinor: number;
+  inclusiveFeeMinor: number;
+  exclusiveFeeMinor: number;
+  feeMinor: number;
+  inclusiveTaxMinor: number;
+  exclusiveTaxMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+}
+
 export interface ReservationView extends JsonObject {
   id: string;
   reservationReference: string;
   organizationId: string;
   propertyId: string;
-  quoteId: string;
-  quoteInventoryHoldId: string;
+  quoteId: string | null;
+  quoteInventoryHoldId: string | null;
+  roomMixQuoteId: string | null;
   inventoryHoldId: string;
   status: ReservationStatus;
   holdExpiresAt: string;
   holdExpired: boolean;
   arrivalDate: string;
   departureDate: string;
-  productType: "ROOM_CATEGORY" | "FULL_PROPERTY";
+  productType: "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX";
   roomCategoryId: string | null;
   quantity: number;
   currencyCode: string;
   totalMinor: number;
   leadGuest: LeadGuestSnapshotView;
-  financial: ReservationFinancialSnapshotView;
+  financial: ReservationFinancialSnapshotView | ReservationRoomMixFinancialSnapshotView;
   createdAt: string;
 }
 
@@ -94,7 +119,7 @@ export interface ReservationSummaryView extends JsonObject {
   status: ReservationStatus;
   arrivalDate: string;
   departureDate: string;
-  productType: "ROOM_CATEGORY" | "FULL_PROPERTY";
+  productType: "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX";
   productLabel: string;
   roomCategoryId: string | null;
   quantity: number;

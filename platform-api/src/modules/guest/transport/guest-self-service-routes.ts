@@ -143,7 +143,7 @@ const guestReservationSchema = {
       properties: {
         type: {
           type: "string",
-          enum: ["ROOM_CATEGORY", "FULL_PROPERTY"]
+          enum: ["ROOM_CATEGORY", "FULL_PROPERTY", "ROOM_MIX"]
         },
         label: { type: "string" },
         roomCategoryId: {

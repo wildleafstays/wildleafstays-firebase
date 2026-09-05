@@ -78,3 +78,40 @@ test("available rates use OTA-style room facts and calendar-backed totals", () =
   assert.match(propertySource, /option\.estimatedTotalMinor/);
   assert.match(propertySource, /GST and any additional fees shown before payment/);
 });
+
+
+test("property page presents published property media as an immersive photo tour", () => {
+  assert.match(propertyHtml, /id="propertyGallery"/);
+  assert.match(propertyHtml, /id="propertyPhotoDialog"/);
+  assert.match(propertySource, /function renderPropertyGallery\(property\)/);
+  assert.match(propertySource, /property\.media \|\| \[\]/);
+  assert.match(propertySource, /View all \$\{media\.length\} photos/);
+  assert.match(propertySource, /function propertyMediaUrl\(mediaId\)/);
+});
+
+
+test("hotel property page can book smart recommendations through canonical checkout", () => {
+  assert.match(propertyHtml, /id="smartMatchSection"/);
+  assert.match(propertyHtml, /id="smartRecommendations"/);
+  assert.match(propertySource, /room-recommendations/);
+  assert.match(propertySource, /function partyTotals\(\)/);
+  assert.match(propertySource, /childAges: state\.units\.flatMap/);
+  assert.match(propertySource, /function smartRecommendationCard\(/);
+  assert.match(propertySource, /function startRecommendedBooking\(/);
+  assert.match(propertySource, /Book this recommendation/);
+  assert.match(propertySource, /room-mixes\/quotes/);
+  assert.match(propertySource, /function renderRoomMixQuote\(/);
+  assert.match(propertySource, /function createRoomMixHold\(/);
+  assert.match(propertySource, /room-mixes\/\$\{state\.roomMixQuote\.id\}\/hold/);
+  assert.match(propertySource, /room-mixes\/\$\{roomMixQuoteId\}\/checkout/);
+  assert.match(propertySource, /state\.roomMixQuote/);
+  assert.match(propertySource, /Estimated room and extra-guest total/);
+
+  // Same-category recommendations must continue through the mature standard quote path.
+  assert.match(propertySource, /recommendation\.items\.length === 1/);
+  assert.match(propertySource, /\/quotes/);
+
+  // Browser still never verifies Razorpay signatures itself.
+  assert.doesNotMatch(propertySource, /razorpay_payment_id/);
+  assert.doesNotMatch(propertySource, /razorpay_signature/);
+});

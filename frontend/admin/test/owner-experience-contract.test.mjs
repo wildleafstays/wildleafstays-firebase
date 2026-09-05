@@ -8,6 +8,11 @@ const js = fs.readFileSync(new URL("../admin.js", import.meta.url), "utf8");
 
 const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 
+const experienceCss = fs.readFileSync(
+  new URL("../experience.css", import.meta.url),
+  "utf8",
+);
+
 test("room category setup uses owner language and hides internal category code", () => {
   const match = html.match(/<form id="roomCategoryForm"[\s\S]*?<\/form>/);
 
@@ -600,4 +605,24 @@ test("Step 4B2 owner can create or synchronize one simple category base rate", (
   assert.match(js, /calendar \? "Sync setup" : "Set base rate"/);
 
   assert.match(js, /expectedVersion/);
+});
+
+
+test("partner portal loads the premium owner experience layer without replacing operational forms", () => {
+  assert.match(html, /\/admin\/experience\.css/);
+  assert.match(experienceCss, /\.sidebar/);
+  assert.match(experienceCss, /\.workspace-head/);
+  assert.match(experienceCss, /\.setup-grid > form/);
+  assert.match(experienceCss, /\.owner-rate-filters/);
+  assert.match(experienceCss, /@media \(max-width: 760px\)/);
+
+  for (const formId of [
+    "profileForm",
+    "roomCategoryForm",
+    "physicalUnitForm",
+    "commercialRulesForm",
+    "imageUploadForm",
+  ]) {
+    assert.match(html, new RegExp(`id="${formId}"`));
+  }
 });

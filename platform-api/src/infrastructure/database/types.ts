@@ -65,7 +65,13 @@ import type {
 } from "../../modules/quotes/infrastructure/quote-promotion-database-types.js";
 import type { QuoteInventoryHoldsTable } from "../../modules/quotes/infrastructure/quote-hold-database-types.js";
 import type {
+  RoomMixInventoryHoldsTable,
+  RoomMixQuoteItemsTable,
+  RoomMixQuotesTable
+} from "../../modules/public-booking/infrastructure/room-mix-database-types.js";
+import type {
   ReservationFinancialSnapshotsTable,
+  ReservationRoomMixFinancialSnapshotsTable,
   ReservationLeadGuestSnapshotsTable,
   ReservationsTable,
   ReservationStatusHistoryTable
@@ -551,8 +557,12 @@ export interface Database {
   quote_final_fee_lines: QuoteFinalFeeLinesTable;
   quote_final_tax_lines: QuoteFinalTaxLinesTable;
   quote_inventory_holds: QuoteInventoryHoldsTable;
+  room_mix_quotes: RoomMixQuotesTable;
+  room_mix_quote_items: RoomMixQuoteItemsTable;
+  room_mix_inventory_holds: RoomMixInventoryHoldsTable;
   reservations: ReservationsTable;
   reservation_financial_snapshots: ReservationFinancialSnapshotsTable;
+  reservation_room_mix_financial_snapshots: ReservationRoomMixFinancialSnapshotsTable;
   reservation_lead_guest_snapshots: ReservationLeadGuestSnapshotsTable;
   reservation_status_history: ReservationStatusHistoryTable;
   guest_reservation_links: GuestReservationLinksTable;

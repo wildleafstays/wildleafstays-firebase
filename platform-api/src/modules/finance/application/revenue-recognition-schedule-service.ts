@@ -137,6 +137,25 @@ export class RevenueRecognitionScheduleService {
     },
     request: RequestMetadata
   ): Promise<RevenueRecognitionScheduleResult> {
+    const reservationIdentity = await trx
+      .selectFrom("reservations")
+      .select(["id", "product_type"])
+      .where("organization_id", "=", input.organizationId)
+      .where("property_id", "=", input.propertyId)
+      .where("id", "=", input.reservationId)
+      .executeTakeFirst();
+
+    if (!reservationIdentity) throw new NotFoundError("Reservation not found");
+    if (reservationIdentity.product_type === "ROOM_MIX") {
+      throw new ConflictError(
+        "Room-mix revenue recognition requires the mixed-booking accounting schedule",
+        {
+          reservationId: input.reservationId,
+          manualReviewRequired: true
+        }
+      );
+    }
+
     const source = await this.revenue.sourceForReservation(
       trx,
       input.organizationId,
@@ -146,6 +165,17 @@ export class RevenueRecognitionScheduleService {
     if (!source) throw new NotFoundError("Reservation not found");
     if (!source.financial) {
       throw new ConflictError("Reservation is missing its immutable accepted financial snapshot");
+    }
+
+    const quoteId = source.reservation.quote_id;
+    if (quoteId === null) {
+      throw new ConflictError(
+        "Standard revenue recognition is missing its canonical quote identity",
+        {
+          reservationId: source.reservation.id,
+          manualReviewRequired: true
+        }
+      );
     }
 
     const build = this.build(source, source.financial);
@@ -160,7 +190,7 @@ export class RevenueRecognitionScheduleService {
       propertyId: source.reservation.property_id,
       reservationId: source.reservation.id,
       reservationFinancialSnapshotId: source.financial.id,
-      quoteId: source.reservation.quote_id,
+      quoteId,
       build,
       request
     });

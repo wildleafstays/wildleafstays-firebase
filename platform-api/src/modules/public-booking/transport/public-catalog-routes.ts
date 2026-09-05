@@ -23,11 +23,15 @@ import { PublicCatalogService } from "../application/public-catalog-service.js";
 import { PublicCheckoutStatusService } from "../application/public-checkout-status-service.js";
 import { PublicCheckoutService } from "../application/public-checkout-service.js";
 import { PublicQuoteService } from "../application/public-quote-service.js";
+import { PublicRoomRecommendationService } from "../application/public-room-recommendation-service.js";
+import { PublicRoomMixService } from "../application/public-room-mix-service.js";
 import { PublicCatalogRepository } from "../infrastructure/public-catalog-repository.js";
 import type { PublicAvailabilityRequest } from "../domain/public-availability.js";
 import type { PublicCheckoutRequest } from "../domain/public-checkout.js";
 import type { PublicCheckoutStatusRequest } from "../domain/public-checkout-status.js";
 import type { PublicQuoteRequest } from "../domain/public-quote.js";
+import type { PublicRoomRecommendationRequest } from "../domain/public-room-recommendation.js";
+import type { PublicRoomMixQuoteRequest } from "../domain/public-room-mix.js";
 export interface PublicCatalogRouteDependencies {
   db: Kysely<Database>;
   authentication?: AuthenticationDependencies;
@@ -49,6 +53,9 @@ interface PublicMediaParams extends PublicPropertyParams {
 }
 interface PublicQuoteParams extends PublicPropertyParams {
   quoteId: string;
+}
+interface PublicRoomMixParams extends PublicPropertyParams {
+  roomMixQuoteId: string;
 }
 const nullableString = {
   anyOf: [{ type: "string" }, { type: "null" }]
@@ -260,7 +267,7 @@ const publicAvailabilityOptionSchema = {
     rateProductId: { type: "string", format: "uuid" },
     productType: {
       type: "string",
-      enum: ["ROOM_CATEGORY", "FULL_PROPERTY"]
+      enum: ["ROOM_CATEGORY", "FULL_PROPERTY", "ROOM_MIX"]
     },
     roomCategoryId: nullableUuid,
     roomCategoryCode: nullableString,
@@ -343,6 +350,143 @@ const publicAvailabilityResponseSchema = {
   }
 } as const;
 
+const publicRecommendationUnitSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["adults", "children", "childAges"],
+  properties: {
+    adults: { type: "integer", minimum: 1, maximum: 20 },
+    children: { type: "integer", minimum: 0, maximum: 20 },
+    childAges: {
+      type: "array",
+      maxItems: 20,
+      items: { type: "integer", minimum: 0, maximum: 17 }
+    }
+  }
+} as const;
+
+const publicRecommendationItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "roomCategoryId",
+    "roomCategoryName",
+    "coverMediaId",
+    "rateProductId",
+    "ratePlanCode",
+    "ratePlanName",
+    "mealPlanCode",
+    "quantity",
+    "maxOccupancy",
+    "units",
+    "estimatedTotalMinor"
+  ],
+  properties: {
+    roomCategoryId: { type: "string", format: "uuid" },
+    roomCategoryName: { type: "string" },
+    coverMediaId: nullableUuid,
+    rateProductId: { type: "string", format: "uuid" },
+    ratePlanCode: { type: "string" },
+    ratePlanName: { type: "string" },
+    mealPlanCode: { type: "string" },
+    quantity: { type: "integer", minimum: 1, maximum: 6 },
+    maxOccupancy: { type: "integer", minimum: 1 },
+    units: {
+      type: "array",
+      minItems: 1,
+      maxItems: 6,
+      items: publicRecommendationUnitSchema
+    },
+    estimatedTotalMinor: { type: "integer", minimum: 0 }
+  }
+} as const;
+
+const publicRecommendationSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "recommendationId",
+    "rank",
+    "reason",
+    "roomCount",
+    "adults",
+    "children",
+    "currencyCode",
+    "estimatedTotalMinor",
+    "occupancySlack",
+    "items"
+  ],
+  properties: {
+    recommendationId: { type: "string" },
+    rank: { type: "integer", minimum: 1 },
+    reason: {
+      type: "string",
+      enum: ["BEST_VALUE", "FEWER_ROOMS", "MORE_SPACE", "ALTERNATIVE"]
+    },
+    roomCount: { type: "integer", minimum: 1, maximum: 6 },
+    adults: { type: "integer", minimum: 1, maximum: 20 },
+    children: { type: "integer", minimum: 0, maximum: 20 },
+    currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+    estimatedTotalMinor: { type: "integer", minimum: 0 },
+    occupancySlack: { type: "integer", minimum: 0 },
+    items: {
+      type: "array",
+      minItems: 1,
+      maxItems: 6,
+      items: publicRecommendationItemSchema
+    }
+  }
+} as const;
+
+const publicRecommendationResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "property",
+    "search",
+    "pricingScope",
+    "exactCommercialPriceIncluded",
+    "singleCheckoutSupported",
+    "recommendations"
+  ],
+  properties: {
+    property: {
+      type: "object",
+      additionalProperties: false,
+      required: ["publicSlug", "name"],
+      properties: {
+        publicSlug: { type: "string" },
+        name: { type: "string" }
+      }
+    },
+    search: {
+      type: "object",
+      additionalProperties: false,
+      required: ["arrivalDate", "departureDate", "adults", "children", "childAges", "maxRooms"],
+      properties: {
+        arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        adults: { type: "integer", minimum: 1, maximum: 20 },
+        children: { type: "integer", minimum: 0, maximum: 20 },
+        childAges: {
+          type: "array",
+          maxItems: 20,
+          items: { type: "integer", minimum: 0, maximum: 17 }
+        },
+        maxRooms: { type: "integer", minimum: 1, maximum: 6 }
+      }
+    },
+    pricingScope: { type: "string", const: "BASE_RATE_AND_EXTRA_GUEST_ONLY" },
+    exactCommercialPriceIncluded: { type: "boolean", const: false },
+    singleCheckoutSupported: { type: "boolean", const: true },
+    recommendations: {
+      type: "array",
+      maxItems: 5,
+      items: publicRecommendationSchema
+    }
+  }
+} as const;
+
 const publicIdempotencyHeaders = {
   type: "object",
   required: ["idempotency-key"],
@@ -366,6 +510,145 @@ const publicQuoteUnitSchema = {
       type: "array",
       maxItems: 100,
       items: { type: "integer", minimum: 0, maximum: 17 }
+    }
+  }
+} as const;
+
+const publicRoomMixQuoteItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "itemIndex",
+    "quoteId",
+    "quoteReference",
+    "rateProductId",
+    "roomCategoryId",
+    "productLabel",
+    "ratePlanCode",
+    "ratePlanName",
+    "mealPlanCode",
+    "quantity",
+    "accommodationMinor",
+    "extraGuestMinor",
+    "feeMinor",
+    "taxMinor",
+    "totalMinor",
+    "units"
+  ],
+  properties: {
+    itemIndex: { type: "integer", minimum: 1, maximum: 6 },
+    quoteId: { type: "string", format: "uuid" },
+    quoteReference: { type: "string" },
+    rateProductId: { type: "string", format: "uuid" },
+    roomCategoryId: { type: "string", format: "uuid" },
+    productLabel: { type: "string" },
+    ratePlanCode: { type: "string" },
+    ratePlanName: { type: "string" },
+    mealPlanCode: { type: "string" },
+    quantity: { type: "integer", minimum: 1, maximum: 20 },
+    accommodationMinor: { type: "integer", minimum: 0 },
+    extraGuestMinor: { type: "integer", minimum: 0 },
+    feeMinor: { type: "integer", minimum: 0 },
+    taxMinor: { type: "integer", minimum: 0 },
+    totalMinor: { type: "integer", minimum: 0 },
+    units: {
+      type: "array",
+      minItems: 1,
+      maxItems: 20,
+      items: publicQuoteUnitSchema
+    }
+  }
+} as const;
+
+const publicRoomMixQuoteViewSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "id",
+    "roomMixReference",
+    "arrivalDate",
+    "departureDate",
+    "quantity",
+    "currencyCode",
+    "grossAccommodationMinor",
+    "grossExtraGuestMinor",
+    "discountMinor",
+    "feeMinor",
+    "taxMinor",
+    "totalMinor",
+    "expiresAt",
+    "holdEligible",
+    "checkoutSupported",
+    "items"
+  ],
+  properties: {
+    id: { type: "string", format: "uuid" },
+    roomMixReference: { type: "string" },
+    arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    quantity: { type: "integer", minimum: 2, maximum: 20 },
+    currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+    grossAccommodationMinor: { type: "integer", minimum: 0 },
+    grossExtraGuestMinor: { type: "integer", minimum: 0 },
+    discountMinor: { type: "integer", minimum: 0 },
+    feeMinor: { type: "integer", minimum: 0 },
+    taxMinor: { type: "integer", minimum: 0 },
+    totalMinor: { type: "integer", minimum: 0 },
+    expiresAt: { type: "string" },
+    holdEligible: { type: "boolean", const: true },
+    checkoutSupported: { type: "boolean", const: true },
+    items: {
+      type: "array",
+      minItems: 2,
+      maxItems: 6,
+      items: publicRoomMixQuoteItemSchema
+    }
+  }
+} as const;
+
+const publicRoomMixQuoteResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["roomMixQuote"],
+  properties: {
+    roomMixQuote: publicRoomMixQuoteViewSchema
+  }
+} as const;
+
+const publicRoomMixHoldResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["created", "roomMixQuoteId", "roomMixReference", "hold"],
+  properties: {
+    created: { type: "boolean" },
+    roomMixQuoteId: { type: "string", format: "uuid" },
+    roomMixReference: { type: "string" },
+    hold: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "status", "startDate", "endDate", "expiresAt", "items"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        status: { type: "string", const: "ACTIVE" },
+        startDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        endDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        expiresAt: { type: "string" },
+        items: {
+          type: "array",
+          minItems: 2,
+          maxItems: 6,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["bucketType", "roomCategoryId", "quantity"],
+            properties: {
+              bucketType: { type: "string", const: "ROOM_CATEGORY" },
+              roomCategoryId: { type: "string", format: "uuid" },
+              quantity: { type: "integer", minimum: 1, maximum: 20 }
+            }
+          }
+        }
+      }
     }
   }
 } as const;
@@ -700,6 +983,7 @@ const publicCheckoutReservationSchema = {
     "id",
     "reservationReference",
     "quoteId",
+    "roomMixQuoteId",
     "status",
     "holdExpiresAt",
     "arrivalDate",
@@ -714,7 +998,8 @@ const publicCheckoutReservationSchema = {
   properties: {
     id: { type: "string", format: "uuid" },
     reservationReference: { type: "string" },
-    quoteId: { type: "string", format: "uuid" },
+    quoteId: nullableUuid,
+    roomMixQuoteId: nullableUuid,
     status: { type: "string", const: "PAYMENT_PENDING" },
     holdExpiresAt: { type: "string" },
     arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
@@ -893,6 +1178,8 @@ export async function registerPublicCatalogRoutes(
   const catalogRepository = new PublicCatalogRepository();
   const availabilityService = new PublicAvailabilityService();
   const publicQuoteService = new PublicQuoteService();
+  const roomRecommendationService = new PublicRoomRecommendationService();
+  const roomMixService = new PublicRoomMixService();
   const publicCheckoutStatusService = new PublicCheckoutStatusService(
     deps.razorpayPaymentRecoveryGateway
       ? new RazorpayPaymentRecoveryService(deps.db, deps.razorpayPaymentRecoveryGateway)
@@ -1108,6 +1395,296 @@ export async function registerPublicCatalogRoutes(
     async (request, reply) => {
       setPublicNoStore(reply);
       return availabilityService.search(deps.db, request.params.publicSlug, request.body);
+    }
+  );
+
+  app.post<{ Params: PublicPropertyParams; Body: PublicRoomRecommendationRequest }>(
+    "/v1/public/properties/:publicSlug/room-recommendations",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Recommend mixed room-category combinations for a guest party",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            }
+          }
+        },
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["arrivalDate", "departureDate", "adults", "childAges"],
+          properties: {
+            arrivalDate: {
+              type: "string",
+              pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            departureDate: {
+              type: "string",
+              pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            adults: { type: "integer", minimum: 1, maximum: 20 },
+            childAges: {
+              type: "array",
+              maxItems: 20,
+              items: { type: "integer", minimum: 0, maximum: 17 }
+            },
+            maxRooms: { type: "integer", minimum: 1, maximum: 6 }
+          }
+        },
+        response: {
+          200: publicRecommendationResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      return roomRecommendationService.recommend(deps.db, request.params.publicSlug, request.body);
+    }
+  );
+
+  app.post<{ Params: PublicPropertyParams; Body: PublicRoomMixQuoteRequest }>(
+    "/v1/public/properties/:publicSlug/room-mixes/quotes",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Create an exact mixed-room quote using canonical room pricing",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            }
+          }
+        },
+        headers: publicIdempotencyHeaders,
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["arrivalDate", "departureDate", "items"],
+          properties: {
+            arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            items: {
+              type: "array",
+              minItems: 2,
+              maxItems: 6,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["rateProductId", "units"],
+                properties: {
+                  rateProductId: { type: "string", format: "uuid" },
+                  units: {
+                    type: "array",
+                    minItems: 1,
+                    maxItems: 20,
+                    items: publicQuoteUnitSchema
+                  }
+                }
+              }
+            }
+          }
+        },
+        response: {
+          201: publicRoomMixQuoteResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      const key = requirePublicIdempotencyKey(request.headers);
+      const body: PublicRoomMixQuoteRequest = {
+        arrivalDate: request.body.arrivalDate,
+        departureDate: request.body.departureDate,
+        items: request.body.items.map((item) => ({
+          rateProductId: item.rateProductId,
+          units: item.units.map((unit) => ({
+            adults: unit.adults,
+            childAges: [...unit.childAges]
+          }))
+        }))
+      };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey: `public.room-mix.quote.create:${request.params.publicSlug.toLowerCase()}`,
+          key,
+          requestBody: body
+        },
+        async (trx) => ({
+          statusCode: 201,
+          body: await roomMixService.createQuote(
+            trx,
+            request.params.publicSlug,
+            body,
+            requestMetadata(request, "public-api")
+          )
+        })
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{ Params: PublicRoomMixParams }>(
+    "/v1/public/properties/:publicSlug/room-mixes/:roomMixQuoteId/hold",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Atomically hold every room category in a mixed-room quote",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug", "roomMixQuoteId"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            },
+            roomMixQuoteId: { type: "string", format: "uuid" }
+          }
+        },
+        headers: publicIdempotencyHeaders,
+        response: {
+          200: publicRoomMixHoldResponseSchema,
+          201: publicRoomMixHoldResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      const key = requirePublicIdempotencyKey(request.headers);
+      const requestBody = {
+        publicSlug: request.params.publicSlug.toLowerCase(),
+        roomMixQuoteId: request.params.roomMixQuoteId
+      };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey:
+            `public.room-mix.hold:${request.params.publicSlug.toLowerCase()}:` +
+            request.params.roomMixQuoteId,
+          key,
+          requestBody
+        },
+        async (trx) => {
+          const body = await roomMixService.createHold(
+            trx,
+            request.params.publicSlug,
+            request.params.roomMixQuoteId,
+            requestMetadata(request, "public-api")
+          );
+          return {
+            statusCode: body.created ? 201 : 200,
+            body
+          };
+        }
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.post<{ Params: PublicRoomMixParams; Body: PublicCheckoutRequest }>(
+    "/v1/public/properties/:publicSlug/room-mixes/:roomMixQuoteId/checkout",
+    {
+      preHandler: optionalAuthentication,
+      schema: {
+        tags: ["Public Booking"],
+        security: [{}, { bearerAuth: [] }],
+        summary: "Create one reservation and Razorpay checkout for a mixed-room hold",
+        description:
+          "Creates one canonical ROOM_MIX reservation and one payment intent from the active multi-category inventory hold. The existing payment confirmation path later confirms the entire hold atomically.",
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["publicSlug", "roomMixQuoteId"],
+          properties: {
+            publicSlug: {
+              type: "string",
+              minLength: 3,
+              maxLength: 200,
+              pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+            },
+            roomMixQuoteId: { type: "string", format: "uuid" }
+          }
+        },
+        headers: publicIdempotencyHeaders,
+        body: publicCheckoutRequestSchema,
+        response: {
+          201: publicCheckoutResponseSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      publicCheckoutService.assertProviderAvailable();
+
+      const key = requirePublicIdempotencyKey(request.headers);
+      const metadata = requestMetadata(request, "public-api");
+      const body: PublicCheckoutRequest = {
+        leadGuest: {
+          name: request.body.leadGuest.name,
+          email: request.body.leadGuest.email ?? null,
+          phone: request.body.leadGuest.phone ?? null
+        }
+      };
+      const idempotencyRequestBody = {
+        ...body,
+        guestAccountUserId: request.actor?.userId ?? null
+      };
+
+      const result = await idempotency.execute(
+        {
+          scopeKey:
+            `public.room-mix.checkout:${request.params.publicSlug.toLowerCase()}:` +
+            request.params.roomMixQuoteId,
+          key,
+          requestBody: idempotencyRequestBody
+        },
+        async (trx) => ({
+          statusCode: 201,
+          body: await publicCheckoutService.createRoomMixReservationPayment(
+            trx,
+            request.params.publicSlug,
+            request.params.roomMixQuoteId,
+            body,
+            metadata,
+            request.actor
+          )
+        })
+      );
+
+      const checkout = await publicCheckoutService.prepareCheckout(
+        request.params.publicSlug,
+        result.body.reservation.id,
+        result.body.paymentIntent.id,
+        metadata
+      );
+
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+
+      return reply.status(result.statusCode).send({
+        ...result.body,
+        checkout
+      });
     }
   );
 

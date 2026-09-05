@@ -19,6 +19,10 @@ const availabilityMessage = document.querySelector("#availabilityMessage");
 const quoteSection = document.querySelector("#quoteSection");
 const guestSection = document.querySelector("#guestSection");
 const statusSection = document.querySelector("#statusSection");
+const smartMatchSection = document.querySelector("#smartMatchSection");
+const smartMatchIntro = document.querySelector("#smartMatchIntro");
+const smartMatchMessage = document.querySelector("#smartMatchMessage");
+const smartRecommendations = document.querySelector("#smartRecommendations");
 const requestedMode = query.get("mode") === "villa" ? "villa" : "hotel";
 
 const state = {
@@ -26,6 +30,7 @@ const state = {
   units: [],
   availability: null,
   quote: null,
+  roomMixQuote: null,
   hold: null,
   session: publicSlug ? loadBookingSession(publicSlug) : {},
   countdownTimer: null,
@@ -35,6 +40,9 @@ const state = {
   bookingMode: requestedMode,
   availabilityTimer: null,
   availabilityRequestVersion: 0,
+  galleryMedia: [],
+  galleryIndex: 0,
+  recommendationRequestVersion: 0,
 };
 
 if (!publicSlug) {
@@ -67,6 +75,24 @@ function wireEvents() {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     void searchAvailability();
+  });
+
+  const photoDialog = document.querySelector("#propertyPhotoDialog");
+  document
+    .querySelector("#photoDialogClose")
+    ?.addEventListener("click", () => photoDialog?.close());
+  document
+    .querySelector("#photoDialogPrev")
+    ?.addEventListener("click", () => stepPropertyPhoto(-1));
+  document
+    .querySelector("#photoDialogNext")
+    ?.addEventListener("click", () => stepPropertyPhoto(1));
+  photoDialog?.addEventListener("click", (event) => {
+    if (event.target === photoDialog) photoDialog.close();
+  });
+  photoDialog?.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") stepPropertyPhoto(-1);
+    if (event.key === "ArrowRight") stepPropertyPhoto(1);
   });
 }
 
@@ -116,7 +142,10 @@ async function loadProperty() {
     configureBookingMode(data.property);
     renderProperty(data.property);
     propertyContent.classList.remove("hidden");
-    await searchAvailability({ resetBooking: false });
+    await Promise.allSettled([
+      searchAvailability({ resetBooking: false }),
+      searchRoomRecommendations(),
+    ]);
 
     if (
       state.session.activeCheckout?.reservationId &&
@@ -177,6 +206,7 @@ function renderProperty(property) {
     fact("Check-out", formatTime(property.checkOutTime) || "Contact property"),
   );
 
+  renderPropertyGallery(property);
   renderStayConfiguration(property.roomCategories || []);
 
   const amenities = document.querySelector("#amenities");
@@ -204,6 +234,98 @@ function renderProperty(property) {
   renderPolicies(property.policies);
 }
 
+
+function renderPropertyGallery(property) {
+  const gallery = document.querySelector("#propertyGallery");
+  if (!gallery) return;
+
+  const media = (property.media || []).filter(
+    (item) => item.mediaType === "IMAGE" && item.id,
+  );
+  state.galleryMedia = media;
+  state.galleryIndex = 0;
+  gallery.replaceChildren();
+
+  if (!media.length) {
+    gallery.classList.add("hidden");
+    return;
+  }
+
+  gallery.classList.remove("hidden");
+  const grid = element("div", "property-gallery-grid");
+
+  media.slice(0, 3).forEach((item, index) => {
+    const tile = element("button", "property-gallery-tile");
+    tile.type = "button";
+    tile.setAttribute(
+      "aria-label",
+      item.caption
+        ? `View photo: ${item.caption}`
+        : `View property photo ${index + 1}`,
+    );
+
+    const image = element("img");
+    image.src = propertyMediaUrl(item.id);
+    image.alt = item.altText || item.caption || `${property.name} photo ${index + 1}`;
+    image.loading = index === 0 ? "eager" : "lazy";
+    image.decoding = "async";
+    tile.append(image);
+    tile.addEventListener("click", () => openPropertyPhoto(index));
+    grid.append(tile);
+  });
+
+  gallery.append(grid);
+
+  const more = element(
+    "button",
+    "property-gallery-more",
+    media.length === 1 ? "View photo" : `View all ${media.length} photos`,
+  );
+  more.type = "button";
+  more.addEventListener("click", () => openPropertyPhoto(0));
+  gallery.append(more);
+}
+
+function openPropertyPhoto(index) {
+  if (!state.galleryMedia.length) return;
+  state.galleryIndex =
+    (index + state.galleryMedia.length) % state.galleryMedia.length;
+  renderPropertyPhotoDialog();
+
+  const dialog = document.querySelector("#propertyPhotoDialog");
+  if (dialog && !dialog.open) dialog.showModal();
+}
+
+function stepPropertyPhoto(direction) {
+  if (!state.galleryMedia.length) return;
+  state.galleryIndex =
+    (state.galleryIndex + direction + state.galleryMedia.length) %
+    state.galleryMedia.length;
+  renderPropertyPhotoDialog();
+}
+
+function renderPropertyPhotoDialog() {
+  const item = state.galleryMedia[state.galleryIndex];
+  if (!item) return;
+
+  const image = document.querySelector("#photoDialogImage");
+  const counter = document.querySelector("#photoDialogCounter");
+  const caption = document.querySelector("#photoDialogCaption");
+  if (!image || !counter || !caption) return;
+
+  image.src = propertyMediaUrl(item.id);
+  image.alt =
+    item.altText ||
+    item.caption ||
+    `${state.property?.name || "Wildleaf property"} photo ${state.galleryIndex + 1}`;
+  counter.textContent = `${state.galleryIndex + 1} / ${state.galleryMedia.length}`;
+  caption.textContent = item.caption || item.altText || "";
+}
+
+function propertyMediaUrl(mediaId) {
+  return `/v1/public/properties/${encodeURIComponent(publicSlug)}/media/${encodeURIComponent(mediaId)}`;
+}
+
 function configureBookingMode(property) {
   const allowsHotel =
     !property.saleMode ||
@@ -219,6 +341,7 @@ function configureBookingMode(property) {
 
   const villa = state.bookingMode === "villa";
   document.querySelector("#unitCountField").classList.toggle("hidden", villa);
+  smartMatchSection?.classList.toggle("hidden", villa);
   document.querySelector("#backToResults").href =
     `/customer/?mode=${state.bookingMode}`;
   if (villa && state.units.length !== 1) setUnitCount(1);
@@ -360,6 +483,422 @@ function renderOccupancyUnits() {
       }
       return card;
     }),
+  );
+}
+
+function partyTotals() {
+  return state.units.reduce(
+    (totals, unit) => ({
+      adults: totals.adults + unit.adults,
+      children: totals.children + unit.childAges.length,
+    }),
+    { adults: 0, children: 0 },
+  );
+}
+
+async function searchRoomRecommendations() {
+  if (state.bookingMode !== "hotel" || !state.property) {
+    smartMatchSection?.classList.add("hidden");
+    return;
+  }
+
+  const requestVersion = ++state.recommendationRequestVersion;
+  const totals = partyTotals();
+  const nights = Math.max(
+    1,
+    Math.round(
+      (new Date(`${form.departureDate.value}T12:00:00`).getTime() -
+        new Date(`${form.arrivalDate.value}T12:00:00`).getTime()) /
+        86400000,
+    ),
+  );
+
+  smartMatchSection?.classList.remove("hidden");
+  if (smartMatchIntro) {
+    smartMatchIntro.textContent =
+      `${totals.adults} ${totals.adults === 1 ? "adult" : "adults"} · ` +
+      `${totals.children} ${totals.children === 1 ? "child" : "children"} · ` +
+      `${nights} ${nights === 1 ? "night" : "nights"}`;
+  }
+  if (smartMatchMessage) {
+    smartMatchMessage.textContent = "Finding the most suitable room combinations…";
+    smartMatchMessage.className = "inline-message message-info";
+  }
+  smartRecommendations?.replaceChildren();
+
+  try {
+    const data = await apiRequest(
+      `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-recommendations`,
+      {
+        method: "POST",
+        body: {
+          arrivalDate: form.arrivalDate.value,
+          departureDate: form.departureDate.value,
+          adults: totals.adults,
+          childAges: state.units.flatMap((unit) => [...unit.childAges]),
+        },
+      },
+    );
+    if (requestVersion !== state.recommendationRequestVersion) return;
+    renderRoomRecommendations(data);
+  } catch (error) {
+    if (requestVersion !== state.recommendationRequestVersion) return;
+    if (smartMatchMessage) {
+      smartMatchMessage.textContent = messageFor(
+        error,
+        "Smart room matching is temporarily unavailable.",
+      );
+      smartMatchMessage.className = "inline-message message-warning";
+    }
+  }
+}
+
+function renderRoomRecommendations(data) {
+  if (!smartRecommendations || !smartMatchMessage) return;
+
+  const recommendations = data.recommendations || [];
+  smartRecommendations.replaceChildren();
+
+  if (!recommendations.length) {
+    smartMatchMessage.textContent =
+      "No mixed room combination currently fits this group and these dates.";
+    smartMatchMessage.className = "inline-message message-warning";
+    return;
+  }
+
+  smartMatchMessage.textContent =
+    recommendations.length === 1
+      ? "1 suitable room combination found."
+      : `${recommendations.length} suitable room combinations found.`;
+  smartMatchMessage.className = "inline-message message-success";
+
+  recommendations.forEach((recommendation) => {
+    smartRecommendations.append(
+      smartRecommendationCard(recommendation, data.singleCheckoutSupported),
+    );
+  });
+}
+
+function smartRecommendationCard(recommendation, singleCheckoutSupported) {
+  const card = element(
+    "article",
+    `smart-recommendation-card${recommendation.rank === 1 ? " recommended" : ""}`,
+  );
+
+  const header = element("div", "smart-recommendation-card-head");
+  const heading = element("div");
+  heading.append(
+    element("p", "option-kicker", recommendationReasonLabel(recommendation.reason)),
+    element(
+      "h3",
+      "",
+      `${recommendation.roomCount} ${recommendation.roomCount === 1 ? "room" : "rooms"} for your group`,
+    ),
+  );
+  header.append(
+    heading,
+    element(
+      "strong",
+      "smart-recommendation-total",
+      money(recommendation.estimatedTotalMinor, recommendation.currencyCode),
+    ),
+  );
+
+  const rooms = element("div", "smart-room-mix");
+  recommendation.items.forEach((item) => {
+    const room = element("div", "smart-room-item");
+    if (item.coverMediaId) {
+      const image = element("img", "smart-room-image");
+      image.src = propertyMediaUrl(item.coverMediaId);
+      image.alt = item.roomCategoryName;
+      image.loading = "lazy";
+      image.decoding = "async";
+      room.append(image);
+    }
+
+    const copy = element("div", "smart-room-copy");
+    copy.append(
+      element(
+        "strong",
+        "",
+        `${item.quantity} × ${item.roomCategoryName}`,
+      ),
+      element(
+        "span",
+        "smart-room-plan",
+        `${mealPlanLabel(item.mealPlanCode)} · ${item.ratePlanName}`,
+      ),
+    );
+
+    const assignments = element("div", "smart-room-assignments");
+    item.units.forEach((unit, index) => {
+      const parts = [
+        `${unit.adults} ${unit.adults === 1 ? "adult" : "adults"}`,
+      ];
+      if (unit.children) {
+        parts.push(
+          `${unit.children} ${unit.children === 1 ? "child" : "children"}`,
+        );
+      }
+      assignments.append(
+        element(
+          "span",
+          "",
+          `Room ${index + 1}: ${parts.join(" + ")}`,
+        ),
+      );
+    });
+    copy.append(assignments);
+    room.append(copy);
+    rooms.append(room);
+  });
+
+  const footer = element("div", "smart-recommendation-footer");
+  footer.append(
+    element(
+      "small",
+      "tax-note",
+      "Estimated room and extra-guest total. Final GST, fees and promotions are calculated in the exact quote.",
+    ),
+  );
+
+  const action = element(
+    "button",
+    "button button-primary smart-mix-action",
+    singleCheckoutSupported ? "Book this recommendation" : "Booking unavailable",
+  );
+  action.type = "button";
+  action.disabled = !singleCheckoutSupported;
+  if (singleCheckoutSupported) {
+    action.addEventListener("click", () =>
+      void startRecommendedBooking(recommendation, action),
+    );
+  } else {
+    action.setAttribute(
+      "title",
+      "This recommendation cannot currently be completed in one secure checkout.",
+    );
+  }
+  footer.append(action);
+
+  card.append(header, rooms, footer);
+  return card;
+}
+
+async function startRecommendedBooking(recommendation, button) {
+  if (!recommendation?.items?.length) return;
+
+  clearQuoteAndLater();
+  setBusy(button, true, "Checking exact price…");
+
+  try {
+    if (recommendation.items.length === 1) {
+      const item = recommendation.items[0];
+      const body = {
+        rateProductId: item.rateProductId,
+        arrivalDate: form.arrivalDate.value,
+        departureDate: form.departureDate.value,
+        promotionCode: form.promotionCode.value.trim() || null,
+        units: item.units.map((unit) => ({
+          adults: unit.adults,
+          childAges: [...unit.childAges],
+        })),
+      };
+      const key = operationKey(
+        state.session,
+        "recommended-quote",
+        JSON.stringify(body),
+      );
+      const data = await apiRequest(
+        `/v1/public/properties/${encodeURIComponent(publicSlug)}/quotes`,
+        {
+          method: "POST",
+          idempotencyKey: key,
+          body,
+        },
+      );
+
+      state.roomMixQuote = null;
+      state.quote = data.quote;
+      state.session.quoteId = data.quote.id;
+      state.session.quote = data.quote;
+      delete state.session.roomMixQuote;
+      delete state.session.holdId;
+      delete state.session.hold;
+      saveBookingSession(publicSlug, state.session);
+
+      renderQuote(data.quote, { showHoldAction: false });
+      await createHold(null, { scrollToGuest: true });
+      return;
+    }
+
+    if (form.promotionCode.value.trim()) {
+      if (smartMatchMessage) {
+        smartMatchMessage.textContent =
+          "Promo codes are not yet supported for a mixed-category checkout. Clear the promo code to book this recommendation, or choose one room category.";
+        smartMatchMessage.className = "inline-message message-warning";
+      }
+      return;
+    }
+
+    const body = {
+      arrivalDate: form.arrivalDate.value,
+      departureDate: form.departureDate.value,
+      items: recommendation.items.map((item) => ({
+        rateProductId: item.rateProductId,
+        units: item.units.map((unit) => ({
+          adults: unit.adults,
+          childAges: [...unit.childAges],
+        })),
+      })),
+    };
+    const key = operationKey(
+      state.session,
+      "room-mix-quote",
+      JSON.stringify(body),
+    );
+    const data = await apiRequest(
+      `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-mixes/quotes`,
+      {
+        method: "POST",
+        idempotencyKey: key,
+        body,
+      },
+    );
+
+    state.quote = null;
+    state.roomMixQuote = data.roomMixQuote;
+    state.session.roomMixQuote = data.roomMixQuote;
+    delete state.session.quoteId;
+    delete state.session.quote;
+    delete state.session.holdId;
+    delete state.session.hold;
+    saveBookingSession(publicSlug, state.session);
+
+    renderRoomMixQuote(data.roomMixQuote);
+    await createRoomMixHold({ scrollToGuest: true });
+  } catch (error) {
+    if (smartMatchMessage) {
+      smartMatchMessage.textContent = messageFor(
+        error,
+        "This recommendation could not be prepared for booking.",
+      );
+      smartMatchMessage.className = "inline-message message-warning";
+    }
+  } finally {
+    setBusy(button, false, "Book this recommendation");
+  }
+}
+
+function renderRoomMixQuote(quote) {
+  quoteSection.classList.remove("hidden");
+  quoteSection.replaceChildren();
+
+  const heading = element("div", "section-heading compact-heading");
+  const headingCopy = element("div");
+  headingCopy.append(
+    element("p", "eyebrow", "Exact Wildleaf quote"),
+    element("h2", "", "Your recommended room mix"),
+  );
+  const expiry = element("span", "expiry-pill");
+  heading.append(headingCopy, expiry);
+
+  const priceBox = element("div", "quote-price-box");
+  const rows = [
+    ["Accommodation", quote.grossAccommodationMinor],
+    ["Extra guests", quote.grossExtraGuestMinor],
+    ["Discount", -quote.discountMinor],
+    ["Fees", quote.feeMinor],
+    ["Taxes", quote.taxMinor],
+  ];
+  const breakdown = element("dl", "price-breakdown");
+  rows.forEach(([label, value]) => {
+    if (value === 0 && !["Fees", "Taxes"].includes(label)) return;
+    breakdown.append(
+      element("dt", "", label),
+      element(
+        "dd",
+        value < 0 ? "discount" : "",
+        `${value < 0 ? "−" : ""}${money(Math.abs(value), quote.currencyCode)}`,
+      ),
+    );
+  });
+  breakdown.append(
+    element("dt", "price-total-label", "Total payable"),
+    element("dd", "price-total", money(quote.totalMinor, quote.currencyCode)),
+  );
+  priceBox.append(breakdown);
+
+  const roomSummary = quote.items
+    .map((item) => `${item.quantity} × ${item.productLabel}`)
+    .join(" · ");
+  const rateSummary = [
+    ...new Set(
+      quote.items.map(
+        (item) => `${item.ratePlanName} · ${mealPlanLabel(item.mealPlanCode)}`,
+      ),
+    ),
+  ].join(" · ");
+
+  const details = element("div", "quote-details");
+  details.append(
+    detailLine(
+      "Stay",
+      `${formatDate(quote.arrivalDate)} – ${formatDate(quote.departureDate)}`,
+    ),
+    detailLine("Rooms", roomSummary),
+    detailLine("Rates", rateSummary),
+  );
+
+  const action = element("div", "quote-action");
+  action.append(
+    element(
+      "p",
+      "fine-print",
+      "This exact total is built from each room's canonical rate, guest ages, GST and applicable fees. The rooms will be held and confirmed together.",
+    ),
+  );
+
+  quoteSection.append(heading, priceBox, details, action);
+  startCountdown(expiry, quote.expiresAt, null, "Quote");
+}
+
+async function createRoomMixHold({ scrollToGuest = true } = {}) {
+  if (!state.roomMixQuote) return;
+
+  const fingerprint = state.roomMixQuote.id;
+  const key = operationKey(state.session, "room-mix-hold", fingerprint);
+  saveBookingSession(publicSlug, state.session);
+
+  try {
+    const data = await apiRequest(
+      `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-mixes/${state.roomMixQuote.id}/hold`,
+      { method: "POST", idempotencyKey: key },
+    );
+    state.hold = data.hold;
+    state.session.holdId = data.hold.id;
+    state.session.hold = data.hold;
+    saveBookingSession(publicSlug, state.session);
+    renderGuestForm();
+    if (scrollToGuest) {
+      guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  } catch (error) {
+    renderSectionError(
+      quoteSection,
+      messageFor(error, "The recommended rooms could not be reserved together."),
+    );
+  }
+}
+
+function recommendationReasonLabel(reason) {
+  return (
+    {
+      BEST_VALUE: "Best value",
+      FEWER_ROOMS: "Fewer rooms",
+      MORE_SPACE: "More space",
+      ALTERNATIVE: "Another good match",
+    }[reason] || "Recommended"
   );
 }
 
@@ -507,6 +1046,8 @@ function availabilityCard(option, nights) {
 
 async function startBooking(option, button) {
   clearHoldAndLater();
+  state.roomMixQuote = null;
+  delete state.session.roomMixQuote;
   setBusy(button, true, "Preparing booking…");
   const body = {
     rateProductId: option.rateProductId,
@@ -716,18 +1257,34 @@ async function beginCheckout(guestForm, button) {
     return;
   }
 
+  const roomMixQuoteId = state.roomMixQuote?.id || null;
+  const standardQuoteId = state.quote?.id || null;
+  const checkoutSourceId = roomMixQuoteId || standardQuoteId;
+  if (!checkoutSourceId) {
+    renderSectionError(
+      guestSection,
+      "The exact quote is no longer available. Please choose your rooms again.",
+    );
+    return;
+  }
+
   setBusy(button, true, "Preparing secure payment…");
   const body = { leadGuest };
-  const fingerprint = `${state.quote.id}:${JSON.stringify(body)}`;
+  const sourceLabel = roomMixQuoteId ? "room-mix" : "quote";
+  const fingerprint = `${sourceLabel}:${checkoutSourceId}:${JSON.stringify(body)}`;
   const key = operationKey(state.session, "checkout", fingerprint);
   state.session.leadGuest = leadGuest;
   saveBookingSession(publicSlug, state.session);
 
   try {
-    const data = await apiRequest(
-      `/v1/public/properties/${encodeURIComponent(publicSlug)}/quotes/${state.quote.id}/checkout`,
-      { method: "POST", idempotencyKey: key, body },
-    );
+    const checkoutPath = roomMixQuoteId
+      ? `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-mixes/${roomMixQuoteId}/checkout`
+      : `/v1/public/properties/${encodeURIComponent(publicSlug)}/quotes/${standardQuoteId}/checkout`;
+    const data = await apiRequest(checkoutPath, {
+      method: "POST",
+      idempotencyKey: key,
+      body,
+    });
     state.session.activeCheckout = {
       reservationId: data.reservation.id,
       reservationReference: data.reservation.reservationReference,
@@ -1009,15 +1566,31 @@ function minimizeCheckoutSession(data) {
 
 function restorePreCheckoutSession() {
   const quote = state.session.quote;
+  const roomMixQuote = state.session.roomMixQuote;
   const hold = state.session.hold;
   const holdIsActive =
     hold?.id &&
     hold.status === "ACTIVE" &&
     new Date(hold.expiresAt).getTime() > Date.now();
-  const quoteIsActive =
+  const standardQuoteIsActive =
     quote?.id && new Date(quote.expiresAt).getTime() > Date.now();
-  if (!quote?.id || (!quoteIsActive && !holdIsActive)) return;
+  const roomMixQuoteIsActive =
+    roomMixQuote?.id && new Date(roomMixQuote.expiresAt).getTime() > Date.now();
 
+  if (roomMixQuote?.id && (roomMixQuoteIsActive || holdIsActive)) {
+    state.quote = null;
+    state.roomMixQuote = roomMixQuote;
+    renderRoomMixQuote(roomMixQuote);
+    if (holdIsActive) {
+      state.hold = hold;
+      renderGuestForm();
+    }
+    return;
+  }
+
+  if (!quote?.id || (!standardQuoteIsActive && !holdIsActive)) return;
+
+  state.roomMixQuote = null;
   state.quote = quote;
   renderQuote(quote);
   if (holdIsActive) {
@@ -1053,6 +1626,7 @@ function scheduleAvailabilitySearch() {
   state.availabilityTimer = window.setTimeout(() => {
     state.availabilityTimer = null;
     void searchAvailability({ resetBooking: false });
+    void searchRoomRecommendations();
   }, 350);
 }
 
@@ -1065,6 +1639,7 @@ function clearResultsAfterSearchChange() {
 
 function clearQuoteAndLater() {
   state.quote = null;
+  state.roomMixQuote = null;
   quoteSection.classList.add("hidden");
   quoteSection.replaceChildren();
   clearHoldAndLater();

@@ -11,12 +11,13 @@ export interface PublicCheckoutRequest extends JsonObject {
 export interface PublicCheckoutReservationView extends JsonObject {
   id: string;
   reservationReference: string;
-  quoteId: string;
+  quoteId: string | null;
+  roomMixQuoteId: string | null;
   status: "PAYMENT_PENDING";
   holdExpiresAt: string;
   arrivalDate: string;
   departureDate: string;
-  productType: "ROOM_CATEGORY" | "FULL_PROPERTY";
+  productType: "ROOM_CATEGORY" | "FULL_PROPERTY" | "ROOM_MIX";
   roomCategoryId: string | null;
   quantity: number;
   currencyCode: string;

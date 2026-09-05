@@ -4666,7 +4666,7 @@ describe("Phase 5E2B1 immutable revenue recognition schedule foundation", () => 
             property_id: fixture.propertyId,
             reservation_id: held.reservation.id,
             reservation_financial_snapshot_id: financial.id,
-            quote_id: held.reservation.quoteId,
+            quote_id: held.reservation.quoteId!,
             allocation_version: "REVENUE_BASIS_V1",
             currency_code: financial.currency_code,
             accepted_total_minor: financial.total_minor + 1,
