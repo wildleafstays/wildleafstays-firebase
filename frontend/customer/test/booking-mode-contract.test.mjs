@@ -156,7 +156,7 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /const complexSearch =/);
   assert.match(
     propertySource,
-    /state\.units\.length > 1 \|\| totals\.adults \+ totals\.children > 2/,
+    /requestedRoomCount\(\) > 1 \|\| totals\.adults \+ totals\.children > 2/,
   );
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
@@ -164,4 +164,58 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
 test("room shopping keeps Razorpay verification server-side", () => {
   assert.doesNotMatch(propertySource, /razorpay_payment_id/);
   assert.doesNotMatch(propertySource, /razorpay_signature/);
+});
+
+
+test("room count is independent from the master travelling party", () => {
+  assert.match(propertyHtml, /id="guestSummary"/);
+  assert.match(propertyHtml, /class="traveller-disclosure compact-guest-picker"/);
+  assert.match(propertySource, /state\.units = \[\s*\{\s*adults,/s);
+  assert.match(propertySource, /function setUnitCount\(count\)/);
+  assert.doesNotMatch(
+    propertySource,
+    /function setUnitCount\(count\)[\s\S]{0,500}Array\.from/,
+  );
+  assert.match(
+    propertySource,
+    /state\.bookingMode === "villa"[\s\S]*: \[\{ adults: 1, children: 0 \}\]/,
+  );
+});
+
+test("room cards expose live per-category stock without requiring one category to satisfy all rooms", () => {
+  assert.match(propertySource, /function refreshCategoryAvailabilityCounts\(/);
+  assert.match(propertySource, /function probeCategoryAvailability\(/);
+  assert.match(propertySource, /function categoryAvailabilityLabel\(/);
+  assert.match(propertySource, /room-stock-badge/);
+  assert.match(propertySource, /Only 1 room available/);
+  assert.match(propertySource, /rooms available/);
+});
+
+test("room allocation dynamically caps adults and children at category occupancy", () => {
+  assert.match(propertySource, /function roomAdultMaximum\(category, unit\)/);
+  assert.match(propertySource, /function roomChildMaximum\(category, unit\)/);
+  assert.match(propertySource, /function roomUnitValid\(category, unit\)/);
+  assert.match(propertySource, /integerSelect\(unit\.adults, 1, adultMaximum\)/);
+  assert.match(
+    propertySource,
+    /integerSelect\(unit\.childAges\.length, 0, childMaximum\)/,
+  );
+  assert.match(propertySource, /children\.disabled = childMaximum === 0/);
+  assert.match(propertySource, /ageOption\.disabled = !roomUnitValid/);
+});
+
+test("search-party mismatch is a soft warning but occupancy and stock remain hard rules", () => {
+  assert.match(propertySource, /function partyMismatchMessage\(/);
+  assert.match(propertySource, /You can continue if this is intentional/);
+  assert.match(propertySource, /warning: mismatch/);
+  assert.match(propertySource, /selectionContinue\.disabled = !validation\.valid/);
+  assert.match(propertySource, /exceeds its maximum occupancy/);
+  assert.match(propertySource, /currently available/);
+});
+
+test("infants use the Wildleaf fallback occupancy policy until a published public policy is available", () => {
+  assert.match(propertySource, /function infantMaxAgeForUi\(\)/);
+  assert.match(propertySource, /state\.property\?\.guestAgePolicy/);
+  assert.match(propertySource, /return 5/);
+  assert.match(propertySource, /function childCountsTowardsOccupancy\(age\)/);
 });
