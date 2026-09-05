@@ -49,7 +49,7 @@ test("property page loads inventory automatically and offers direct booking", ()
   assert.doesNotMatch(propertyHtml, />\s*Check availability\s*</);
   assert.doesNotMatch(propertyHtml, /Available rooms and rates/);
   assert.match(propertyHtml, /class="[^"]*availability-form/);
-  assert.match(propertySource, /searchAvailability\\(\\{ resetBooking: false \\}\\)/);
+  assert.match(propertySource, /searchAvailability\(\{ resetBooking: false \}\)/);
   assert.match(propertySource, /function scheduleAvailabilitySearch\(\)/);
   assert.match(propertySource, /"Book now"/);
   assert.match(propertySource, /GST and any additional fees shown before payment/);
@@ -73,7 +73,7 @@ test("hotel room categories are not repeated in the property summary", () => {
 
 test("available rates use OTA-style room facts and calendar-backed totals", () => {
   assert.match(propertySource, /ota-rate-card/);
-  assert.match(propertySource, /category\\.maxOccupancy/);
+  assert.match(propertySource, /category\.maxOccupancy/);
   assert.match(propertySource, /mealPlanLabel/);
   assert.match(propertySource, /option\.estimatedTotalMinor/);
   assert.match(propertySource, /GST and any additional fees shown before payment/);
