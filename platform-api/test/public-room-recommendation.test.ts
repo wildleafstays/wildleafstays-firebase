@@ -4,10 +4,8 @@ import type {
   PublicAvailabilityView
 } from "../src/modules/public-booking/domain/public-availability.js";
 import type { PublicPropertyDetailView } from "../src/modules/public-booking/domain/public-catalog.js";
-import {
-  PublicRecommendationGuestAgePolicyReader,
-  PublicRoomRecommendationService
-} from "../src/modules/public-booking/application/public-room-recommendation-service.js";
+import { PublicRoomRecommendationService } from "../src/modules/public-booking/application/public-room-recommendation-service.js";
+import type { PublicRecommendationGuestAgePolicyReader } from "../src/modules/public-booking/application/public-room-recommendation-service.js";
 import type { PublicCatalogService } from "../src/modules/public-booking/application/public-catalog-service.js";
 import type { PublicAvailabilityService } from "../src/modules/public-booking/application/public-availability-service.js";
 
