@@ -115,3 +115,53 @@ test("hotel property page can book smart recommendations through canonical check
   assert.doesNotMatch(propertySource, /razorpay_payment_id/);
   assert.doesNotMatch(propertySource, /razorpay_signature/);
 });
+
+
+test("property shopping starts with photography and keeps identity below the gallery", () => {
+  const galleryIndex = propertyHtml.indexOf('id="propertyGallery"');
+  const propertyNameIndex = propertyHtml.indexOf('id="propertyName"');
+  assert.ok(galleryIndex >= 0);
+  assert.ok(propertyNameIndex > galleryIndex);
+  assert.doesNotMatch(propertyHtml, /class="property-hero"/);
+  assert.doesNotMatch(propertyHtml, /class="booking-assurance"/);
+  assert.match(propertySource, /media\.slice\(0, 5\)/);
+  assert.match(propertySource, /gallery-count-/);
+});
+
+test("hotel rates are grouped into one horizontal shopping card per room category", () => {
+  assert.match(propertyHtml, /room-category-rail/);
+  assert.match(propertySource, /function groupRoomOptions\(options\)/);
+  assert.match(propertySource, /function roomCategoryCard\(category, options, nights\)/);
+  assert.match(propertySource, /rate-plan-list/);
+  assert.match(propertySource, /rate-plan-choice/);
+  assert.match(propertySource, /mealPlanLabel\(option\.mealPlanCode\)/);
+  assert.match(propertySource, /function renderRoomAllocationControls\(category, selection\)/);
+  assert.match(propertySource, /Who is staying in this room\?/);
+});
+
+test("manual room shopping uses one sticky selection ribbon and canonical checkout paths", () => {
+  assert.match(propertyHtml, /id="selectionRibbon"/);
+  assert.match(propertyHtml, /id="selectionContinue"/);
+  assert.match(propertySource, /function renderSelectionRibbon\(\)/);
+  assert.match(propertySource, /function continueRoomSelection\(button\)/);
+  assert.match(propertySource, /"manual-room-quote"/);
+  assert.match(propertySource, /"manual-room-mix-quote"/);
+  assert.match(propertySource, /room-mixes\/quotes/);
+  assert.match(propertySource, /await createRoomMixHold\(\{ scrollToGuest: true \}\)/);
+  assert.match(propertySource, /await createHold\(null, \{ scrollToGuest: true \}\)/);
+});
+
+test("Wildleaf Match stays out of simple searches and is collapsible for complex groups", () => {
+  assert.match(propertyHtml, /<details\s+id="smartMatchSection"/);
+  assert.match(propertySource, /const complexSearch =/);
+  assert.match(
+    propertySource,
+    /state\.units\.length > 1 \|\| totals\.adults \+ totals\.children > 2/,
+  );
+  assert.match(propertySource, /smartMatchSection\.open = false/);
+});
+
+test("room shopping keeps Razorpay verification server-side", () => {
+  assert.doesNotMatch(propertySource, /razorpay_payment_id/);
+  assert.doesNotMatch(propertySource, /razorpay_signature/);
+});
