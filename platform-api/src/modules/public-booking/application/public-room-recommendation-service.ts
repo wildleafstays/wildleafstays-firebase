@@ -165,11 +165,7 @@ function classifyAges(childAges: number[], policy: GuestAgePolicy | null): Class
   return { children, infants };
 }
 
-function childLimitCount(
-  children: number,
-  infants: number,
-  policy: GuestAgePolicy | null
-): number {
+function childLimitCount(children: number, infants: number, policy: GuestAgePolicy | null): number {
   return children + (policy?.infantsCountTowardsChildLimit ? infants : 0);
 }
 
@@ -189,12 +185,7 @@ function chargeableChildren(
   return children + (policy?.infantsChargeAsChildren ? infants : 0);
 }
 
-function choiceKey(
-  categoryId: string,
-  adults: number,
-  children: number,
-  infants: number
-): string {
+function choiceKey(categoryId: string, adults: number, children: number, infants: number): string {
   return `${categoryId}:${adults}:${children}:${infants}`;
 }
 
