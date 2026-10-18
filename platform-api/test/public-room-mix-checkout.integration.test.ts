@@ -585,7 +585,7 @@ describe("Atomic room-mix booking core", () => {
         const allocationRows = await trx
           .selectFrom("inventory_allocations")
           .select("id")
-          .where("reservation_id", "=", firstReservation.reservation.id)
+          .where("hold_id", "=", firstHold.hold.id)
           .execute();
         expect(allocationRows).toHaveLength(1);
         expect(allocationRows[0]?.id).toBe(processed.inventoryAllocationId);
