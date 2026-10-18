@@ -151,6 +151,13 @@ test("SmartStay premium cards retain accessible keyboard focus and reduced motio
   assert.match(discoveryStyles, /property-card:hover/);
 });
 
+test("SmartStay never loses published properties when taxonomy is incomplete", () => {
+  assert.match(homeSource, /const categorizedIds = new Set/);
+  assert.match(homeSource, /!categorizedIds\.has\(property\.propertyCategoryId\)/);
+  assert.match(homeSource, /More Wildleaf stays/);
+  assert.match(homeSource, /renderedCount \+= uncategorized\.length/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
