@@ -131,6 +131,13 @@ test("SmartStay returns customers to search with their guest preferences", () =>
   assert.doesNotMatch(propertySource, /querySelector\("#backToResults"\)\.href = "\/customer\/"/);
 });
 
+test("SmartStay ranks verified room matches ahead of speculative options", () => {
+  assert.match(homeSource, /properties\.sort\(\(a, b\) =>/);
+  assert.match(homeSource, /a\.smartstayCheckUnavailable \? 1 : -1/);
+  assert.match(homeSource, /a\.smartstayIsAlternative \? 1 : -1/);
+  assert.match(homeSource, /return aAmount - bAmount/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
