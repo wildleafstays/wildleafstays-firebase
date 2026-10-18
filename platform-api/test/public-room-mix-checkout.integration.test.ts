@@ -608,6 +608,22 @@ describe("Atomic room-mix booking core", () => {
           .execute();
         expect(allocationRows).toHaveLength(1);
         expect(allocationRows[0]?.id).toBe(processed.inventoryAllocationId);
+        const canonicalSuccess = await trx
+          .selectFrom("payment_successes")
+          .select([
+            "reservation_id",
+            "payment_intent_id",
+            "inventory_allocation_id",
+            "outcome"
+          ])
+          .where("id", "=", processed.paymentSuccessId!)
+          .executeTakeFirstOrThrow();
+        expect(canonicalSuccess).toMatchObject({
+          reservation_id: firstReservation.reservation.id,
+          payment_intent_id: firstPayment.paymentIntent.id,
+          inventory_allocation_id: processed.inventoryAllocationId,
+          outcome: PaymentProcessingOutcomes.RESERVATION_CONFIRMED
+        });
 
         const reservation = await trx
           .selectFrom("reservations")
