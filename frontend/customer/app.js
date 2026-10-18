@@ -342,6 +342,11 @@ async function matchGuestRequirements(properties) {
       const position = next++;
       const property = candidates[position];
       try {
+        if (!exclusive && requestedRooms > 6 &&
+            property.saleMode !== "FULL_PROPERTY_ONLY") {
+          outcomes[position] = {...property,smartstayCheckUnavailable:true};
+          continue;
+        }
         const isEntire = exclusive || property.saleMode === "FULL_PROPERTY_ONLY";
         let matches = false;
         let estimateMinor = null;
@@ -357,7 +362,18 @@ async function matchGuestRequirements(properties) {
           // Recommendation payloads vary with available room mixes;
           // never claim availability from a result we cannot substantiate.
           const recommendations = response.recommendations || response.options || [];
-          matches = Array.isArray(recommendations) && recommendations.length > 0;
+          const suitable = Array.isArray(recommendations)
+            ? recommendations.filter(item => item.roomCount === requestedRooms)
+            : [];
+          matches = suitable.length > 0;
+          if (matches) {
+            const offer = [...suitable].sort((a,b) =>
+              a.estimatedTotalMinor - b.estimatedTotalMinor)[0];
+            if (Number.isSafeInteger(offer.estimatedTotalMinor)) {
+              estimateMinor = offer.estimatedTotalMinor;
+              currencyCode = offer.currencyCode || "INR";
+            }
+          }
         } else {
           const units = isEntire
             ? [{adults,children}]
@@ -368,7 +384,9 @@ async function matchGuestRequirements(properties) {
           );
           const options = (response.options || []).filter(option =>
             option.available &&
-            option.productType === (isEntire ? "FULL_PROPERTY" : "ROOM_CATEGORY")
+            (isEntire ? option.productType === "FULL_PROPERTY" :
+              (option.productType === "ROOM_CATEGORY" ||
+               option.productType === "FULL_PROPERTY"))
           );
           matches = options.length > 0;
           if (matches) {
@@ -552,7 +570,7 @@ function propertyCard(property, index) {
   }
   const link = element("a", "button button-primary property-cta", "Explore this stay");
   link.href = propertyUrl(property);
-  link.setAttribute("aria-label", `View rooms at ${property.name}`);
+  link.setAttribute("aria-label", `Explore stay options at ${property.name}`);
   body.append(link);
 
   article.append(visual, body);
