@@ -2084,6 +2084,11 @@ function renderQuote(quote, { showHoldAction = true } = {}) {
       quote.cancellationPolicy.policyText ||
         "Cancellation terms are snapshotted with this quote.",
     ),
+    element(
+      "p",
+      "fine-print",
+      "This is your confirmed quote breakdown, including the calculated taxes and fees. No payment is taken until you review the guest details and complete secure checkout.",
+    ),
   );
   let holdButton = null;
   if (showHoldAction) {
