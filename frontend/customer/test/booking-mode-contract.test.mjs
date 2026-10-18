@@ -420,7 +420,7 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /const complexSearch =/);
   assert.match(
     propertySource,
-    /requestedRooms > 1 \|\| totals\.adults \+ totals\.children > 2/,
+    /requestedRooms > 1 \|\| totals\.children > 0 \|\| totals\.adults > 2/,
   );
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
