@@ -580,6 +580,16 @@ describe("Atomic room-mix booking core", () => {
         expect(processed.reconciliationCaseId).toBeNull();
         expect(processed.inventoryAllocationId).not.toBeNull();
 
+        // Confirming payment must turn the held room mix into one allocation,
+        // not leave orphaned active holds or create duplicate allocations.
+        const allocationRows = await trx
+          .selectFrom("inventory_allocations")
+          .select("id")
+          .where("reservation_id", "=", firstReservation.reservation.id)
+          .execute();
+        expect(allocationRows).toHaveLength(1);
+        expect(allocationRows[0]?.id).toBe(processed.inventoryAllocationId);
+
         const reservation = await trx
           .selectFrom("reservations")
           .select(["status", "quote_id", "room_mix_quote_id", "inventory_hold_id"])
