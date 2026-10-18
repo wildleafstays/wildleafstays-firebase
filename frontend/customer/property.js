@@ -520,7 +520,7 @@ async function searchRoomRecommendations() {
   const totals = partyTotals();
   const requestedRooms = requestedRoomCount();
   const complexSearch =
-    requestedRooms > 1 || totals.adults + totals.children > 2;
+    requestedRooms > 1 || totals.children > 0 || totals.adults > 2;
   if (!complexSearch || requestedRooms > 6) {
     state.recommendationRequestVersion += 1;
     smartMatchSection?.classList.add("hidden");
