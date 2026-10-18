@@ -82,6 +82,15 @@ test("SmartStay explains privacy and returns from entire property to rooms", () 
   assert.match(bookingModeNavSource, /no unrelated overnight guests/);
 });
 
+test("SmartStay discovery checks dates and exact group room count", () => {
+  assert.match(homeSource, /async function matchGuestRequirements/);
+  assert.match(homeSource, /room-recommendations/);
+  assert.match(homeSource, /item\.roomCount === requestedRooms/);
+  assert.match(homeSource, /smartstayCheckUnavailable/);
+  assert.match(homeSource, /Date-specific estimate:/);
+  assert.match(homeSource, /before tax and fees/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
