@@ -718,6 +718,7 @@ async function startRecommendedBooking(recommendation, button) {
   if (!recommendation?.items?.length) return;
 
   clearQuoteAndLater();
+  const bookingSearchVersion = state.recommendationRequestVersion;
   setBusy(button, true, "Checking exact price…");
 
   try {
@@ -746,6 +747,8 @@ async function startRecommendedBooking(recommendation, button) {
           body,
         },
       );
+
+    if (bookingSearchVersion !== state.recommendationRequestVersion) return;
 
       state.roomMixQuote = null;
       state.quote = data.quote;
@@ -794,6 +797,8 @@ async function startRecommendedBooking(recommendation, button) {
         body,
       },
     );
+
+    if (bookingSearchVersion !== state.recommendationRequestVersion) return;
 
     state.quote = null;
     state.roomMixQuote = data.roomMixQuote;
