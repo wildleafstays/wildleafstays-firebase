@@ -903,6 +903,28 @@ describe("Phase 6A public property catalog", () => {
     expect(after).toEqual(before);
   });
 
+  it("accepts explicit child ages for a single-room discovery search", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/public/smartstay/search",
+      payload: {
+        arrivalDate: "2030-02-10",
+        departureDate: "2030-02-11",
+        adults: 2,
+        childAges: [4],
+        requestedRooms: 1,
+        exclusive: false,
+        destination: fixture.city,
+        limit: 10,
+        offset: 0
+      }
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { properties: unknown[]; scanned: number };
+    expect(body.scanned).toBe(1);
+    expect(Array.isArray(body.properties)).toBe(true);
+  });
+
   it("does not present room-only properties as exclusive stays", async () => {
     const response = await app.inject({
       method: "POST",
