@@ -2526,11 +2526,21 @@ function renderFinalStatus(kind, title, message, reference) {
 
 function startStatusPolling() {
   stopStatusPolling();
+  const pollingReservationId = state.session.activeCheckout?.reservationId;
+  const pollingPaymentIntentId = state.session.activeCheckout?.paymentIntentId;
+  if (!pollingReservationId || !pollingPaymentIntentId) return;
   state.polling = true;
   state.pollAttempts = 0;
   const poll = async () => {
     state.pollAttempts += 1;
     await refreshCheckoutStatus(true);
+    if (
+      state.session.activeCheckout?.reservationId !== pollingReservationId ||
+      state.session.activeCheckout?.paymentIntentId !== pollingPaymentIntentId
+    ) {
+      stopStatusPolling();
+      return;
+    }
     if (
       state.polling &&
       !state.pollTimer &&
