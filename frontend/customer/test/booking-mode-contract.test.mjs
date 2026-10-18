@@ -109,6 +109,13 @@ test("SmartStay child ages are gathered and kept with the booking request", () =
   assert.match(propertySource, /query\.get\("childAges"\)/);
 });
 
+test("SmartStay offers exclusive accommodation when requested rooms cannot be matched", () => {
+  assert.match(homeSource, /if \(!matches && !exclusive && allowsEntireProperty\(property\)\)/);
+  assert.match(homeSource, /suggestedMode = "villa"/);
+  assert.match(homeSource, /requestedRooms > 6 && allowsEntireProperty\(property\)/);
+  assert.match(homeSource, /option\.productType === "FULL_PROPERTY" && option\.available/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
