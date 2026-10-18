@@ -425,6 +425,18 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("delayed recommended quotes cannot restore an outdated booking after search edits", () => {
+  assert.match(propertySource, /const bookingSearchVersion = state\.recommendationRequestVersion/);
+  assert.equal(
+    (
+      propertySource.match(
+        /if \(bookingSearchVersion !== state\.recommendationRequestVersion\) return;/g,
+      ) || []
+    ).length,
+    2,
+  );
+});
+
 test("changing dates or guests immediately invalidates stale room recommendations", () => {
   assert.match(
     propertySource,
