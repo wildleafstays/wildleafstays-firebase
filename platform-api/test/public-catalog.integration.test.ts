@@ -928,6 +928,34 @@ describe("Phase 6A public property catalog", () => {
     expect(body.properties).toEqual([]);
   });
 
+  it("rejects exclusive property search options that exceed request limits", async () => {
+    const base = {
+      arrivalDate: "2030-02-10",
+      departureDate: "2030-02-11",
+      adults: 2,
+      childAges: [],
+      requestedRooms: 1,
+      exclusive: true
+    };
+    const invalid = [
+      { ...base, limit: 51 },
+      { ...base, offset: -1 },
+      { ...base, adults: 21 },
+      { ...base, childAges: [18] },
+      { ...base, requestedRooms: 0 },
+      { ...base, categoryId: "not-a-uuid" },
+      { ...base, typeId: "not-a-uuid" }
+    ];
+    for (const payload of invalid) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/public/smartstay/search",
+        payload
+      });
+      expect(response.statusCode).toBe(400);
+    }
+  });
+
   it("paginates source properties without skipping when matches are absent", async () => {
     const payload = {
       arrivalDate: "2030-02-10",
