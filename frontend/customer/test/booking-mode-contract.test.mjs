@@ -425,6 +425,13 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("promotion edits invalidate an in-flight recommended quote", () => {
+  assert.match(
+    propertySource,
+    /form\.promotionCode\.addEventListener\("input", \(\) => \{[\s\S]*?state\.recommendationRequestVersion \+= 1;[\s\S]*?clearQuoteAndLater\(\)/,
+  );
+});
+
 test("delayed recommended quotes cannot restore an outdated booking after search edits", () => {
   assert.match(propertySource, /const bookingSearchVersion = state\.recommendationRequestVersion/);
   assert.equal(
