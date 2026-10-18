@@ -45,51 +45,32 @@ const bookingModeNavSource = await readFile(
   "utf8",
 );
 
-test("homepage is room-booking discovery with one Entire Property doorway", () => {
-  assert.doesNotMatch(homeHtml, /id="modeAll"/);
-  assert.doesNotMatch(homeHtml, /id="modeHotel"/);
-  assert.doesNotMatch(homeHtml, /id="modeVilla"/);
-  assert.doesNotMatch(homeHtml, /class="stay-mode-switch"/);
-  assert.match(
-    homeHtml,
-    /id="entirePropertyEntry"[\s\S]*href="\/customer\/entire-properties\.html"/,
-  );
-  assert.match(homeSource, /function isRoomBookable\(property\)/);
-  assert.match(homeSource, /property\.saleMode === "ROOMS_ONLY"/);
+test("SmartStay homepage uses unified discovery with optional privacy", () => {
+  assert.doesNotMatch(homeHtml, /id="modeAll"|id="modeHotel"|id="modeVilla"/);
+  assert.doesNotMatch(homeHtml, /id="entirePropertyEntry"/);
+  assert.match(homeHtml, /id="privateStay"[^>]*type="checkbox"/);
+  assert.match(homeSource, /function allowsEntireProperty\(property\)/);
+  assert.match(homeSource, /exclusiveOnly \? allowsEntireProperty\(property\) : true/);
+  assert.match(homeSource, /property\.saleMode === "FULL_PROPERTY_ONLY"/);
   assert.match(homeSource, /property\.saleMode === "BOTH"/);
-  assert.doesNotMatch(homeSource, /saleModeAllows/);
-  assert.doesNotMatch(homeSource, /function bookingModeForProperty/);
-  assert.match(homeSource, /mode: "hotel"/);
+  assert.match(homeSource, /"Explore this stay"/);
+  assert.match(homeSource, /mode: form\.elements\.namedItem\("privateStay"\)/);
+  assert.match(propertySource, /"Choose rooms for your stay"/);
 });
 
-test("homepage cards stay concise and use the canonical starting room rate", () => {
+test("SmartStay never advertises room pricing for full-property-only listings", () => {
+  assert.match(homeSource, /property\.saleMode !== "FULL_PROPERTY_ONLY"/);
   assert.match(homeSource, /property\.startingRoomRateMinor/);
   assert.match(homeSource, /formatMinorPrice/);
-  assert.match(homeSource, /"View rooms"/);
-  assert.doesNotMatch(
-    homeSource,
-    /A distinctive Wildleaf stay with live availability and secure booking/,
-  );
-  assert.doesNotMatch(homeSource, /property-tags/);
+  assert.match(homeSource, /"Exclusive entire-property accommodation"/);
   assert.match(discoveryStyles, /\.property-card-price/);
-  assert.match(
-    discoveryStyles,
-    /\.property-category-heading h2[\s\S]*font-family: "DM Sans"/,
-  );
-  assert.match(
-    discoveryStyles,
-    /\.home-page \.property-card-body h3[\s\S]*font-family: "DM Sans"/,
-  );
 });
 
-test("BOTH properties offer a clean switch from room booking to entire-property booking", () => {
+test("BOTH properties preserve the existing offer switch", () => {
   assert.match(propertyHtml, /id="entirePropertySwitch"/);
-  assert.match(propertyHtml, /You can book this entire property/);
   assert.match(bookingModeNavSource, /data\.property\?\.saleMode !== "BOTH"/);
   assert.match(bookingModeNavSource, /villaParams\.set\("mode", "villa"\)/);
-  assert.match(bookingModeNavSource, /villaParams\.set\("rooms", "1"\)/);
   assert.match(bookingModeNavSource, /switchLink\.classList\.remove\("hidden"\)/);
-  assert.match(discoveryStyles, /\.property-mode-alternative/);
 });
 
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
