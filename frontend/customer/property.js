@@ -2574,6 +2574,12 @@ function scheduleAvailabilitySearch() {
 }
 
 function clearResultsAfterSearchChange() {
+  // Invalidate in-flight results immediately, before the debounced replacement
+  // request. Otherwise a stale recommendation can briefly be booked.
+  state.recommendationRequestVersion += 1;
+  state.availabilityRequestVersion += 1;
+  smartRecommendations?.replaceChildren();
+  smartMatchSection?.classList.add("hidden");
   state.availability = null;
   state.roomSelections.clear();
   state.categoryAvailabilityCounts.clear();
