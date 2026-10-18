@@ -610,12 +610,7 @@ describe("Atomic room-mix booking core", () => {
         expect(allocationRows[0]?.id).toBe(processed.inventoryAllocationId);
         const canonicalSuccess = await trx
           .selectFrom("payment_successes")
-          .select([
-            "reservation_id",
-            "payment_intent_id",
-            "inventory_allocation_id",
-            "outcome"
-          ])
+          .select(["reservation_id", "payment_intent_id", "inventory_allocation_id", "outcome"])
           .where("id", "=", processed.paymentSuccessId!)
           .executeTakeFirstOrThrow();
         expect(canonicalSuccess).toMatchObject({
