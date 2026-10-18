@@ -12,7 +12,7 @@ const backLink = document.querySelector("#backToResults");
 
 if (backLink) {
   const returnParams = new URLSearchParams();
-  for (const key of ["arrivalDate", "departureDate", "rooms", "adults", "children", "childAges"]) {
+  for (const key of ["destination", "categoryId", "typeId", "arrivalDate", "departureDate", "rooms", "adults", "children", "childAges"]) {
     if (params.has(key)) returnParams.set(key, params.get(key));
   }
   if (requestedMode === "villa") returnParams.set("privateStay", "1");
