@@ -1239,20 +1239,15 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       .execute();
     expect(prematureSuccesses).toHaveLength(0);
 
+    const pendingReservation = await db
+      .selectFrom("reservations")
+      .select("inventory_hold_id")
+      .where("id", "=", pendingReservations[0]!.id)
+      .executeTakeFirstOrThrow();
     const prematureAllocations = await db
       .selectFrom("inventory_allocations")
       .select("id")
-      .where(
-        "hold_id",
-        "=",
-        (
-          await db
-            .selectFrom("reservations")
-            .select("inventory_hold_id")
-            .where("id", "=", pendingReservations[0]!.id)
-            .executeTakeFirstOrThrow()
-        ).inventory_hold_id
-      )
+      .where("hold_id", "=", pendingReservation.inventory_hold_id)
       .execute();
     expect(prematureAllocations).toHaveLength(0);
 
