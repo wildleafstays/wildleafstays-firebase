@@ -381,7 +381,9 @@ async function matchGuestRequirements(properties) {
       const position = next++;
       const property = candidates[position];
       try {
-        const isEntire = exclusive || property.saleMode === "FULL_PROPERTY_ONLY";
+        const isEntire = exclusive ||
+          property.saleMode === "FULL_PROPERTY_ONLY" ||
+          (requestedRooms > 6 && allowsEntireProperty(property));
         // Room-mix recommendations currently support at most six rooms.
         // For larger groups, a whole-property offer may still satisfy the trip.
         if (!isEntire && requestedRooms > 6 && !allowsEntireProperty(property)) {
