@@ -521,6 +521,21 @@ describe("Atomic room-mix booking core", () => {
           publicRequest
         );
 
+        // Repeated requests must not create extra payment intents or holds.
+        const holdRows = await trx
+          .selectFrom("inventory_holds")
+          .select("id")
+          .where("id", "=", firstHold.hold.id)
+          .execute();
+        expect(holdRows).toHaveLength(1);
+
+        const paymentRows = await trx
+          .selectFrom("payment_intents")
+          .select("id")
+          .where("reservation_id", "=", firstReservation.reservation.id)
+          .execute();
+        expect(paymentRows).toHaveLength(1);
+
         expect(firstPayment.created).toBe(true);
         expect(repeatedPayment.created).toBe(false);
         expect(repeatedPayment.paymentIntent.id).toBe(firstPayment.paymentIntent.id);
