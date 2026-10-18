@@ -2233,6 +2233,8 @@ async function beginCheckout(guestForm, button) {
     return;
   }
 
+  const bookingSearchVersion = state.recommendationRequestVersion;
+  const selectionVersion = state.selectionPricingVersion;
   setBusy(button, true, "Preparing secure payment…");
   const body = { leadGuest };
   const sourceLabel = roomMixQuoteId ? "room-mix" : "quote";
@@ -2259,6 +2261,21 @@ async function beginCheckout(guestForm, button) {
       checkout: data.checkout,
     };
     saveBookingSession(publicSlug, state.session);
+    if (
+      bookingSearchVersion !== state.recommendationRequestVersion ||
+      selectionVersion !== state.selectionPricingVersion ||
+      (roomMixQuoteId
+        ? state.roomMixQuote?.id !== checkoutSourceId
+        : state.quote?.id !== checkoutSourceId)
+    ) {
+      // Preserve the server-created pending booking for recovery, but never
+      // open payment for dates or rooms the guest has since changed.
+      renderPendingStatus(
+        "An earlier booking was prepared after your search changed. Check its status before making another payment.",
+        false,
+      );
+      return;
+    }
     renderPendingStatus(
       "Secure payment is ready. Complete it in the Razorpay window.",
       true,
