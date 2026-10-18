@@ -425,6 +425,19 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("stale standard and mixed-room holds cannot restore obsolete guest checkout", () => {
+  for (const source of ["state.quote", "state.roomMixQuote"]) {
+    assert.match(
+      propertySource,
+      new RegExp(
+        "requestVersion !== state\\.recommendationRequestVersion \\|\\| " +
+          source.replace(".", "\\.") +
+          "\\?\\.id !== fingerprint",
+      ),
+    );
+  }
+});
+
 test("promotion edits invalidate an in-flight recommended quote", () => {
   assert.match(
     propertySource,
