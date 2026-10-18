@@ -1356,7 +1356,7 @@ export async function registerPublicCatalogRoutes(
                 currencyCode: string;
                 mode: "hotel" | "villa";
               } | null = null;
-              if (!entire && input.requestedRooms > 1) {
+              if (!entire && (input.requestedRooms > 1 || input.childAges.length > 0)) {
                 const response = await roomRecommendationService.recommend(
                   deps.db,
                   property.publicSlug,
