@@ -649,6 +649,15 @@ function propertyCard(property, index) {
       ? "Rooms or exclusive use — choose your stay"
       : "Exclusive entire-property accommodation"));
   }
+  if (property.smartstaySuggestedMode === "villa" &&
+      !property.smartstayIsAlternative) {
+    body.append(element("p", "property-location",
+      "Entire property · exclusive accommodation for your group"));
+  } else if (property.smartstaySuggestedMode === "hotel") {
+    const requestedRooms = Math.max(1, Number(form.rooms.value) || 1);
+    body.append(element("p", "property-location",
+      `Room arrangement available · ${requestedRooms} requested ${requestedRooms === 1 ? "room" : "rooms"}`));
+  }
   if (property.smartstayIsAlternative) {
     body.append(element("p", "property-location",
       "Alternative: reserve the entire property, not just your requested rooms"));
@@ -662,7 +671,9 @@ function propertyCard(property, index) {
       `Stay estimate: ${formatMinorPrice(property.smartstayEstimateMinor,
         property.smartstayCurrency)} · accommodation & extra guests only, before GST, fees & discounts`));
   }
-  const link = element("a", "button button-primary property-cta", "Explore this stay");
+  const link = element("a", "button button-primary property-cta",
+    property.smartstaySuggestedMode === "villa" ? "Explore entire property" :
+    property.smartstaySuggestedMode === "hotel" ? "Explore available rooms" : "Check this stay");
   link.href = propertyUrl(property);
   link.setAttribute("aria-label", `Explore stay options at ${property.name}`);
   body.append(link);
