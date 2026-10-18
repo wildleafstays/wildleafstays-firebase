@@ -351,6 +351,7 @@ async function matchGuestRequirements(properties) {
         let matches = false;
         let estimateMinor = null;
         let currencyCode = "INR";
+        let suggestedMode = isEntire ? "villa" : "hotel";
         if (!isEntire && requestedRooms > 1 && requestedRooms <= 6) {
           const response = await apiRequest(
             `/v1/public/properties/${encodeURIComponent(property.publicSlug)}/room-recommendations`,
@@ -396,10 +397,12 @@ async function matchGuestRequirements(properties) {
               estimateMinor = offer.estimatedTotalMinor;
               currencyCode = offer.currencyCode || "INR";
             }
+            suggestedMode = offer.productType === "FULL_PROPERTY" ? "villa" : "hotel";
           }
         }
         outcomes[position] = matches
-          ? {...property,smartstayEstimateMinor:estimateMinor,smartstayCurrency:currencyCode}
+          ? {...property,smartstayEstimateMinor:estimateMinor,smartstayCurrency:currencyCode,
+            smartstaySuggestedMode:suggestedMode}
           : null;
       } catch {
         // Network/service failures are not evidence that a stay is sold out.
@@ -736,7 +739,8 @@ function propertyUrl(property) {
     adults: form.adults.value,
     children: form.children.value,
     mode: form.elements.namedItem("privateStay")?.checked ||
-      property.saleMode === "FULL_PROPERTY_ONLY" ? "villa" : "hotel",
+      property.saleMode === "FULL_PROPERTY_ONLY" ||
+      property.smartstaySuggestedMode === "villa" ? "villa" : "hotel",
   });
   return `/customer/property.html?${params}`;
 }
