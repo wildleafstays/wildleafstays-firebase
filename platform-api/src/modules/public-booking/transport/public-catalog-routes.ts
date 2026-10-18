@@ -1335,7 +1335,9 @@ export async function registerPublicCatalogRoutes(
               outcomes[index] = { ...property, smartstayCheckUnavailable: true };
               continue;
             }
-            const cheapest = (offers: Array<{estimatedTotalMinor: number; currencyCode: string}>) =>
+            const cheapest = <T extends { estimatedTotalMinor: number; currencyCode: string }>(
+              offers: T[]
+            ): T | undefined =>
               [...offers].sort((a, b) => a.estimatedTotalMinor - b.estimatedTotalMinor)[0];
             try {
               let match: {
