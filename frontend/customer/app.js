@@ -873,6 +873,9 @@ function propertyUrl(property) {
     adults: form.adults.value,
     children: form.children.value,
     childAges: selectedChildAges().join(","),
+    destination: form.destination.value.trim(),
+    ...(propertyCategorySelect.value ? { categoryId: propertyCategorySelect.value } : {}),
+    ...(propertyTypeSelect.value ? { typeId: propertyTypeSelect.value } : {}),
     mode: form.elements.namedItem("privateStay")?.checked ||
       property.saleMode === "FULL_PROPERTY_ONLY" ||
       property.smartstaySuggestedMode === "villa" ? "villa" : "hotel",
