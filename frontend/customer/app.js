@@ -56,6 +56,8 @@ const state = {
 };
 
 setDefaultDates();
+configureChildAgeFields();
+form.children.addEventListener("change", configureChildAgeFields);
 void initialize();
 
 form.addEventListener("submit", (event) => {
@@ -312,10 +314,43 @@ async function loadProperties(destinationOverride = null) {
     state.properties = matched;
     renderProperties(state.properties);
   } catch (error) {
-    renderError(error);
+    if (searchVersion === state.searchVersion) renderError(error);
   }
 }
 
+
+function configureChildAgeFields() {
+  const container = document.querySelector("#smartstayChildAges");
+  const fields = document.querySelector("#smartstayChildAgeFields");
+  if (!container || !fields) return;
+  const count = Math.min(6, Math.max(0, Number(form.children.value) || 0));
+  const previous = [...fields.querySelectorAll("select")].map(select => select.value);
+  fields.replaceChildren();
+  container.style.display = count ? "block" : "none";
+  for (let index = 0; index < count; index += 1) {
+    const label = document.createElement("label");
+    label.style.display = "grid";
+    label.style.gap = ".25rem";
+    label.textContent = `Child ${index + 1}`;
+    const select = document.createElement("select");
+    select.className = "smartstay-child-age";
+    select.required = true;
+    select.setAttribute("aria-label", `Age of child ${index + 1}`);
+    const placeholder = new Option("Select age", "");
+    select.append(placeholder);
+    for (let age = 0; age <= 17; age += 1) {
+      select.append(new Option(age === 0 ? "Under 1" : `${age} years`, String(age)));
+    }
+    select.value = previous[index] ?? "";
+    label.append(select);
+    fields.append(label);
+  }
+}
+
+function selectedChildAges() {
+  return [...document.querySelectorAll("#smartstayChildAgeFields select")]
+    .map(select => select.value === "" ? NaN : Number(select.value));
+}
 
 // A preliminary discovery check only: canonical quotes and inventory holds
 // still determine the final bookability and all taxes before checkout.
@@ -327,6 +362,10 @@ async function matchGuestRequirements(properties) {
   const adults = Math.max(1, Number(form.adults.value) || 2);
   const children = Math.max(0, Number(form.children.value) || 0);
   const exclusive = Boolean(form.elements.namedItem("privateStay")?.checked);
+  const childAges = selectedChildAges();
+  if (childAges.length !== children || childAges.some(age => !Number.isInteger(age))) {
+    throw new Error("Please select the age of each child.");
+  }
   const validDates = /^\d{4}-\d{2}-\d{2}$/.test(arrivalDate) &&
     /^\d{4}-\d{2}-\d{2}$/.test(departureDate) &&
     departureDate > arrivalDate;
@@ -357,7 +396,7 @@ async function matchGuestRequirements(properties) {
             `/v1/public/properties/${encodeURIComponent(property.publicSlug)}/room-recommendations`,
             {method:"POST",body:{
               arrivalDate,departureDate,adults,
-              childAges:Array.from({length:children},()=>8),requestedRooms
+              childAges,requestedRooms
             }}
           );
           // Recommendation payloads vary with available room mixes;
@@ -740,6 +779,7 @@ function propertyUrl(property) {
     rooms: form.rooms.value,
     adults: form.adults.value,
     children: form.children.value,
+    childAges: selectedChildAges().join(","),
     mode: form.elements.namedItem("privateStay")?.checked ||
       property.saleMode === "FULL_PROPERTY_ONLY" ||
       property.smartstaySuggestedMode === "villa" ? "villa" : "hotel",
