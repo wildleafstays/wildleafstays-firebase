@@ -1180,7 +1180,9 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       }
     });
     expect(tamperedReplay.statusCode).toBe(409);
+    expect(tamperedReplay.headers["cache-control"]).toBe("no-store");
     expect(razorpayGateway.createCalls).toBe(callsBefore + 1);
+    expect(JSON.stringify(tamperedReplay.json())).not.toContain(body.checkout.orderId);
 
     const reservationCount = await db
       .selectFrom("reservations")
