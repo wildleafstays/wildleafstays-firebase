@@ -1494,6 +1494,30 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       paymentIntent: { status: "SUCCEEDED" }
     });
 
+    // Provider recovery is safe to poll again; every repeat remains confirmed
+    // and must not create another payment success or inventory allocation.
+    const secondPoll = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/checkout-status`,
+      payload: {
+        reservationId: prepared.reservation.id,
+        paymentIntentId: prepared.paymentIntent.id
+      }
+    });
+    expect(secondPoll.statusCode).toBe(200);
+    expect(secondPoll.json()).toMatchObject({
+      outcome: "CONFIRMED",
+      reservation: { status: "CONFIRMED" },
+      paymentIntent: { status: "SUCCEEDED" }
+    });
+    const successes = await db
+      .selectFrom("payment_successes")
+      .select(["id", "inventory_allocation_id"])
+      .where("payment_intent_id", "=", prepared.paymentIntent.id)
+      .execute();
+    expect(successes).toHaveLength(1);
+    expect(successes[0]?.inventory_allocation_id).not.toBeNull();
+
     const mismatched = await app.inject({
       method: "POST",
       url: `/v1/public/properties/${fixture.publicSlug}/checkout-status`,
