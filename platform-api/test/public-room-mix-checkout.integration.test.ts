@@ -771,6 +771,12 @@ describe("Atomic room-mix booking core", () => {
         expect(replayed.reconciliationCaseId).toBe(processed.reconciliationCaseId);
         expect(replayed.paymentSuccessId).toBe(processed.paymentSuccessId);
         expect(replayed.inventoryAllocationId).toBeNull();
+        const replayReview = await trx
+          .selectFrom("payment_reconciliation_cases")
+          .select(["reason_code", "required_action", "status"])
+          .where("id", "=", replayed.reconciliationCaseId!)
+          .executeTakeFirstOrThrow();
+        expect(replayReview).toEqual(requiredReview);
 
         // Repeated provider deliveries cannot proliferate payment successes or
         // independent reconciliation cases for this one captured transaction.
