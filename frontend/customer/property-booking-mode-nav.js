@@ -43,9 +43,45 @@ async function configureStayOptions() {
       const villaParams = new URLSearchParams(location.search);
       villaParams.set("slug", publicSlug);
       villaParams.set("mode", "villa");
-      villaParams.set("rooms", "1");
+      // Preserve requested room count so guests can return to their original group search.
       switchLink.href = `/customer/property.html?${villaParams}`;
       switchLink.classList.toggle("hidden", exclusive);
+      if (!exclusive) {
+        switchLink.textContent = "Checking exclusive-use availability…";
+        const arrivalDate = params.get("arrivalDate");
+        const departureDate = params.get("departureDate");
+        if (arrivalDate && departureDate && departureDate > arrivalDate) {
+          try {
+            const availability = await apiRequest(
+              `/v1/public/properties/${encodeURIComponent(publicSlug)}/availability`,
+              { method: "POST", body: {
+                arrivalDate, departureDate, units: [{ adults, children }]
+              } }
+            );
+            const offers = (availability.options || [])
+              .filter((offer) => offer.available && offer.productType === "FULL_PROPERTY")
+              .sort((left, right) => left.estimatedTotalMinor - right.estimatedTotalMinor);
+            if (offers.length) {
+              const offer = offers[0];
+              const estimate = new Intl.NumberFormat("en-IN", {
+                style: "currency",
+                currency: offer.currencyCode || "INR",
+                maximumFractionDigits: 0
+              }).format(offer.estimatedTotalMinor / 100);
+              switchLink.textContent =
+                `Explore exclusive use · from ${estimate} before taxes & fees →`;
+            } else {
+              switchLink.classList.add("hidden");
+              if (privacyNotice) privacyNotice.textContent +=
+                " Exclusive use is unavailable for the selected dates and guests.";
+            }
+          } catch {
+            switchLink.textContent = "Explore exclusive use · check live price →";
+          }
+        } else {
+          switchLink.textContent = "Explore exclusive use · check live price →";
+        }
+      }
     }
 
     if (allowsRooms && roomsLink) {
