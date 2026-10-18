@@ -425,6 +425,17 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("changing dates or guests immediately invalidates stale room recommendations", () => {
+  assert.match(
+    propertySource,
+    /function clearResultsAfterSearchChange\(\) \{[\s\S]*?state\.recommendationRequestVersion \+= 1/,
+  );
+  assert.match(
+    propertySource,
+    /function clearResultsAfterSearchChange\(\) \{[\s\S]*?smartRecommendations\?\.replaceChildren\(\)/,
+  );
+});
+
 test("room shopping keeps Razorpay verification server-side", () => {
   assert.doesNotMatch(propertySource, /razorpay_payment_id/);
   assert.doesNotMatch(propertySource, /razorpay_signature/);
