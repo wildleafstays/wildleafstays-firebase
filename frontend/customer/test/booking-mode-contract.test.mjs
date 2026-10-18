@@ -99,6 +99,16 @@ test("SmartStay checks exclusive availability before offering a villa upgrade", 
   assert.match(bookingModeNavSource, /Exclusive use is unavailable/);
 });
 
+test("SmartStay child ages are gathered and kept with the booking request", () => {
+  assert.match(homeHtml, /id="smartstayChildAgeFields"/);
+  assert.match(homeHtml, /Adults in group/);
+  assert.match(homeSource, /function configureChildAgeFields/);
+  assert.match(homeSource, /function selectedChildAges/);
+  assert.match(homeSource, /childAges: selectedChildAges\(\)\.join/);
+  assert.match(homeSource, /childAges,requestedRooms/);
+  assert.match(propertySource, /query\.get\("childAges"\)/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
