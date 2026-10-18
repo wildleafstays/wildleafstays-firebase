@@ -665,4 +665,87 @@ describe("Atomic room-mix booking core", () => {
       .executeTakeFirst();
     expect(persisted).toBeUndefined();
   });
+  it("reconciles captured payment after a room hold expires instead of confirming unavailable rooms", async () => {
+    try {
+      await db.transaction().execute(async (trx) => {
+        const fixture = await createFixture(trx);
+        const request = metadata("integration-test");
+        const quoted = await new PublicRoomMixService().createQuote(
+          trx,
+          fixture.publicSlug,
+          {
+            arrivalDate: "2036-03-10",
+            departureDate: "2036-03-11",
+            items: [
+              { rateProductId: fixture.deluxeRateProductId, units: [{ adults: 2, childAges: [] }] },
+              { rateProductId: fixture.superRateProductId, units: [{ adults: 2, childAges: [] }] }
+            ]
+          },
+          request
+        );
+        const hold = await new PublicRoomMixService().createHold(
+          trx, fixture.publicSlug, quoted.roomMixQuote.id, request
+        );
+        const reserved = await new PublicRoomMixReservationService().create(
+          trx, fixture.publicSlug, quoted.roomMixQuote.id,
+          { name: "Expiry Test Guest", email: "expiry@example.invalid", phone: null },
+          request, null
+        );
+        const payment = await new BeginPaymentService().beginPaymentSystem(
+          trx,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            reservationId: reserved.reservation.id
+          },
+          request
+        );
+        const expiry = new Date(Date.now() - 60_000);
+        await trx.updateTable("inventory_holds")
+          .set({ expires_at: expiry })
+          .where("id", "=", hold.hold.id).execute();
+        const evidence = await new PaymentEvidenceRepository().create(trx, {
+          paymentIntentId: payment.paymentIntent.id,
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: reserved.reservation.id,
+          provider: "RAZORPAY",
+          providerEventId: `evt_${randomUUID().replaceAll("-", "")}`,
+          providerPaymentId: `pay_${randomUUID().replaceAll("-", "")}`,
+          providerOrderId: `order_${randomUUID().replaceAll("-", "")}`,
+          amountMinor: quoted.roomMixQuote.totalMinor,
+          currencyCode: "INR",
+          verificationMethod: PaymentVerificationMethods.PROVIDER_API,
+          payloadSha256: "b".repeat(64),
+          request
+        });
+        const processed = await new VerifiedPaymentProcessor().process(
+          trx,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            reservationId: reserved.reservation.id,
+            paymentIntentId: payment.paymentIntent.id,
+            paymentEvidenceId: evidence!.id,
+            providerCapturedAt: new Date()
+          },
+          request
+        );
+        expect(processed.outcome).toBe(PaymentProcessingOutcomes.RECONCILIATION_REQUIRED);
+        expect(processed.inventoryAllocationId).toBeNull();
+        expect(processed.reconciliationCaseId).not.toBeNull();
+        const allocationRows = await trx.selectFrom("inventory_allocations")
+          .select("id").where("hold_id", "=", hold.hold.id).execute();
+        expect(allocationRows).toHaveLength(0);
+        const reservation = await trx.selectFrom("reservations")
+          .select("status").where("id", "=", reserved.reservation.id)
+          .executeTakeFirstOrThrow();
+        expect(reservation.status).not.toBe("CONFIRMED");
+        throw new RollbackAfterAssertions();
+      });
+    } catch (error) {
+      if (!(error instanceof RollbackAfterAssertions)) throw error;
+    }
+  });
+
 });
