@@ -10,7 +10,14 @@ const partySummary = document.querySelector("#smartstayPartySummary");
 const privacyNotice = document.querySelector("#smartstayPrivacyNotice");
 const backLink = document.querySelector("#backToResults");
 
-if (backLink) backLink.href = "/customer/";
+if (backLink) {
+  const returnParams = new URLSearchParams();
+  for (const key of ["arrivalDate", "departureDate", "rooms", "adults", "children", "childAges"]) {
+    if (params.has(key)) returnParams.set(key, params.get(key));
+  }
+  if (requestedMode === "villa") returnParams.set("privateStay", "1");
+  backLink.href = `/customer/?${returnParams}`;
+}
 
 if (publicSlug && optionPanel) void configureStayOptions();
 
