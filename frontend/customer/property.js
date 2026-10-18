@@ -132,6 +132,14 @@ function configureInitialSearch() {
       : clamp(Number(query.get("rooms") || 1), 1, 20);
   const adults = clamp(Number(query.get("adults") || 2), 1, 10);
   const children = clamp(Number(query.get("children") || 0), 0, 6);
+  const parsedChildAges = (query.get("childAges") || "")
+    .split(",")
+    .filter((entry) => entry !== "")
+    .map(Number);
+  const childAges = parsedChildAges.length === children &&
+    parsedChildAges.every((age) => Number.isInteger(age) && age >= 0 && age <= 17)
+    ? parsedChildAges
+    : Array.from({ length: children }, () => 8);
 
   form.arrivalDate.min = today;
   form.arrivalDate.value = arrival;
@@ -141,7 +149,7 @@ function configureInitialSearch() {
   state.units = [
     {
       adults,
-      childAges: Array.from({ length: children }, () => 8),
+      childAges,
     },
   ];
   renderOccupancyUnits();
