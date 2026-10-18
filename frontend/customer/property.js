@@ -83,7 +83,11 @@ function wireEvents() {
     scheduleAvailabilitySearch();
   });
   form.departureDate.addEventListener("change", scheduleAvailabilitySearch);
-  form.promotionCode.addEventListener("input", clearQuoteAndLater);
+  form.promotionCode.addEventListener("input", () => {
+    // A promo edit invalidates pending exact quotes without discarding room availability.
+    state.recommendationRequestVersion += 1;
+    clearQuoteAndLater();
+  });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     void searchAvailability();
@@ -748,7 +752,7 @@ async function startRecommendedBooking(recommendation, button) {
         },
       );
 
-    if (bookingSearchVersion !== state.recommendationRequestVersion) return;
+      if (bookingSearchVersion !== state.recommendationRequestVersion) return;
 
       state.roomMixQuote = null;
       state.quote = data.quote;
