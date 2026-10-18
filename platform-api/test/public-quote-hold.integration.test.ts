@@ -1230,6 +1230,15 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       .execute();
     expect(prematureOrders).toHaveLength(0);
 
+    // No payment can be marked successful or allocated before the provider
+    // has created its canonical order and supplied verified capture evidence.
+    const prematureSuccesses = await db
+      .selectFrom("payment_successes")
+      .select("id")
+      .where("reservation_id", "=", pendingReservations[0]!.id)
+      .execute();
+    expect(prematureSuccesses).toHaveLength(0);
+
     const retry = await app.inject({
       method: "POST",
       url,
