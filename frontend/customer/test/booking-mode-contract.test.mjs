@@ -425,6 +425,15 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("superseded checkout preserves pending booking but does not launch Razorpay", () => {
+  const checkoutFlow = propertySource.split("async function beginCheckout(guestForm, button) {")[1].split("\nfunction openRazorpay")[0];
+  assert.match(checkoutFlow, /bookingSearchVersion !== state\.recommendationRequestVersion/);
+  assert.match(checkoutFlow, /selectionVersion !== state\.selectionPricingVersion/);
+  assert.match(checkoutFlow, /state\.session\.activeCheckout =/);
+  assert.match(checkoutFlow, /Check its status before making another payment/);
+  assert.match(checkoutFlow, /return;[\s\S]*?openRazorpay\(\)/);
+});
+
 test("manual room quotes cannot overwrite a changed room selection or search", () => {
   const manualFlow = propertySource.split("async function continueRoomSelection(button) {")[1].split("\nfunction availabilityCard")[0];
   assert.match(manualFlow, /const selectionVersion = state\.selectionPricingVersion/);
