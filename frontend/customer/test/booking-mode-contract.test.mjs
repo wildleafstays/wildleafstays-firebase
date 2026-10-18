@@ -425,6 +425,16 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("manual room quotes cannot overwrite a changed room selection or search", () => {
+  const manualFlow = propertySource.split("async function continueRoomSelection(button) {")[1].split("\nfunction availabilityCard")[0];
+  assert.match(manualFlow, /const selectionVersion = state\.selectionPricingVersion/);
+  assert.match(manualFlow, /const bookingSearchVersion = state\.recommendationRequestVersion/);
+  assert.equal(
+    (manualFlow.match(/selectionVersion !== state\.selectionPricingVersion/g) || []).length,
+    3,
+  );
+});
+
 test("stale standard and mixed-room holds cannot restore obsolete guest checkout", () => {
   for (const source of ["state.quote", "state.roomMixQuote"]) {
     assert.match(
