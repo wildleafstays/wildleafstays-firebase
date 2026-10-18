@@ -1206,6 +1206,16 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
     });
     expect(failed.statusCode).toBeGreaterThanOrEqual(500);
 
+    // The first failure may leave the canonical pending reservation, but must
+    // not leave a partially linked provider order or charge-ready checkout.
+    const pendingReservations = await db
+      .selectFrom("reservations")
+      .select(["id", "status"])
+      .where("quote_id", "=", quote.id)
+      .execute();
+    expect(pendingReservations).toHaveLength(1);
+    expect(pendingReservations[0]?.status).toBe("PAYMENT_PENDING");
+
     const retry = await app.inject({
       method: "POST",
       url,
