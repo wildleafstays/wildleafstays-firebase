@@ -1517,6 +1517,26 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       .execute();
     expect(successes).toHaveLength(1);
     expect(successes[0]?.inventory_allocation_id).not.toBeNull();
+    const allocations = await db
+      .selectFrom("inventory_allocations")
+      .select("id")
+      .where("id", "=", successes[0]!.inventory_allocation_id!)
+      .execute();
+    expect(allocations).toHaveLength(1);
+
+    const confirmedReservation = await db
+      .selectFrom("reservations")
+      .select(["id", "status", "inventory_hold_id"])
+      .where("id", "=", prepared.reservation.id)
+      .executeTakeFirstOrThrow();
+    expect(confirmedReservation.status).toBe("CONFIRMED");
+    const linkedAllocation = await db
+      .selectFrom("inventory_allocations")
+      .select("id")
+      .where("hold_id", "=", confirmedReservation.inventory_hold_id)
+      .execute();
+    expect(linkedAllocation).toHaveLength(1);
+    expect(linkedAllocation[0]?.id).toBe(successes[0]!.inventory_allocation_id);
 
     const mismatched = await app.inject({
       method: "POST",
