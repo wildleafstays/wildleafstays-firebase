@@ -2206,6 +2206,17 @@ function renderGuestForm() {
 }
 
 async function beginCheckout(guestForm, button) {
+  // Never start a second charge while the browser still has a recoverable
+  // pending payment. Resolve the canonical status before creating another order.
+  if (state.session.activeCheckout?.checkout) {
+    renderPendingStatus(
+      "An earlier payment is still pending. Check that booking before starting another payment.",
+      true,
+    );
+    void refreshCheckoutStatus(true);
+    return;
+  }
+
   const guestName = guestForm.elements.namedItem("name");
   const guestEmail = guestForm.elements.namedItem("email");
   const guestPhone = guestForm.elements.namedItem("phone");
