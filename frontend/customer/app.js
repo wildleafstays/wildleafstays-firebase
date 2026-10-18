@@ -626,6 +626,30 @@ function renderProperties(properties) {
     results.append(section);
   }
 
+  // Published stays must not disappear when taxonomy is missing, inactive,
+  // or temporarily unavailable. The search backend already vetted these stays.
+  const categorizedIds = new Set(orderedCategories.map((category) => category.id));
+  const uncategorized = visibleProperties.filter((property) =>
+    !categorizedIds.has(property.propertyCategoryId)
+  );
+  if (uncategorized.length) {
+    const section = element("section", "property-category-section");
+    section.dataset.categoryId = "other-stays";
+    const heading = element("div", "property-category-heading");
+    heading.append(
+      element("h2", "", "More Wildleaf stays"),
+      element("span", "property-category-count",
+        `${uncategorized.length} ${uncategorized.length === 1 ? "property" : "properties"}`)
+    );
+    const rail = element("div", "property-category-rail");
+    uncategorized.forEach((property, index) => {
+      rail.append(propertyCard(property, renderedCount + index));
+    });
+    section.append(heading, rail);
+    results.append(section);
+    renderedCount += uncategorized.length;
+  }
+
   if (!renderedCount) {
     resultsStatus.textContent = "No visible property categories match these filters.";
     results.append(
