@@ -47,14 +47,16 @@
             <p id="propertySummary" class="property-summary">
               Checking the latest property information.
             </p>
-            <a
-              id="entirePropertySwitch"
-              class="property-mode-alternative hidden"
-              href="#"
-            >
-              You can book this entire property
-              <span aria-hidden="true">→</span>
-            </a>
+            <div id="smartstayStayOptions" class="hidden" aria-label="Ways to stay" style="margin-top:1rem;padding:1rem;background:#edf4ef;border:1px solid #d8e6dd;border-radius:16px;color:#18352c;">
+              <strong style="display:block;margin-bottom:.35rem">Your stay, your way</strong>
+              <p id="smartstayPartySummary" style="margin:0 0 .5rem;font-size:.9rem"></p>
+              <p id="smartstayPrivacyNotice" style="margin:0 0 .75rem;font-size:.85rem"></p>
+              <div style="display:flex;flex-wrap:wrap;gap:.65rem">
+                <a id="smartstayRoomOption" class="button button-secondary hidden" href="#">Choose individual rooms</a>
+                <a id="entirePropertySwitch" class="button button-primary hidden" href="#">Explore exclusive use →</a>
+              </div>
+              <small style="display:block;margin-top:.7rem">Each offer is checked for your dates and guests. Final taxes and charges are confirmed before payment.</small>
+            </div>
           </div>
           <div id="propertyFacts" class="property-quick-facts"></div>
           <div id="amenities" class="amenity-list property-key-amenities"></div>
@@ -128,7 +130,7 @@
             <summary class="smart-match-summary">
               <div>
                 <p class="eyebrow">Wildleaf Match</p>
-                <strong>Want the cheapest suitable room combination?</strong>
+                <strong>Find the best room arrangement for your group</strong>
                 <span id="smartMatchIntro" class="muted"></span>
               </div>
               <span class="smart-match-summary-action">View matches</span>
