@@ -203,8 +203,8 @@ function renderProperty(property) {
 
   const villa = state.bookingMode === "villa";
   document.querySelector("#bookingModeBadge").textContent = villa
-    ? "Entire property"
-    : "Book by room";
+    ? "Exclusive entire property"
+    : "Choose rooms for your stay";
   document.querySelector("#propertyOverviewHeading").textContent =
     "About this stay";
   const facts = document.querySelector("#propertyFacts");
@@ -363,8 +363,7 @@ function configureBookingMode(property) {
   const villa = state.bookingMode === "villa";
   document.querySelector("#unitCountField").classList.toggle("hidden", villa);
   smartMatchSection?.classList.toggle("hidden", villa);
-  document.querySelector("#backToResults").href =
-    `/customer/?mode=${state.bookingMode}`;
+  document.querySelector("#backToResults").href = "/customer/";
   if (villa && state.units.length !== 1) setUnitCount(1);
   form.unitCount.value = villa ? "1" : String(state.units.length || 1);
 }
