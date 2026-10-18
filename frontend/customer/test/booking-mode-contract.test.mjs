@@ -170,11 +170,8 @@ test("homepage sections use subtle alternating surfaces to avoid a monotone scro
   );
 });
 
-test("Entire Property opens a dedicated live catalogue grouped alphabetically by destination", () => {
-  assert.match(
-    homeHtml,
-    /id="entirePropertyEntry"[\s\S]*href="\/customer\/entire-properties\.html"/,
-  );
+test("Legacy entire-property catalogue remains available at its direct URL", () => {
+  assert.doesNotMatch(homeHtml, /id="entirePropertyEntry"/);
   assert.match(entirePropertyHtml, /id="entirePropertyFilters"/);
   assert.match(entirePropertyHtml, /id="catalogDestination"/);
   assert.match(entirePropertyHtml, /id="catalogCategory"/);
