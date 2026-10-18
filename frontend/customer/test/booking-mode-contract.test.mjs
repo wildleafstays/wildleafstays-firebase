@@ -425,6 +425,11 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("terminal payment outcomes cannot be replaced by timeout messaging", () => {
+  const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
+  assert.match(polling, /if \(!state\.polling\) return;[\s\S]*?if \(state\.pollAttempts >= 24\)/);
+});
+
 test("exhausted payment polling shows an actionable manual recovery path", () => {
   const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
   assert.match(polling, /state\.pollAttempts >= 24/);
