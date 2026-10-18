@@ -663,9 +663,10 @@ function renderProperties(properties) {
   }
 
   const unverified = visibleProperties.filter((property) => property.smartstayCheckUnavailable).length;
+  const verified = renderedCount - unverified;
   resultsStatus.textContent =
-    `${renderedCount} matching ${renderedCount === 1 ? "stay" : "stays"}` +
-    (unverified ? ` · ${unverified} require an availability check` : "") +
+    `${verified} availability-matched ${verified === 1 ? "stay" : "stays"}` +
+    (unverified ? ` · ${unverified} more ${unverified === 1 ? "stay requires" : "stays require"} verification` : "") +
     " · final rates confirmed before booking";
 }
 
