@@ -2418,9 +2418,19 @@ async function refreshCheckoutStatus(quiet) {
         timeoutMs: 12000,
       },
     );
+    // A response for an earlier reservation must never overwrite the status
+    // of a newer checkout opened while this network request was in flight.
+    if (
+      state.session.activeCheckout?.reservationId !== active.reservationId ||
+      state.session.activeCheckout?.paymentIntentId !== active.paymentIntentId
+    ) return null;
     renderCheckoutOutcome(data);
     return data;
   } catch (error) {
+    if (
+      state.session.activeCheckout?.reservationId !== active.reservationId ||
+      state.session.activeCheckout?.paymentIntentId !== active.paymentIntentId
+    ) return null;
     if (!quiet)
       renderPendingStatus(
         messageFor(error, "Booking status could not be checked yet."),
