@@ -53,7 +53,8 @@ test("SmartStay homepage uses unified discovery with optional privacy", () => {
   assert.match(homeSource, /exclusiveOnly \? allowsEntireProperty\(property\) : true/);
   assert.match(homeSource, /property\.saleMode === "FULL_PROPERTY_ONLY"/);
   assert.match(homeSource, /property\.saleMode === "BOTH"/);
-  assert.match(homeSource, /"Explore this stay"/);
+  assert.match(homeSource, /"Explore entire property"/);
+  assert.match(homeSource, /"Explore available rooms"/);
   assert.match(homeSource, /mode: form\.elements\.namedItem\("privateStay"\)/);
   assert.match(propertySource, /"Choose rooms for your stay"/);
 });
