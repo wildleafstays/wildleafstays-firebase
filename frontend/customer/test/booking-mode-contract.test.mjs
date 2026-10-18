@@ -116,6 +116,13 @@ test("SmartStay offers exclusive accommodation when requested rooms cannot be ma
   assert.match(homeSource, /option\.productType === "FULL_PROPERTY" && option\.available/);
 });
 
+test("SmartStay verifies party totals and labels exclusive-use fallback honestly", () => {
+  assert.match(homeSource, /item\.adults === adults/);
+  assert.match(homeSource, /item\.children === children/);
+  assert.match(homeSource, /smartstayIsAlternative/);
+  assert.match(homeSource, /Alternative: reserve the entire property/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
