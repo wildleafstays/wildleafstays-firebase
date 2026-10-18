@@ -406,7 +406,13 @@ async function matchGuestRequirements(properties) {
           // never claim availability from a result we cannot substantiate.
           const recommendations = response.recommendations || response.options || [];
           const suitable = Array.isArray(recommendations)
-            ? recommendations.filter(item => item.roomCount === requestedRooms)
+            ? recommendations.filter(item =>
+                item.roomCount === requestedRooms &&
+                item.adults === adults &&
+                item.children === children &&
+                Array.isArray(item.items) &&
+                item.items.reduce((sum, room) => sum + room.quantity, 0) === requestedRooms
+              )
             : [];
           matches = suitable.length > 0;
           if (matches) {
@@ -464,7 +470,9 @@ async function matchGuestRequirements(properties) {
         }
         outcomes[position] = matches
           ? {...property,smartstayEstimateMinor:estimateMinor,smartstayCurrency:currencyCode,
-            smartstaySuggestedMode:suggestedMode}
+            smartstaySuggestedMode:suggestedMode,smartstayIsAlternative:
+              suggestedMode === "villa" && !exclusive &&
+              property.saleMode !== "FULL_PROPERTY_ONLY"}
           : null;
       } catch {
         // Network/service failures are not evidence that a stay is sold out.
@@ -627,6 +635,10 @@ function propertyCard(property, index) {
     body.append(element("p", "property-location", property.saleMode === "BOTH"
       ? "Rooms or exclusive use — choose your stay"
       : "Exclusive entire-property accommodation"));
+  }
+  if (property.smartstayIsAlternative) {
+    body.append(element("p", "property-location",
+      "Alternative: reserve the entire property, not just your requested rooms"));
   }
   if (property.smartstayCheckUnavailable) {
     body.append(element("p", "property-location",
