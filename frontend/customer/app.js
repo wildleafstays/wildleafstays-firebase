@@ -339,12 +339,15 @@ function updateResultsHeading(destination, categoryId, typeId) {
 }
 
 function renderProperties(properties) {
-  const visibleProperties = properties.filter(isRoomBookable);
+  const exclusiveOnly = Boolean(form.elements.namedItem("privateStay")?.checked);
+  const visibleProperties = properties.filter((property) =>
+    exclusiveOnly ? allowsEntireProperty(property) : true,
+  );
   updateHero(visibleProperties);
   results.replaceChildren();
 
   if (!visibleProperties.length) {
-    resultsStatus.textContent = "No live room-booking properties match these filters yet.";
+    resultsStatus.textContent = "No properties match these preferences. Check another destination or remove the exclusive-use requirement.";
     const empty = element("div", "empty-state");
     empty.append(
       element("h3", "", "No stays found"),
@@ -438,7 +441,8 @@ function propertyCard(property, index) {
     element("h3", "", property.name),
   );
 
-  if (property.startingRoomRateMinor !== null && property.startingRoomRateMinor !== undefined) {
+  if (property.saleMode !== "FULL_PROPERTY_ONLY" &&
+      property.startingRoomRateMinor !== null && property.startingRoomRateMinor !== undefined) {
     const price = element("p", "property-card-price");
     price.append(
       element("span", "", "From"),
@@ -452,7 +456,12 @@ function propertyCard(property, index) {
     body.append(price);
   }
 
-  const link = element("a", "button button-primary property-cta", "View rooms");
+  if (allowsEntireProperty(property)) {
+    body.append(element("p", "property-location", property.saleMode === "BOTH"
+      ? "Rooms or exclusive use — choose your stay"
+      : "Exclusive entire-property accommodation"));
+  }
+  const link = element("a", "button button-primary property-cta", "Explore this stay");
   link.href = propertyUrl(property);
   link.setAttribute("aria-label", `View rooms at ${property.name}`);
   body.append(link);
@@ -619,7 +628,8 @@ function propertyUrl(property) {
     rooms: form.rooms.value,
     adults: form.adults.value,
     children: form.children.value,
-    mode: "hotel",
+    mode: form.elements.namedItem("privateStay")?.checked ||
+      property.saleMode === "FULL_PROPERTY_ONLY" ? "villa" : "hotel",
   });
   return `/customer/property.html?${params}`;
 }
@@ -648,7 +658,9 @@ function updateMobileSearchSummary() {
     form.arrivalDate.value && form.departureDate.value
       ? `${shortDate(form.arrivalDate.value)} – ${shortDate(form.departureDate.value)}`
       : "Add dates";
-  const roomLabel = `${rooms} ${rooms === 1 ? "room" : "rooms"}`;
+  const roomLabel = form.elements.namedItem("privateStay")?.checked
+    ? "entire place"
+    : `${rooms} ${rooms === 1 ? "room" : "rooms"}`;
   mobileSearchMeta.textContent =
     `${dates} · ${guestCount} ${guestCount === 1 ? "guest" : "guests"} · ${roomLabel}`;
 }
@@ -662,12 +674,8 @@ function shortDate(value) {
   }).format(date);
 }
 
-function isRoomBookable(property) {
-  return (
-    !property.saleMode ||
-    property.saleMode === "ROOMS_ONLY" ||
-    property.saleMode === "BOTH"
-  );
+function allowsEntireProperty(property) {
+  return property.saleMode === "FULL_PROPERTY_ONLY" || property.saleMode === "BOTH";
 }
 
 function formatMinorPrice(minor, currencyCode) {
