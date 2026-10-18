@@ -97,16 +97,6 @@
             </button>
           </div>
 
-          <a
-            id="entirePropertyEntry"
-            class="entire-property-entry"
-            href="/customer/entire-properties.html"
-          >
-            <span aria-hidden="true">⌂</span>
-            <strong>Entire Property</strong>
-            <small>Browse private-use stays</small>
-            <span aria-hidden="true">→</span>
-          </a>
 
           <label class="search-field search-destination">
             <span>Where</span>
@@ -159,7 +149,11 @@
             </label>
           </div>
 
-          <button class="button button-primary search-button" type="submit">Search stays</button>
+          <label class="smartstay-privacy-choice" style="display:flex;align-items:center;gap:.65rem;min-width:0;padding:.65rem 1rem;background:rgba(255,255,255,.12);border-radius:12px;">
+            <input id="privateStay" name="privateStay" type="checkbox" style="width:18px;height:18px;flex:none" />
+            <span><strong>We want the entire place to ourselves</strong><small style="display:block">Optional — leave unchecked to explore rooms and private stays together</small></span>
+          </label>
+          <button class="button button-primary search-button" type="submit">Find my stay</button>
         </form>
       </section>
 
