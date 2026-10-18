@@ -905,6 +905,7 @@ async function createRoomMixHold({ scrollToGuest = true } = {}) {
   if (!state.roomMixQuote) return;
 
   const fingerprint = state.roomMixQuote.id;
+  const requestVersion = state.recommendationRequestVersion;
   const key = operationKey(state.session, "room-mix-hold", fingerprint);
   saveBookingSession(publicSlug, state.session);
 
@@ -913,6 +914,7 @@ async function createRoomMixHold({ scrollToGuest = true } = {}) {
       `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-mixes/${state.roomMixQuote.id}/hold`,
       { method: "POST", idempotencyKey: key },
     );
+    if (requestVersion !== state.recommendationRequestVersion || state.roomMixQuote?.id !== fingerprint) return;
     state.hold = data.hold;
     state.session.holdId = data.hold.id;
     state.session.hold = data.hold;
@@ -922,6 +924,7 @@ async function createRoomMixHold({ scrollToGuest = true } = {}) {
       guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   } catch (error) {
+    if (requestVersion !== state.recommendationRequestVersion || state.roomMixQuote?.id !== fingerprint) return;
     renderSectionError(
       quoteSection,
       messageFor(error, "The recommended rooms could not be reserved together."),
@@ -2127,6 +2130,7 @@ async function createHold(button, { scrollToGuest = true } = {}) {
   if (!state.quote) return;
   if (button) setBusy(button, true, "Reserving inventory…");
   const fingerprint = state.quote.id;
+  const requestVersion = state.recommendationRequestVersion;
   const key = operationKey(state.session, "hold", fingerprint);
   saveBookingSession(publicSlug, state.session);
 
@@ -2135,6 +2139,7 @@ async function createHold(button, { scrollToGuest = true } = {}) {
       `/v1/public/properties/${encodeURIComponent(publicSlug)}/quotes/${state.quote.id}/hold`,
       { method: "POST", idempotencyKey: key },
     );
+    if (requestVersion !== state.recommendationRequestVersion || state.quote?.id !== fingerprint) return;
     state.hold = data.hold;
     state.session.holdId = data.hold.id;
     state.session.hold = data.hold;
@@ -2144,6 +2149,7 @@ async function createHold(button, { scrollToGuest = true } = {}) {
       guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   } catch (error) {
+    if (requestVersion !== state.recommendationRequestVersion || state.quote?.id !== fingerprint) return;
     renderSectionError(
       quoteSection,
       messageFor(error, "Inventory could not be reserved."),
