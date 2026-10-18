@@ -778,7 +778,6 @@ describe("Atomic room-mix booking core", () => {
         expect(reconciliationRows).toHaveLength(1);
         expect(reconciliationRows[0]?.id).toBe(processed.reconciliationCaseId);
 
-
         const allocationRows = await trx
           .selectFrom("inventory_allocations")
           .select("id")
