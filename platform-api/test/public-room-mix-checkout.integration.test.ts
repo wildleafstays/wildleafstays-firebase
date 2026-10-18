@@ -759,7 +759,18 @@ describe("Atomic room-mix booking core", () => {
         expect(replayed.processed).toBe(false);
         expect(replayed.outcome).toBe(PaymentProcessingOutcomes.RECONCILIATION_REQUIRED);
         expect(replayed.reconciliationCaseId).toBe(processed.reconciliationCaseId);
+        expect(replayed.paymentSuccessId).toBe(processed.paymentSuccessId);
         expect(replayed.inventoryAllocationId).toBeNull();
+
+        // Repeated provider deliveries cannot proliferate payment successes or
+        // independent reconciliation cases for this one captured transaction.
+        const canonicalSuccesses = await trx
+          .selectFrom("payment_successes")
+          .select("id")
+          .where("payment_intent_id", "=", payment.paymentIntent.id)
+          .execute();
+        expect(canonicalSuccesses).toHaveLength(1);
+
 
         const allocationRows = await trx
           .selectFrom("inventory_allocations")
