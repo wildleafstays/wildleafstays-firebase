@@ -349,6 +349,21 @@ async function loadProperties(destinationOverride = null) {
       offset = response.nextOffset;
       if (page === 19) throw new Error("Too many search results. Refine your destination.");
     }
+    // Sort only verified comparable offers; never rank a failed availability
+    // check as cheaper or more suitable than an actual bookable arrangement.
+    properties.sort((a, b) => {
+      if (Boolean(a.smartstayCheckUnavailable) !== Boolean(b.smartstayCheckUnavailable)) {
+        return a.smartstayCheckUnavailable ? 1 : -1;
+      }
+      if (Boolean(a.smartstayIsAlternative) !== Boolean(b.smartstayIsAlternative)) {
+        return a.smartstayIsAlternative ? 1 : -1;
+      }
+      const aAmount = Number.isSafeInteger(a.smartstayEstimateMinor)
+        ? a.smartstayEstimateMinor : Infinity;
+      const bAmount = Number.isSafeInteger(b.smartstayEstimateMinor)
+        ? b.smartstayEstimateMinor : Infinity;
+      return aAmount - bAmount;
+    });
     state.properties = properties;
     renderProperties(properties);
   } catch (error) {
