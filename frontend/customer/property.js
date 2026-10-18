@@ -2533,7 +2533,7 @@ function startStatusPolling() {
   state.pollAttempts = 0;
   const poll = async () => {
     state.pollAttempts += 1;
-    await refreshCheckoutStatus(true);
+    const checkedStatus = await refreshCheckoutStatus(true);
     if (
       state.session.activeCheckout?.reservationId !== pollingReservationId ||
       state.session.activeCheckout?.paymentIntentId !== pollingPaymentIntentId
@@ -2544,6 +2544,16 @@ function startStatusPolling() {
     // A confirmed, closed, or assistance-required payment may have stopped
     // polling inside refreshCheckoutStatus; do not replace its final outcome.
     if (!state.polling) return;
+    // Do not count transport failures as a definitive payment timeout:
+    // keep manual recovery visible instead of asserting an outcome.
+    if (!checkedStatus && state.pollAttempts >= 24) {
+      stopStatusPolling();
+      renderPendingStatus(
+        "Wildleaf could not reach payment verification. Please check your connection and use Check booking status; do not make another payment.",
+        false,
+      );
+      return;
+    }
     if (state.pollAttempts >= 24) {
       stopStatusPolling();
       renderPendingStatus(
