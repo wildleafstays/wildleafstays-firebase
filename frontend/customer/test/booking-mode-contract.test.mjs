@@ -145,6 +145,12 @@ test("SmartStay restores complete destination and category context after viewing
   assert.match(bookingModeNavSource, /"destination", "categoryId", "typeId"/);
 });
 
+test("SmartStay premium cards retain accessible keyboard focus and reduced motion", () => {
+  assert.match(discoveryStyles, /prefers-reduced-motion: reduce/);
+  assert.match(discoveryStyles, /property-cta:focus-visible/);
+  assert.match(discoveryStyles, /property-card:hover/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
