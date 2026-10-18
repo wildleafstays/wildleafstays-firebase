@@ -129,8 +129,8 @@ test("homepage categories, sliders and filters are generated from database taxon
   assert.match(homeHtml, /class="property-category-sections"/);
   assert.match(homeSource, /\/v1\/public\/property-taxonomy/);
   assert.match(homeSource, /function renderPropertyTaxonomyFilters\(\)/);
-  assert.match(homeSource, /query\.set\("categoryId", categoryId\)/);
-  assert.match(homeSource, /query\.set\("typeId", typeId\)/);
+  assert.match(homeSource, /categoryId \? \{categoryId\} : \{\}/);
+  assert.match(homeSource, /typeId \? \{typeId\} : \{\}/);
   assert.match(homeSource, /category\.homepageHeading \|\| category\.name/);
   assert.match(homeSource, /if \(!categoryProperties\.length\) continue/);
   assert.match(homeSource, /property-category-rail/);
