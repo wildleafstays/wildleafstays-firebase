@@ -821,14 +821,38 @@ describe("Phase 6A public property catalog", () => {
   });
   it("rejects malformed SmartStay group searches without touching inventory", async () => {
     const invalidRequests = [
-      { arrivalDate: "2030-02-10", departureDate: "2030-02-09", adults: 2,
-        childAges: [], requestedRooms: 1, exclusive: false },
-      { arrivalDate: "2030-02-10", departureDate: "2030-02-11", adults: 0,
-        childAges: [], requestedRooms: 1, exclusive: false },
-      { arrivalDate: "2030-02-10", departureDate: "2030-02-11", adults: 2,
-        childAges: [-1], requestedRooms: 1, exclusive: false },
-      { arrivalDate: "2030-02-10", departureDate: "2030-02-11", adults: 2,
-        childAges: [], requestedRooms: 21, exclusive: false }
+      {
+        arrivalDate: "2030-02-10",
+        departureDate: "2030-02-09",
+        adults: 2,
+        childAges: [],
+        requestedRooms: 1,
+        exclusive: false
+      },
+      {
+        arrivalDate: "2030-02-10",
+        departureDate: "2030-02-11",
+        adults: 0,
+        childAges: [],
+        requestedRooms: 1,
+        exclusive: false
+      },
+      {
+        arrivalDate: "2030-02-10",
+        departureDate: "2030-02-11",
+        adults: 2,
+        childAges: [-1],
+        requestedRooms: 1,
+        exclusive: false
+      },
+      {
+        arrivalDate: "2030-02-10",
+        departureDate: "2030-02-11",
+        adults: 2,
+        childAges: [],
+        requestedRooms: 21,
+        exclusive: false
+      }
     ];
     for (const payload of invalidRequests) {
       const response = await app.inject({
@@ -841,8 +865,10 @@ describe("Phase 6A public property catalog", () => {
   });
 
   it("returns a bounded, nonbookable SmartStay discovery page without exposing private data", async () => {
-    const live = await db.selectFrom("properties")
-      .select("id").where("public_slug", "=", fixture.publicSlug)
+    const live = await db
+      .selectFrom("properties")
+      .select("id")
+      .where("public_slug", "=", fixture.publicSlug)
       .executeTakeFirstOrThrow();
     const before = await scopedMutationCounts(live.id);
     const response = await app.inject({
@@ -876,5 +902,4 @@ describe("Phase 6A public property catalog", () => {
     const after = await scopedMutationCounts(live.id);
     expect(after).toEqual(before);
   });
-
 });
