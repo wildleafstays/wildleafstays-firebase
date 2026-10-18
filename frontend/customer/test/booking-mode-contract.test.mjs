@@ -425,6 +425,14 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("payment polling stops when reservation or payment identity changes", () => {
+  const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
+  assert.match(polling, /const pollingReservationId = state\.session\.activeCheckout\?\.reservationId/);
+  assert.match(polling, /const pollingPaymentIntentId = state\.session\.activeCheckout\?\.paymentIntentId/);
+  assert.match(polling, /state\.session\.activeCheckout\?\.reservationId !== pollingReservationId/);
+  assert.match(polling, /stopStatusPolling\(\);[\s\S]*?return;/);
+});
+
 test("stale payment-status responses cannot overwrite another checkout", () => {
   const statusFlow = propertySource.split("async function refreshCheckoutStatus(quiet) {")[1].split("\nfunction renderCheckoutOutcome")[0];
   assert.equal(
