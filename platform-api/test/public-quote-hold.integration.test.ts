@@ -1172,8 +1172,15 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       .where("reservation_id", "=", body.reservation.id)
       .executeTakeFirstOrThrow();
 
+    const providerOrderCount = await db
+      .selectFrom("payment_provider_orders")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("payment_intent_id", "=", body.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+
     expect(Number(reservationCount.count)).toBe(1);
     expect(Number(paymentCount.count)).toBe(1);
+    expect(Number(providerOrderCount.count)).toBe(1);
   });
 
   it("refuses to replace the immutable lead guest on a public checkout retry with a new key", async () => {
