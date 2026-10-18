@@ -4,35 +4,60 @@ const params = new URLSearchParams(location.search);
 const publicSlug = String(params.get("slug") || "").trim().toLowerCase();
 const requestedMode = params.get("mode") === "villa" ? "villa" : "hotel";
 const switchLink = document.querySelector("#entirePropertySwitch");
+const roomsLink = document.querySelector("#smartstayRoomOption");
+const optionPanel = document.querySelector("#smartstayStayOptions");
+const partySummary = document.querySelector("#smartstayPartySummary");
+const privacyNotice = document.querySelector("#smartstayPrivacyNotice");
 const backLink = document.querySelector("#backToResults");
 
-if (backLink) {
-  backLink.href =
-    requestedMode === "villa"
-      ? "/customer/entire-properties.html"
-      : "/customer/";
-}
+if (backLink) backLink.href = "/customer/";
 
-if (publicSlug && switchLink && requestedMode !== "villa") {
-  void configureEntirePropertySwitch();
-}
+if (publicSlug && optionPanel) void configureStayOptions();
 
-async function configureEntirePropertySwitch() {
+async function configureStayOptions() {
   try {
     const data = await apiRequest(
       `/v1/public/properties/${encodeURIComponent(publicSlug)}`,
       { cache: "default" },
     );
-    if (data.property?.saleMode !== "BOTH") return;
+    const saleMode = data.property?.saleMode;
+    const allowsRooms = !saleMode || saleMode === "ROOMS_ONLY" || saleMode === "BOTH";
+    const allowsEntire = saleMode === "FULL_PROPERTY_ONLY" || saleMode === "BOTH";
+    if (!allowsRooms && !allowsEntire) return;
 
-    const villaParams = new URLSearchParams(location.search);
-    villaParams.set("slug", publicSlug);
-    villaParams.set("mode", "villa");
-    villaParams.set("rooms", "1");
-    switchLink.href = `/customer/property.html?${villaParams}`;
-    switchLink.classList.remove("hidden");
+    const rooms = Math.max(1, Number(params.get("rooms")) || 1);
+    const adults = Math.max(1, Number(params.get("adults")) || 2);
+    const children = Math.max(0, Number(params.get("children")) || 0);
+    if (partySummary) {
+      partySummary.textContent =
+        `${adults} adult${adults === 1 ? "" : "s"} · ${children} child${children === 1 ? "" : "ren"} · ${rooms} requested room${rooms === 1 ? "" : "s"}`;
+    }
+    const exclusive = requestedMode === "villa";
+    if (privacyNotice) {
+      privacyNotice.textContent = exclusive
+        ? "Exclusive use means no unrelated overnight guests share this property. Room count is a search preference, not a restriction on the number of rooms reserved with an entire-property stay."
+        : "Individual rooms may share common spaces with other guests. You can also explore reserving the entire property, if offered.";
+    }
+
+    if (allowsEntire && switchLink) {
+      const villaParams = new URLSearchParams(location.search);
+      villaParams.set("slug", publicSlug);
+      villaParams.set("mode", "villa");
+      villaParams.set("rooms", "1");
+      switchLink.href = `/customer/property.html?${villaParams}`;
+      switchLink.classList.toggle("hidden", exclusive);
+    }
+
+    if (allowsRooms && roomsLink) {
+      const roomParams = new URLSearchParams(location.search);
+      roomParams.set("slug", publicSlug);
+      roomParams.set("mode", "hotel");
+      roomParams.set("rooms", String(rooms));
+      roomsLink.href = `/customer/property.html?${roomParams}`;
+      roomsLink.classList.toggle("hidden", !exclusive);
+    }
+    optionPanel.classList.remove("hidden");
   } catch {
-    // The main property experience remains fully usable if this optional
-    // cross-mode navigation cannot be resolved.
+    // Optional offer explanation must never interrupt real booking.
   }
 }
