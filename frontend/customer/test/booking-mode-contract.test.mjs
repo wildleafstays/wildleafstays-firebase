@@ -59,12 +59,11 @@ test("SmartStay homepage uses unified discovery with optional privacy", () => {
   assert.match(propertySource, /"Choose rooms for your stay"/);
 });
 
-test("SmartStay never advertises room pricing for full-property-only listings", () => {
-  assert.match(homeSource, /property\.saleMode !== "FULL_PROPERTY_ONLY"/);
-  assert.match(homeSource, /property\.startingRoomRateMinor/);
-  assert.match(homeSource, /formatMinorPrice/);
-  assert.match(homeSource, /"Exclusive entire-property accommodation"/);
-  assert.match(discoveryStyles, /\.property-card-price/);
+test("SmartStay distinguishes date-specific quotes from static room starting rates", () => {
+  assert.doesNotMatch(homeSource, /property\\.startingRoomRateMinor/);
+  assert.match(homeSource, /smartstayEstimateMinor/);
+  assert.match(homeSource, /smartstay-price-disclaimer/);
+  assert.match(homeSource, /Excludes GST, fees and discounts/);
 });
 
 test("BOTH properties preserve the existing offer switch", () => {
