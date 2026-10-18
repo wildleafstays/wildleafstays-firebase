@@ -1255,6 +1255,180 @@ export async function registerPublicCatalogRoutes(
     }
   );
 
+  // SmartStay evaluates a bounded page of physical properties server-side.
+  // This is discovery only: exact quotes, holds and checkout remain authoritative.
+  app.post<{
+    Body: {
+      arrivalDate: string;
+      departureDate: string;
+      adults: number;
+      childAges: number[];
+      requestedRooms: number;
+      exclusive: boolean;
+      destination?: string;
+      categoryId?: string;
+      typeId?: string;
+      limit?: number;
+      offset?: number;
+    };
+  }>(
+    "/v1/public/smartstay/search",
+    {
+      schema: {
+        tags: ["Public Booking"],
+        summary: "Search one page of properties with availability-aware guest matching",
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["arrivalDate", "departureDate", "adults", "childAges", "requestedRooms", "exclusive"],
+          properties: {
+            arrivalDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            departureDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            adults: { type: "integer", minimum: 1, maximum: 20 },
+            childAges: { type: "array", maxItems: 20, items: { type: "integer", minimum: 0, maximum: 17 } },
+            requestedRooms: { type: "integer", minimum: 1, maximum: 20 },
+            exclusive: { type: "boolean" },
+            destination: { type: "string", minLength: 1, maxLength: 150 },
+            categoryId: { type: "string", format: "uuid" },
+            typeId: { type: "string", format: "uuid" },
+            limit: { type: "integer", minimum: 1, maximum: 50 },
+            offset: { type: "integer", minimum: 0, maximum: 100000 }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      setPublicNoStore(reply);
+      const input = request.body;
+      if (input.departureDate <= input.arrivalDate) {
+        throw new ValidationError("Check-out must be after check-in");
+      }
+      const page = await service.listProperties(deps.db, {
+        ...(input.destination ? { destination: input.destination } : {}),
+        ...(input.categoryId ? { categoryId: input.categoryId } : {}),
+        ...(input.typeId ? { typeId: input.typeId } : {}),
+        limit: input.limit ?? 25,
+        offset: input.offset ?? 0
+      });
+      type Listing = (typeof page.properties)[number] & {
+        smartstayEstimateMinor?: number | null;
+        smartstayCurrency?: string;
+        smartstaySuggestedMode?: "hotel" | "villa";
+        smartstayIsAlternative?: boolean;
+        smartstayCheckUnavailable?: boolean;
+      };
+      const outcomes: Array<Listing | null> = Array(page.properties.length).fill(null);
+      let cursor = 0;
+      await Promise.all(Array.from(
+        { length: Math.min(4, page.properties.length) },
+        async () => {
+          while (cursor < page.properties.length) {
+            const index = cursor++;
+            const property = page.properties[index]!;
+            const allowsEntire = property.saleMode === "BOTH" ||
+              property.saleMode === "FULL_PROPERTY_ONLY";
+            if (input.exclusive && !allowsEntire) continue;
+            const entire = input.exclusive ||
+              property.saleMode === "FULL_PROPERTY_ONLY" ||
+              (input.requestedRooms > 6 && allowsEntire);
+            if (!entire && input.requestedRooms > 6) {
+              outcomes[index] = { ...property, smartstayCheckUnavailable: true };
+              continue;
+            }
+            const cheapest = (offers: Array<{estimatedTotalMinor: number; currencyCode: string}>) =>
+              [...offers].sort((a, b) => a.estimatedTotalMinor - b.estimatedTotalMinor)[0];
+            try {
+              let match: {
+                estimatedTotalMinor: number;
+                currencyCode: string;
+                mode: "hotel" | "villa";
+              } | null = null;
+              if (!entire && input.requestedRooms > 1) {
+                const response = await roomRecommendationService.recommend(
+                  deps.db, property.publicSlug, {
+                    arrivalDate: input.arrivalDate,
+                    departureDate: input.departureDate,
+                    adults: input.adults,
+                    childAges: input.childAges,
+                    requestedRooms: input.requestedRooms
+                  }
+                );
+                const offers = response.recommendations.filter(offer =>
+                  offer.roomCount === input.requestedRooms &&
+                  offer.adults === input.adults &&
+                  offer.children === input.childAges.length &&
+                  offer.items.reduce((n, item) => n + item.quantity, 0) === input.requestedRooms
+                );
+                const offer = cheapest(offers);
+                if (offer) match = {
+                  estimatedTotalMinor: offer.estimatedTotalMinor,
+                  currencyCode: offer.currencyCode,
+                  mode: "hotel"
+                };
+              } else {
+                const response = await availabilityService.search(
+                  deps.db, property.publicSlug, {
+                    arrivalDate: input.arrivalDate,
+                    departureDate: input.departureDate,
+                    units: [{ adults: input.adults, children: input.childAges.length }]
+                  }
+                );
+                const options = response.options.filter(offer =>
+                  offer.available && (entire
+                    ? offer.productType === "FULL_PROPERTY"
+                    : offer.productType === "ROOM_CATEGORY" ||
+                      offer.productType === "FULL_PROPERTY")
+                );
+                const offer = cheapest(options);
+                if (offer) match = {
+                  estimatedTotalMinor: offer.estimatedTotalMinor,
+                  currencyCode: offer.currencyCode,
+                  mode: offer.productType === "FULL_PROPERTY" ? "villa" : "hotel"
+                };
+              }
+              if (!match && !input.exclusive && allowsEntire) {
+                const response = await availabilityService.search(
+                  deps.db, property.publicSlug, {
+                    arrivalDate: input.arrivalDate,
+                    departureDate: input.departureDate,
+                    units: [{ adults: input.adults, children: input.childAges.length }]
+                  }
+                );
+                const offer = cheapest(response.options.filter(option =>
+                  option.available && option.productType === "FULL_PROPERTY"
+                ));
+                if (offer) match = {
+                  estimatedTotalMinor: offer.estimatedTotalMinor,
+                  currencyCode: offer.currencyCode,
+                  mode: "villa"
+                };
+              }
+              if (!match) continue;
+              outcomes[index] = {
+                ...property,
+                smartstayEstimateMinor: match.estimatedTotalMinor,
+                smartstayCurrency: match.currencyCode,
+                smartstaySuggestedMode: match.mode,
+                smartstayIsAlternative: match.mode === "villa" &&
+                  !input.exclusive && property.saleMode === "BOTH"
+              };
+            } catch {
+              // A matching service failure is not proof of unavailable inventory.
+              outcomes[index] = { ...property, smartstayCheckUnavailable: true };
+            }
+          }
+        }
+      ));
+      return {
+        properties: outcomes.filter((property): property is Listing => property !== null),
+        scanned: page.properties.length,
+        nextOffset: page.properties.length === (input.limit ?? 25)
+          ? (input.offset ?? 0) + page.properties.length
+          : null
+      };
+    }
+  );
+
   app.get<{ Querystring: PublicPropertiesQuery }>(
     "/v1/public/properties",
     {
