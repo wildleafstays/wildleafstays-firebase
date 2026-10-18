@@ -87,8 +87,8 @@ test("SmartStay discovery checks dates and exact group room count", () => {
   assert.match(homeSource, /room-recommendations/);
   assert.match(homeSource, /item\.roomCount === requestedRooms/);
   assert.match(homeSource, /smartstayCheckUnavailable/);
-  assert.match(homeSource, /Date-specific estimate:/);
-  assert.match(homeSource, /before tax and fees/);
+  assert.match(homeSource, /Stay estimate:/);
+  assert.match(homeSource, /before GST, fees & discounts/);
 });
 
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
