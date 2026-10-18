@@ -742,6 +742,25 @@ describe("Atomic room-mix booking core", () => {
         expect(processed.outcome).toBe(PaymentProcessingOutcomes.RECONCILIATION_REQUIRED);
         expect(processed.inventoryAllocationId).toBeNull();
         expect(processed.reconciliationCaseId).not.toBeNull();
+        // Replayed capture evidence must retain its canonical reconciliation
+        // instead of creating another case or unexpectedly confirming rooms.
+        const replayed = await new VerifiedPaymentProcessor().process(
+          trx,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            reservationId: reserved.reservation.id,
+            paymentIntentId: payment.paymentIntent.id,
+            paymentEvidenceId: evidence!.id,
+            providerCapturedAt: new Date()
+          },
+          request
+        );
+        expect(replayed.processed).toBe(false);
+        expect(replayed.outcome).toBe(PaymentProcessingOutcomes.RECONCILIATION_REQUIRED);
+        expect(replayed.reconciliationCaseId).toBe(processed.reconciliationCaseId);
+        expect(replayed.inventoryAllocationId).toBeNull();
+
         const allocationRows = await trx
           .selectFrom("inventory_allocations")
           .select("id")
