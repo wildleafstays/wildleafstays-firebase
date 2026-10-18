@@ -56,6 +56,7 @@ class FakeRazorpayGateway implements RazorpayOrderGateway, RazorpayPaymentRecove
   private readonly orders = new Map<string, RazorpayOrder>();
   private readonly payments = new Map<string, RazorpayPayment[]>();
   createCalls = 0;
+  failNextCreate = false;
 
   publicKeyId(): string {
     return "rzp_test_phase6d_public";
@@ -63,6 +64,10 @@ class FakeRazorpayGateway implements RazorpayOrderGateway, RazorpayPaymentRecove
 
   async createOrder(input: RazorpayCreateOrderInput): Promise<RazorpayOrder> {
     this.createCalls += 1;
+    if (this.failNextCreate) {
+      this.failNextCreate = false;
+      throw new Error("Simulated transient Razorpay order failure");
+    }
 
     const existing = this.orders.get(input.receipt);
     if (existing) return existing;
@@ -1181,6 +1186,56 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
     expect(Number(reservationCount.count)).toBe(1);
     expect(Number(paymentCount.count)).toBe(1);
     expect(Number(providerOrderCount.count)).toBe(1);
+  });
+
+  it("recovers a transient Razorpay order failure on HTTP checkout retry without duplicate booking", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2034-03-04", "2034-03-06");
+    const key = `public-checkout-recovery-${randomUUID()}`;
+    const url = `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`;
+    const payload = {
+      leadGuest: { name: "Recovery Guest", email: "recovery@example.com", phone: null }
+    };
+    const callsBefore = razorpayGateway.createCalls;
+    razorpayGateway.failNextCreate = true;
+
+    const failed = await app.inject({
+      method: "POST",
+      url,
+      headers: { "idempotency-key": key },
+      payload
+    });
+    expect(failed.statusCode).toBeGreaterThanOrEqual(500);
+
+    const retry = await app.inject({
+      method: "POST",
+      url,
+      headers: { "idempotency-key": key },
+      payload
+    });
+    expect(retry.statusCode).toBe(201);
+    expect(retry.headers["idempotency-replayed"]).toBe("true");
+    expect(razorpayGateway.createCalls).toBe(callsBefore + 2);
+
+    const recovered = retry.json() as {
+      reservation: { id: string };
+      paymentIntent: { id: string };
+    };
+    const [reservations, paymentIntents, orders] = await Promise.all([
+      db.selectFrom("reservations").select("id").where("quote_id", "=", quote.id).execute(),
+      db
+        .selectFrom("payment_intents")
+        .select("id")
+        .where("reservation_id", "=", recovered.reservation.id)
+        .execute(),
+      db
+        .selectFrom("payment_provider_orders")
+        .select("id")
+        .where("payment_intent_id", "=", recovered.paymentIntent.id)
+        .execute()
+    ]);
+    expect(reservations).toHaveLength(1);
+    expect(paymentIntents).toHaveLength(1);
+    expect(orders).toHaveLength(1);
   });
 
   it("refuses to replace the immutable lead guest on a public checkout retry with a new key", async () => {
