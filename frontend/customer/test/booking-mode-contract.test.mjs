@@ -425,6 +425,14 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("exhausted payment polling shows an actionable manual recovery path", () => {
+  const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
+  assert.match(polling, /state\.pollAttempts >= 24/);
+  assert.match(polling, /Automatic payment checks have paused/);
+  assert.match(polling, /use Check booking status to retry/);
+  assert.match(polling, /Do not make another payment until the result is verified/);
+});
+
 test("payment polling stops when reservation or payment identity changes", () => {
   const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
   assert.match(polling, /const pollingReservationId = state\.session\.activeCheckout\?\.reservationId/);
