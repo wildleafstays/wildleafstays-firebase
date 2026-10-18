@@ -576,6 +576,25 @@ describe("Atomic room-mix booking core", () => {
           publicRequest
         );
 
+        // Payment providers can deliver the same verified callback repeatedly.
+        // The processor must return its canonical success without allocating twice.
+        const replayed = await new VerifiedPaymentProcessor().process(
+          trx,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            reservationId: firstReservation.reservation.id,
+            paymentIntentId: firstPayment.paymentIntent.id,
+            paymentEvidenceId: evidence!.id,
+            providerCapturedAt: new Date()
+          },
+          publicRequest
+        );
+        expect(replayed.processed).toBe(false);
+        expect(replayed.outcome).toBe(PaymentProcessingOutcomes.RESERVATION_CONFIRMED);
+        expect(replayed.inventoryAllocationId).toBe(processed.inventoryAllocationId);
+        expect(replayed.paymentSuccessId).toBe(processed.paymentSuccessId);
+
         expect(processed.outcome).toBe(PaymentProcessingOutcomes.RESERVATION_CONFIRMED);
         expect(processed.reconciliationCaseId).toBeNull();
         expect(processed.inventoryAllocationId).not.toBeNull();
