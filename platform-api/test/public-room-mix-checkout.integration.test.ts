@@ -770,6 +770,13 @@ describe("Atomic room-mix booking core", () => {
           .where("payment_intent_id", "=", payment.paymentIntent.id)
           .execute();
         expect(canonicalSuccesses).toHaveLength(1);
+        const reconciliationRows = await trx
+          .selectFrom("payment_reconciliation_cases")
+          .select("id")
+          .where("payment_evidence_id", "=", evidence!.id)
+          .execute();
+        expect(reconciliationRows).toHaveLength(1);
+        expect(reconciliationRows[0]?.id).toBe(processed.reconciliationCaseId);
 
 
         const allocationRows = await trx
