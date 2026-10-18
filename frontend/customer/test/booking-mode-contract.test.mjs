@@ -73,7 +73,16 @@ test("BOTH properties preserve the existing offer switch", () => {
   assert.match(bookingModeNavSource, /switchLink\.classList\.toggle\("hidden", exclusive\)/);
 });
 
-test("SmartStay explains privacy and returns from entire property to rooms", () => {\n  assert.match(propertyHtml, /id="smartstayStayOptions"/);\n  assert.match(propertyHtml, /id="smartstayPartySummary"/);\n  assert.match(propertyHtml, /id="smartstayPrivacyNotice"/);\n  assert.match(propertyHtml, /id="smartstayRoomOption"/);\n  assert.match(bookingModeNavSource, /roomParams\.set\("mode", "hotel"\)/);\n  assert.match(bookingModeNavSource, /No unrelated overnight guests|no unrelated overnight guests/);\n});\n\ntest("homepage categories, sliders and filters are generated from database taxonomy", () => {
+test("SmartStay explains privacy and returns from entire property to rooms", () => {
+  assert.match(propertyHtml, /id="smartstayStayOptions"/);
+  assert.match(propertyHtml, /id="smartstayPartySummary"/);
+  assert.match(propertyHtml, /id="smartstayPrivacyNotice"/);
+  assert.match(propertyHtml, /id="smartstayRoomOption"/);
+  assert.match(bookingModeNavSource, /roomParams\.set\("mode", "hotel"\)/);
+  assert.match(bookingModeNavSource, /no unrelated overnight guests/);
+});
+
+test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
   assert.match(homeHtml, /class="property-category-sections"/);
