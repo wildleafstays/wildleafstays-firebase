@@ -2541,7 +2541,10 @@ function startStatusPolling() {
       stopStatusPolling();
       return;
     }
-    if (state.polling && state.pollAttempts >= 24) {
+    // A confirmed, closed, or assistance-required payment may have stopped
+    // polling inside refreshCheckoutStatus; do not replace its final outcome.
+    if (!state.polling) return;
+    if (state.pollAttempts >= 24) {
       stopStatusPolling();
       renderPendingStatus(
         "Automatic payment checks have paused. Your booking is still unresolved; use Check booking status to retry. Do not make another payment until the result is verified.",
