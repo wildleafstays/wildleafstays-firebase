@@ -158,6 +158,12 @@ test("SmartStay never loses published properties when taxonomy is incomplete", (
   assert.match(homeSource, /renderedCount \+= uncategorized\.length/);
 });
 
+test("SmartStay separates verified property matches from unchecked stays", () => {
+  assert.match(homeSource, /const verified = renderedCount - unverified/);
+  assert.match(homeSource, /availability-matched/);
+  assert.match(homeSource, /require.*verification/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
