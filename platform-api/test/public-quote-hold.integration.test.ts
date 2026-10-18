@@ -1216,6 +1216,20 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
     expect(pendingReservations).toHaveLength(1);
     expect(pendingReservations[0]?.status).toBe("PAYMENT_PENDING");
 
+    // An upstream outage must not persist an incomplete provider-order link.
+    const pendingIntents = await db
+      .selectFrom("payment_intents")
+      .select("id")
+      .where("reservation_id", "=", pendingReservations[0]!.id)
+      .execute();
+    expect(pendingIntents).toHaveLength(1);
+    const prematureOrders = await db
+      .selectFrom("payment_provider_orders")
+      .select("id")
+      .where("payment_intent_id", "=", pendingIntents[0]!.id)
+      .execute();
+    expect(prematureOrders).toHaveLength(0);
+
     const retry = await app.inject({
       method: "POST",
       url,
