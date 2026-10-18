@@ -138,6 +138,13 @@ test("SmartStay ranks verified room matches ahead of speculative options", () =>
   assert.match(homeSource, /return aAmount - bAmount/);
 });
 
+test("SmartStay restores complete destination and category context after viewing a stay", () => {
+  assert.match(homeSource, /destination: form\.destination\.value\.trim\(\)/);
+  assert.match(homeSource, /initialSearch\.get\("categoryId"\)/);
+  assert.match(homeSource, /renderPropertyTypeFilter\(savedCategory, savedType \|\| ""\)/);
+  assert.match(bookingModeNavSource, /"destination", "categoryId", "typeId"/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
