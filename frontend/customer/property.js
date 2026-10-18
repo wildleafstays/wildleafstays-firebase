@@ -1834,6 +1834,8 @@ async function continueRoomSelection(button) {
 
   const selections = [...state.roomSelections.values()];
   clearQuoteAndLater();
+  const selectionVersion = state.selectionPricingVersion;
+  const bookingSearchVersion = state.recommendationRequestVersion;
   setBusy(button, true, "Checking exact price…");
 
   try {
@@ -1862,6 +1864,8 @@ async function continueRoomSelection(button) {
           body,
         },
       );
+
+      if (selectionVersion !== state.selectionPricingVersion || bookingSearchVersion !== state.recommendationRequestVersion) return;
 
       state.roomMixQuote = null;
       state.quote = data.quote;
@@ -1910,6 +1914,8 @@ async function continueRoomSelection(button) {
       },
     );
 
+    if (selectionVersion !== state.selectionPricingVersion || bookingSearchVersion !== state.recommendationRequestVersion) return;
+
     state.quote = null;
     state.roomMixQuote = data.roomMixQuote;
     state.session.roomMixQuote = data.roomMixQuote;
@@ -1922,6 +1928,7 @@ async function continueRoomSelection(button) {
     renderSelectionRibbon();
     await createRoomMixHold({ scrollToGuest: true });
   } catch (error) {
+    if (selectionVersion !== state.selectionPricingVersion || bookingSearchVersion !== state.recommendationRequestVersion) return;
     showInlineMessage(
       messageFor(error, "This room selection could not be prepared for booking."),
       "error",
