@@ -89,8 +89,8 @@ test("SmartStay discovery checks dates and exact group room count", () => {
   assert.match(homeSource, /room-recommendations/);
   assert.match(homeSource, /item\.roomCount === requestedRooms/);
   assert.match(homeSource, /smartstayCheckUnavailable/);
-  assert.match(homeSource, /Stay estimate:/);
-  assert.match(homeSource, /before GST, fees & discounts/);
+  assert.match(homeSource, /smartstay-price-summary/);
+  assert.match(homeSource, /Excludes GST, fees and discounts/);
 });
 
 test("SmartStay checks exclusive availability before offering a villa upgrade", () => {
@@ -121,7 +121,7 @@ test("SmartStay verifies party totals and labels exclusive-use fallback honestly
   assert.match(homeSource, /item\.adults === adults/);
   assert.match(homeSource, /item\.children === children/);
   assert.match(homeSource, /smartstayIsAlternative/);
-  assert.match(homeSource, /Alternative: reserve the entire property/);
+  assert.match(homeSource, /This is an entire-property alternative/);
 });
 
 test("SmartStay returns customers to search with their guest preferences", () => {
