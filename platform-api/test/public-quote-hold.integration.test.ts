@@ -1225,6 +1225,29 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
     expect(Number(count.count)).toBe(1);
   });
 
+  it("rejects malformed customer checkout at HTTP boundary without creating payment or reservation", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2034-03-01", "2034-03-03");
+    const callsBefore = razorpayGateway.createCalls;
+    const checkoutUrl = `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`;
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: checkoutUrl,
+      headers: { "idempotency-key": `bad-public-checkout-${randomUUID()}` },
+      payload: { leadGuest: { name: "", email: "not-an-email", phone: null } }
+    });
+
+    expect(invalid.statusCode).toBe(400);
+    expect(razorpayGateway.createCalls).toBe(callsBefore);
+
+    const reservations = await db
+      .selectFrom("reservations")
+      .select("id")
+      .where("quote_id", "=", quote.id)
+      .execute();
+    expect(reservations).toHaveLength(0);
+  });
+
   it("rejects checkout before reservation mutation when Razorpay is unavailable", async () => {
     const { quote } = await createPublicQuoteAndHold(fixture, "2034-02-26", "2034-02-28");
 
