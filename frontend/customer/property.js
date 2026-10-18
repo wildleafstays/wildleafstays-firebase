@@ -2541,6 +2541,14 @@ function startStatusPolling() {
       stopStatusPolling();
       return;
     }
+    if (state.polling && state.pollAttempts >= 24) {
+      stopStatusPolling();
+      renderPendingStatus(
+        "Automatic payment checks have paused. Your booking is still unresolved; use Check booking status to retry. Do not make another payment until the result is verified.",
+        false,
+      );
+      return;
+    }
     if (
       state.polling &&
       !state.pollTimer &&
