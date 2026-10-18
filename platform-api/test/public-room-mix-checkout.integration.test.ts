@@ -684,12 +684,18 @@ describe("Atomic room-mix booking core", () => {
           request
         );
         const hold = await new PublicRoomMixService().createHold(
-          trx, fixture.publicSlug, quoted.roomMixQuote.id, request
+          trx,
+          fixture.publicSlug,
+          quoted.roomMixQuote.id,
+          request
         );
         const reserved = await new PublicRoomMixReservationService().create(
-          trx, fixture.publicSlug, quoted.roomMixQuote.id,
+          trx,
+          fixture.publicSlug,
+          quoted.roomMixQuote.id,
           { name: "Expiry Test Guest", email: "expiry@example.invalid", phone: null },
-          request, null
+          request,
+          null
         );
         const payment = await new BeginPaymentService().beginPaymentSystem(
           trx,
@@ -701,9 +707,11 @@ describe("Atomic room-mix booking core", () => {
           request
         );
         const expiry = new Date(Date.now() - 60_000);
-        await trx.updateTable("inventory_holds")
+        await trx
+          .updateTable("inventory_holds")
           .set({ expires_at: expiry })
-          .where("id", "=", hold.hold.id).execute();
+          .where("id", "=", hold.hold.id)
+          .execute();
         const evidence = await new PaymentEvidenceRepository().create(trx, {
           paymentIntentId: payment.paymentIntent.id,
           organizationId: fixture.organizationId,
@@ -734,11 +742,16 @@ describe("Atomic room-mix booking core", () => {
         expect(processed.outcome).toBe(PaymentProcessingOutcomes.RECONCILIATION_REQUIRED);
         expect(processed.inventoryAllocationId).toBeNull();
         expect(processed.reconciliationCaseId).not.toBeNull();
-        const allocationRows = await trx.selectFrom("inventory_allocations")
-          .select("id").where("hold_id", "=", hold.hold.id).execute();
+        const allocationRows = await trx
+          .selectFrom("inventory_allocations")
+          .select("id")
+          .where("hold_id", "=", hold.hold.id)
+          .execute();
         expect(allocationRows).toHaveLength(0);
-        const reservation = await trx.selectFrom("reservations")
-          .select("status").where("id", "=", reserved.reservation.id)
+        const reservation = await trx
+          .selectFrom("reservations")
+          .select("status")
+          .where("id", "=", reserved.reservation.id)
           .executeTakeFirstOrThrow();
         expect(reservation.status).not.toBe("CONFIRMED");
         throw new RollbackAfterAssertions();
@@ -747,5 +760,4 @@ describe("Atomic room-mix booking core", () => {
       if (!(error instanceof RollbackAfterAssertions)) throw error;
     }
   });
-
 });
