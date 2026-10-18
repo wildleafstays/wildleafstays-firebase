@@ -2211,7 +2211,7 @@ async function beginCheckout(guestForm, button) {
   if (state.session.activeCheckout && !state.session.activeCheckout.outcome) {
     renderPendingStatus(
       "An earlier payment is still pending. Check that booking before starting another payment.",
-      true,
+      Boolean(state.session.activeCheckout.checkout),
     );
     void refreshCheckoutStatus(true);
     return;
