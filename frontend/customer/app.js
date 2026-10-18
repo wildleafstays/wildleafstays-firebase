@@ -376,9 +376,7 @@ async function matchGuestRequirements(properties) {
             }
           }
         } else {
-          const units = isEntire
-            ? [{adults,children}]
-            : [{adults,children}];
+          const units = [{adults,children}];
           const response = await apiRequest(
             `/v1/public/properties/${encodeURIComponent(property.publicSlug)}/availability`,
             {method:"POST",body:{arrivalDate,departureDate,units}}
@@ -508,8 +506,11 @@ function renderProperties(properties) {
     return;
   }
 
+  const unverified = visibleProperties.filter((property) => property.smartstayCheckUnavailable).length;
   resultsStatus.textContent =
-    `${renderedCount} live ${renderedCount === 1 ? "property" : "properties"} across ${results.children.length} ${results.children.length === 1 ? "category" : "categories"}`;
+    `${renderedCount} matching ${renderedCount === 1 ? "stay" : "stays"}` +
+    (unverified ? ` · ${unverified} require an availability check` : "") +
+    " · final rates confirmed before booking";
 }
 
 function propertyCard(property, index) {
@@ -542,7 +543,8 @@ function propertyCard(property, index) {
     element("h3", "", property.name),
   );
 
-  if (property.saleMode !== "FULL_PROPERTY_ONLY" &&
+  if (property.smartstayCheckUnavailable &&
+      property.saleMode !== "FULL_PROPERTY_ONLY" &&
       property.startingRoomRateMinor !== null && property.startingRoomRateMinor !== undefined) {
     const price = element("p", "property-card-price");
     price.append(
@@ -564,12 +566,12 @@ function propertyCard(property, index) {
   }
   if (property.smartstayCheckUnavailable) {
     body.append(element("p", "property-location",
-      "Availability could not be checked — verify on property page"));
+      "Availability not verified — check dates and final price on property page"));
   } else if (property.smartstayEstimateMinor !== null &&
              property.smartstayEstimateMinor !== undefined) {
     body.append(element("p", "property-location",
-      `Date-specific estimate: ${formatMinorPrice(property.smartstayEstimateMinor,
-        property.smartstayCurrency)} · before tax and fees`));
+      `Stay estimate: ${formatMinorPrice(property.smartstayEstimateMinor,
+        property.smartstayCurrency)} · accommodation & extra guests only, before GST, fees & discounts`));
   }
   const link = element("a", "button button-primary property-cta", "Explore this stay");
   link.href = propertyUrl(property);
