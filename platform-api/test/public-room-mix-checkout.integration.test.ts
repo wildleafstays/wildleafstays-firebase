@@ -669,7 +669,7 @@ describe("Atomic room-mix booking core", () => {
     try {
       await db.transaction().execute(async (trx) => {
         const fixture = await createFixture(trx);
-        const request = metadata("integration-test");
+        const request = metadata("public-api");
         const quoted = await new PublicRoomMixService().createQuote(
           trx,
           fixture.publicSlug,
