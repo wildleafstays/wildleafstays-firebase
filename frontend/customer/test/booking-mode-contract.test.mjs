@@ -425,6 +425,15 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("stale payment-status responses cannot overwrite another checkout", () => {
+  const statusFlow = propertySource.split("async function refreshCheckoutStatus(quiet) {")[1].split("\nfunction renderCheckoutOutcome")[0];
+  assert.equal(
+    (statusFlow.match(/state\.session\.activeCheckout\?\.reservationId !== active\.reservationId/g) || []).length,
+    2,
+  );
+  assert.match(statusFlow, /state\.session\.activeCheckout\?\.paymentIntentId !== active\.paymentIntentId/);
+});
+
 test("pending Razorpay orders block a second checkout until canonical status is resolved", () => {
   const checkoutFlow = propertySource.split("async function beginCheckout(guestForm, button) {")[1].split("\nfunction openRazorpay")[0];
   const guard = checkoutFlow.indexOf("if (state.session.activeCheckout && !state.session.activeCheckout.outcome)");
