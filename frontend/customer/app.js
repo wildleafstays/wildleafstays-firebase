@@ -381,12 +381,13 @@ async function matchGuestRequirements(properties) {
       const position = next++;
       const property = candidates[position];
       try {
-        if (!exclusive && requestedRooms > 6 &&
-            property.saleMode !== "FULL_PROPERTY_ONLY") {
+        const isEntire = exclusive || property.saleMode === "FULL_PROPERTY_ONLY";
+        // Room-mix recommendations currently support at most six rooms.
+        // For larger groups, a whole-property offer may still satisfy the trip.
+        if (!isEntire && requestedRooms > 6 && !allowsEntireProperty(property)) {
           outcomes[position] = {...property,smartstayCheckUnavailable:true};
           continue;
         }
-        const isEntire = exclusive || property.saleMode === "FULL_PROPERTY_ONLY";
         let matches = false;
         let estimateMinor = null;
         let currencyCode = "INR";
@@ -435,6 +436,28 @@ async function matchGuestRequirements(properties) {
               currencyCode = offer.currencyCode || "INR";
             }
             suggestedMode = offer.productType === "FULL_PROPERTY" ? "villa" : "hotel";
+          }
+        }
+        // An entire-property booking can be suitable even when the requested
+        // individual-room mix is unavailable. Never silently call it a room match.
+        if (!matches && !exclusive && allowsEntireProperty(property)) {
+          const response = await apiRequest(
+            `/v1/public/properties/${encodeURIComponent(property.publicSlug)}/availability`,
+            {method:"POST",body:{
+              arrivalDate,departureDate,units:[{adults,children}]
+            }}
+          );
+          const villas = (response.options || []).filter(option =>
+            option.productType === "FULL_PROPERTY" && option.available
+          ).sort((a,b) => a.estimatedTotalMinor - b.estimatedTotalMinor);
+          if (villas.length) {
+            matches = true;
+            suggestedMode = "villa";
+            const villa = villas[0];
+            if (Number.isSafeInteger(villa.estimatedTotalMinor)) {
+              estimateMinor = villa.estimatedTotalMinor;
+              currencyCode = villa.currencyCode || "INR";
+            }
           }
         }
         outcomes[position] = matches
