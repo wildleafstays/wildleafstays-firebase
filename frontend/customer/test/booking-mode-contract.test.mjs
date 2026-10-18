@@ -70,6 +70,7 @@ test("BOTH properties preserve the existing offer switch", () => {
   assert.match(propertyHtml, /id="entirePropertySwitch"/);
   assert.match(bookingModeNavSource, /saleMode === "BOTH"/);
   assert.match(bookingModeNavSource, /villaParams\.set\("mode", "villa"\)/);
+  assert.doesNotMatch(bookingModeNavSource, /villaParams\.set\("rooms", "1"\)/);
   assert.match(bookingModeNavSource, /switchLink\.classList\.toggle\("hidden", exclusive\)/);
 });
 
@@ -89,6 +90,13 @@ test("SmartStay discovery checks dates and exact group room count", () => {
   assert.match(homeSource, /smartstayCheckUnavailable/);
   assert.match(homeSource, /Stay estimate:/);
   assert.match(homeSource, /before GST, fees & discounts/);
+});
+
+test("SmartStay checks exclusive availability before offering a villa upgrade", () => {
+  assert.match(bookingModeNavSource, /productType === "FULL_PROPERTY"/);
+  assert.match(bookingModeNavSource, /offers\.length/);
+  assert.match(bookingModeNavSource, /before taxes & fees/);
+  assert.match(bookingModeNavSource, /Exclusive use is unavailable/);
 });
 
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
