@@ -819,4 +819,62 @@ describe("Phase 6A public property catalog", () => {
     const after = await scopedMutationCounts(live.id);
     expect(after).toEqual(before);
   });
+  it("rejects malformed SmartStay group searches without touching inventory", async () => {
+    const invalidRequests = [
+      { arrivalDate: "2030-02-10", departureDate: "2030-02-09", adults: 2,
+        childAges: [], requestedRooms: 1, exclusive: false },
+      { arrivalDate: "2030-02-10", departureDate: "2030-02-11", adults: 0,
+        childAges: [], requestedRooms: 1, exclusive: false },
+      { arrivalDate: "2030-02-10", departureDate: "2030-02-11", adults: 2,
+        childAges: [-1], requestedRooms: 1, exclusive: false },
+      { arrivalDate: "2030-02-10", departureDate: "2030-02-11", adults: 2,
+        childAges: [], requestedRooms: 21, exclusive: false }
+    ];
+    for (const payload of invalidRequests) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/public/smartstay/search",
+        payload
+      });
+      expect(response.statusCode).toBe(400);
+    }
+  });
+
+  it("returns a bounded, nonbookable SmartStay discovery page without exposing private data", async () => {
+    const live = await db.selectFrom("properties")
+      .select("id").where("public_slug", "=", fixture.publicSlug)
+      .executeTakeFirstOrThrow();
+    const before = await scopedMutationCounts(live.id);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/public/smartstay/search",
+      payload: {
+        arrivalDate: "2030-02-10",
+        departureDate: "2030-02-11",
+        adults: 2,
+        childAges: [],
+        requestedRooms: 1,
+        exclusive: false,
+        destination: fixture.city,
+        limit: 10,
+        offset: 0
+      }
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      properties: Array<Record<string, unknown>>;
+      scanned: number;
+      nextOffset: number | null;
+    };
+    expect(body.scanned).toBe(1);
+    expect(body.nextOffset).toBeNull();
+    expect(body.properties.length).toBeLessThanOrEqual(1);
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain(fixture.privateEmail);
+    expect(serialized).not.toContain(fixture.privatePhone);
+    expect(serialized).not.toContain(fixture.privateStorageKey);
+    const after = await scopedMutationCounts(live.id);
+    expect(after).toEqual(before);
+  });
+
 });
