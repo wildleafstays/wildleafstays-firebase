@@ -902,6 +902,7 @@ describe("Phase 6A public property catalog", () => {
     const after = await scopedMutationCounts(live.id);
     expect(after).toEqual(before);
   });
+
   it("does not present room-only properties as exclusive stays", async () => {
     const response = await app.inject({
       method: "POST",
@@ -954,5 +955,4 @@ describe("Phase 6A public property catalog", () => {
     });
     expect(second.statusCode).toBe(200);
   });
-
 });
