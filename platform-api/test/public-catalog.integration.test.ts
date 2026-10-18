@@ -902,4 +902,57 @@ describe("Phase 6A public property catalog", () => {
     const after = await scopedMutationCounts(live.id);
     expect(after).toEqual(before);
   });
+  it("does not present room-only properties as exclusive stays", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/public/smartstay/search",
+      payload: {
+        arrivalDate: "2030-02-10",
+        departureDate: "2030-02-11",
+        adults: 2,
+        childAges: [],
+        requestedRooms: 1,
+        exclusive: true,
+        destination: fixture.otherCity,
+        limit: 10,
+        offset: 0
+      }
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      properties: Array<{ saleMode: string | null }>;
+      scanned: number;
+    };
+    expect(body.scanned).toBe(1);
+    expect(body.properties).toEqual([]);
+  });
+
+  it("paginates source properties without skipping when matches are absent", async () => {
+    const payload = {
+      arrivalDate: "2030-02-10",
+      departureDate: "2030-02-11",
+      adults: 2,
+      childAges: [],
+      requestedRooms: 1,
+      exclusive: false,
+      limit: 1,
+      offset: 0
+    };
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/public/smartstay/search",
+      payload
+    });
+    expect(first.statusCode).toBe(200);
+    const page = first.json() as { scanned: number; nextOffset: number | null };
+    expect(page.scanned).toBe(1);
+    expect(page.nextOffset).toBe(1);
+    const second = await app.inject({
+      method: "POST",
+      url: "/v1/public/smartstay/search",
+      payload: { ...payload, offset: page.nextOffset }
+    });
+    expect(second.statusCode).toBe(200);
+  });
+
 });
