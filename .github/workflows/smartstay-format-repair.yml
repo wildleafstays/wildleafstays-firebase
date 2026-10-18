@@ -1,0 +1,46 @@
+name: SmartStay Code Formatting Repair
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/smartstay-format-repair.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: >-
+      github.event.pull_request.head.repo.full_name == 'wildleafstays/wildleafstays-firebase' &&
+      github.event.pull_request.head.ref == 'feat/smartstay-unified-discovery-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: platform-api
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: platform-api/package-lock.json
+      - run: npm ci
+      - name: Format only SmartStay API route
+        run: npx prettier --write src/modules/public-booking/transport/public-catalog-routes.ts
+      - name: Verify formatting and TypeScript
+        run: |
+          npm run format:check
+          npm run typecheck
+      - name: Commit formatting to development branch
+        run: |
+          git config user.name "wildleaf-format-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/modules/public-booking/transport/public-catalog-routes.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "style(smartstay): format backend search route with Prettier"
+            git push origin HEAD:feat/smartstay-unified-discovery-20261018
+          fi
