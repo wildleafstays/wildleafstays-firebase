@@ -149,3 +149,27 @@
   .home-page .property-card { border-radius: 18px; }
   .home-page .property-card:hover { transform: none; }
 }
+
+/* Booking-mode choice shown on each property: easy to see and operate. */
+.property-page .property-mode-alternative {
+  min-height: 48px;
+  border-radius: 12px;
+  padding-inline: 1.1rem;
+  text-wrap: balance;
+  transition: border-color .2s ease, background-color .2s ease;
+}
+.property-page .property-mode-alternative:focus-visible {
+  outline: 3px solid #cba765;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .property-page .property-mode-alternative {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    font-size: .84rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .property-page .property-mode-alternative { transition: none; }
+}
