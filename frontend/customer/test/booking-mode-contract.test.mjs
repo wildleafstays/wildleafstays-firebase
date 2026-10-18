@@ -124,6 +124,14 @@ test("SmartStay verifies party totals and labels exclusive-use fallback honestly
   assert.match(homeSource, /Alternative: reserve the entire property/);
 });
 
+test("SmartStay returns customers to search with their guest preferences", () => {
+  assert.match(homeSource, /function restoreSearchFromUrl/);
+  assert.match(homeSource, /initialSearch\.set\("privateStay", "1"\)/);
+  assert.match(bookingModeNavSource, /returnParams\.set\(key, params\.get\(key\)\)/);
+  assert.match(bookingModeNavSource, /backLink\.href =/);
+  assert.doesNotMatch(propertySource, /querySelector\("#backToResults"\)\.href = "\/customer\/"/);
+});
+
 test("homepage categories, sliders and filters are generated from database taxonomy", () => {
   assert.match(homeHtml, /id="propertyCategory"[^>]*name="propertyCategoryId"/);
   assert.match(homeHtml, /id="propertyType"[^>]*name="propertyTypeId"/);
