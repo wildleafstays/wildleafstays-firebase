@@ -427,9 +427,10 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
 
 test("pending Razorpay orders block a second checkout until canonical status is resolved", () => {
   const checkoutFlow = propertySource.split("async function beginCheckout(guestForm, button) {")[1].split("\nfunction openRazorpay")[0];
-  const guard = checkoutFlow.indexOf("if (state.session.activeCheckout?.checkout)");
+  const guard = checkoutFlow.indexOf("if (state.session.activeCheckout && !state.session.activeCheckout.outcome)");
   const submit = checkoutFlow.indexOf("const data = await apiRequest(checkoutPath");
   assert.ok(guard >= 0 && guard < submit);
+  assert.match(propertySource, /outcome: data\.outcome/);
   assert.match(checkoutFlow, /An earlier payment is still pending/);
   assert.match(checkoutFlow, /void refreshCheckoutStatus\(true\)/);
 });
