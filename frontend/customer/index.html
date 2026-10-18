@@ -140,15 +140,19 @@
               <input id="rooms" name="rooms" type="number" min="1" max="20" value="1" required />
             </label>
             <label class="search-field compact-field">
-              <span id="adultsLabel">Adults / room</span>
+              <span id="adultsLabel">Adults in group</span>
               <input id="adults" name="adults" type="number" min="1" max="10" value="2" required />
             </label>
             <label class="search-field compact-field">
-              <span id="childrenLabel">Children / room</span>
+              <span id="childrenLabel">Children in group</span>
               <input id="children" name="children" type="number" min="0" max="6" value="0" required />
             </label>
           </div>
 
+          <div id="smartstayChildAges" aria-live="polite" style="display:none;padding:.5rem .8rem;background:rgba(255,255,255,.11);border-radius:12px;">
+            <strong style="display:block;margin-bottom:.4rem">Children’s ages at check-in</strong>
+            <div id="smartstayChildAgeFields" style="display:flex;flex-wrap:wrap;gap:.75rem"></div>
+          </div>
           <label class="smartstay-privacy-choice" style="display:flex;align-items:center;gap:.65rem;min-width:0;padding:.65rem 1rem;background:rgba(255,255,255,.12);border-radius:12px;">
             <input id="privateStay" name="privateStay" type="checkbox" style="width:18px;height:18px;flex:none" />
             <span><strong>We want the entire place to ourselves</strong><small style="display:block">Optional — leave unchecked to explore rooms and private stays together</small></span>
