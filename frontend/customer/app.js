@@ -125,6 +125,13 @@ async function loadPropertyTaxonomy() {
     types: data.types || [],
   };
   renderPropertyTaxonomyFilters();
+  const savedCategory = initialSearch.get("categoryId");
+  const savedType = initialSearch.get("typeId");
+  if (savedCategory && [...propertyCategorySelect.options].some(option =>
+    option.value === savedCategory)) {
+    propertyCategorySelect.value = savedCategory;
+    renderPropertyTypeFilter(savedCategory, savedType || "");
+  }
 }
 
 function renderPropertyTaxonomyFilters() {
