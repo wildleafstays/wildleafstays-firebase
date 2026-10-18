@@ -48,6 +48,7 @@ const state = {
   heroSlides: [],
   heroIndex: 0,
   heroTimer: null,
+  searchVersion: 0,
   propertyTaxonomy: {
     categories: [],
     types: [],
@@ -283,7 +284,8 @@ async function loadProperties(destinationOverride = null) {
   const categoryId = propertyCategorySelect.value;
   const typeId = propertyTypeSelect.value;
 
-  resultsStatus.textContent = "Finding live Wildleaf properties…";
+  const searchVersion = ++state.searchVersion;
+  resultsStatus.textContent = "Checking stays against your requested dates and guests…";
   renderLoadingCards();
   updateResultsHeading(destination, categoryId, typeId);
 
@@ -305,11 +307,89 @@ async function loadProperties(destinationOverride = null) {
       if (page.length < 100) break;
       offset += page.length;
     }
-    state.properties = properties;
+    const matched = await matchGuestRequirements(properties);
+    if (searchVersion !== state.searchVersion) return;
+    state.properties = matched;
     renderProperties(state.properties);
   } catch (error) {
     renderError(error);
   }
+}
+
+
+// A preliminary discovery check only: canonical quotes and inventory holds
+// still determine the final bookability and all taxes before checkout.
+async function matchGuestRequirements(properties) {
+  const version = state.searchVersion;
+  const arrivalDate = form.arrivalDate.value;
+  const departureDate = form.departureDate.value;
+  const requestedRooms = Math.max(1, Number(form.rooms.value) || 1);
+  const adults = Math.max(1, Number(form.adults.value) || 2);
+  const children = Math.max(0, Number(form.children.value) || 0);
+  const exclusive = Boolean(form.elements.namedItem("privateStay")?.checked);
+  const validDates = /^\d{4}-\d{2}-\d{2}$/.test(arrivalDate) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(departureDate) &&
+    departureDate > arrivalDate;
+  if (!validDates) return [];
+
+  const candidates = properties.filter(p => !exclusive || allowsEntireProperty(p));
+  const outcomes = new Array(candidates.length);
+  let next = 0;
+  // Bound requests. This endpoint is transactional-database backed, not a
+  // cached listing feed; do not fire a request storm for a large portfolio.
+  await Promise.all(Array.from({length: Math.min(4, candidates.length)}, async () => {
+    while (next < candidates.length && version === state.searchVersion) {
+      const position = next++;
+      const property = candidates[position];
+      try {
+        const isEntire = exclusive || property.saleMode === "FULL_PROPERTY_ONLY";
+        let matches = false;
+        let estimateMinor = null;
+        let currencyCode = "INR";
+        if (!isEntire && requestedRooms > 1 && requestedRooms <= 6) {
+          const response = await apiRequest(
+            `/v1/public/properties/${encodeURIComponent(property.publicSlug)}/room-recommendations`,
+            {method:"POST",body:{
+              arrivalDate,departureDate,adults,
+              childAges:Array.from({length:children},()=>8),requestedRooms
+            }}
+          );
+          // Recommendation payloads vary with available room mixes;
+          // never claim availability from a result we cannot substantiate.
+          const recommendations = response.recommendations || response.options || [];
+          matches = Array.isArray(recommendations) && recommendations.length > 0;
+        } else {
+          const units = isEntire
+            ? [{adults,children}]
+            : [{adults,children}];
+          const response = await apiRequest(
+            `/v1/public/properties/${encodeURIComponent(property.publicSlug)}/availability`,
+            {method:"POST",body:{arrivalDate,departureDate,units}}
+          );
+          const options = (response.options || []).filter(option =>
+            option.available &&
+            option.productType === (isEntire ? "FULL_PROPERTY" : "ROOM_CATEGORY")
+          );
+          matches = options.length > 0;
+          if (matches) {
+            const offer = [...options].sort((a,b) =>
+              Number(a.estimatedTotalMinor) - Number(b.estimatedTotalMinor))[0];
+            if (Number.isSafeInteger(offer.estimatedTotalMinor)) {
+              estimateMinor = offer.estimatedTotalMinor;
+              currencyCode = offer.currencyCode || "INR";
+            }
+          }
+        }
+        outcomes[position] = matches
+          ? {...property,smartstayEstimateMinor:estimateMinor,smartstayCurrency:currencyCode}
+          : null;
+      } catch {
+        // Network/service failures are not evidence that a stay is sold out.
+        outcomes[position] = {...property,smartstayCheckUnavailable:true};
+      }
+    }
+  }));
+  return outcomes.filter(Boolean);
 }
 
 function taxonomyCategory(categoryId) {
@@ -460,6 +540,15 @@ function propertyCard(property, index) {
     body.append(element("p", "property-location", property.saleMode === "BOTH"
       ? "Rooms or exclusive use — choose your stay"
       : "Exclusive entire-property accommodation"));
+  }
+  if (property.smartstayCheckUnavailable) {
+    body.append(element("p", "property-location",
+      "Availability could not be checked — verify on property page"));
+  } else if (property.smartstayEstimateMinor !== null &&
+             property.smartstayEstimateMinor !== undefined) {
+    body.append(element("p", "property-location",
+      `Date-specific estimate: ${formatMinorPrice(property.smartstayEstimateMinor,
+        property.smartstayCurrency)} · before tax and fees`));
   }
   const link = element("a", "button button-primary property-cta", "Explore this stay");
   link.href = propertyUrl(property);
