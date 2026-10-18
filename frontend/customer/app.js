@@ -653,48 +653,40 @@ function propertyCard(property, index) {
     element("h3", "", property.name),
   );
 
-  if (property.smartstayCheckUnavailable &&
-      property.saleMode !== "FULL_PROPERTY_ONLY" &&
-      property.startingRoomRateMinor !== null && property.startingRoomRateMinor !== undefined) {
-    const price = element("p", "property-card-price");
-    price.append(
-      element("span", "", "From"),
-      element(
-        "strong",
-        "",
-        formatMinorPrice(property.startingRoomRateMinor, property.currencyCode || "INR"),
-      ),
-      element("span", "", "/ night"),
-    );
-    body.append(price);
-  }
+  const offerType = property.smartstayCheckUnavailable
+    ? "Check availability"
+    : property.smartstayIsAlternative
+      ? "Exclusive alternative"
+      : property.smartstaySuggestedMode === "villa"
+        ? "Entire place to yourself"
+        : "Rooms available";
+  body.append(element("span", "smartstay-offer-label", offerType));
 
-  if (allowsEntireProperty(property)) {
-    body.append(element("p", "property-location", property.saleMode === "BOTH"
-      ? "Rooms or exclusive use — choose your stay"
-      : "Exclusive entire-property accommodation"));
-  }
-  if (property.smartstaySuggestedMode === "villa" &&
-      !property.smartstayIsAlternative) {
-    body.append(element("p", "property-location",
-      "Entire property · exclusive accommodation for your group"));
-  } else if (property.smartstaySuggestedMode === "hotel") {
-    const requestedRooms = Math.max(1, Number(form.rooms.value) || 1);
-    body.append(element("p", "property-location",
-      `Room arrangement available · ${requestedRooms} requested ${requestedRooms === 1 ? "room" : "rooms"}`));
-  }
-  if (property.smartstayIsAlternative) {
-    body.append(element("p", "property-location",
-      "Alternative: reserve the entire property, not just your requested rooms"));
-  }
   if (property.smartstayCheckUnavailable) {
-    body.append(element("p", "property-location",
-      "Availability not verified — check dates and final price on property page"));
-  } else if (property.smartstayEstimateMinor !== null &&
-             property.smartstayEstimateMinor !== undefined) {
-    body.append(element("p", "property-location",
-      `Stay estimate: ${formatMinorPrice(property.smartstayEstimateMinor,
-        property.smartstayCurrency)} · accommodation & extra guests only, before GST, fees & discounts`));
+    body.append(element("p", "smartstay-offer-note",
+      "Live availability could not be verified. Check the property before booking."));
+  } else {
+    if (property.smartstaySuggestedMode === "hotel") {
+      const rooms = Math.max(1, Number(form.rooms.value) || 1);
+      body.append(element("p", "smartstay-offer-note",
+        `${rooms} ${rooms === 1 ? "room" : "rooms"} matched for your group and dates`));
+    } else {
+      body.append(element("p", "smartstay-offer-note",
+        property.smartstayIsAlternative
+          ? "Your room combination was unavailable. This is an entire-property alternative."
+          : "Exclusive use of the whole property on the selected dates."));
+    }
+    if (Number.isSafeInteger(property.smartstayEstimateMinor)) {
+      const price = element("div", "smartstay-price-summary");
+      price.append(
+        element("strong", "smartstay-price-value",
+          formatMinorPrice(property.smartstayEstimateMinor, property.smartstayCurrency)),
+        element("span", "smartstay-price-caption", "Estimated accommodation total for selected dates"),
+        element("small", "smartstay-price-disclaimer",
+          "Excludes GST, fees and discounts · exact total shown before payment")
+      );
+      body.append(price);
+    }
   }
   const link = element("a", "button button-primary property-cta",
     property.smartstaySuggestedMode === "villa" ? "Explore entire property" :
