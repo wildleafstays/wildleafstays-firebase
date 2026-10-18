@@ -425,6 +425,15 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
   assert.match(propertySource, /smartMatchSection\.open = false/);
 });
 
+test("pending Razorpay orders block a second checkout until canonical status is resolved", () => {
+  const checkoutFlow = propertySource.split("async function beginCheckout(guestForm, button) {")[1].split("\nfunction openRazorpay")[0];
+  const guard = checkoutFlow.indexOf("if (state.session.activeCheckout?.checkout)");
+  const submit = checkoutFlow.indexOf("const data = await apiRequest(checkoutPath");
+  assert.ok(guard >= 0 && guard < submit);
+  assert.match(checkoutFlow, /An earlier payment is still pending/);
+  assert.match(checkoutFlow, /void refreshCheckoutStatus\(true\)/);
+});
+
 test("superseded checkout preserves pending booking but does not launch Razorpay", () => {
   const checkoutFlow = propertySource.split("async function beginCheckout(guestForm, button) {")[1].split("\nfunction openRazorpay")[0];
   assert.match(checkoutFlow, /bookingSearchVersion !== state\.recommendationRequestVersion/);
