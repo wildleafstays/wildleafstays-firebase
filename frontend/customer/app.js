@@ -25,22 +25,13 @@ const heroPrevious = document.querySelector("#heroPrevious");
 const heroNext = document.querySelector("#heroNext");
 const heroDots = document.querySelector("#heroDots");
 
-const requestedMode = new URLSearchParams(location.search).get("mode");
-if (requestedMode === "villa") {
-  const legacyParams = new URLSearchParams(location.search);
-  legacyParams.delete("mode");
-  const suffix = legacyParams.toString() ? `?${legacyParams}` : "";
-  location.replace(`/customer/entire-properties.html${suffix}`);
-} else if (requestedMode) {
-  const normalizedParams = new URLSearchParams(location.search);
-  normalizedParams.delete("mode");
-  history.replaceState(
-    null,
-    "",
-    normalizedParams.toString()
-      ? `${location.pathname}?${normalizedParams}`
-      : location.pathname,
-  );
+const initialSearch = new URLSearchParams(location.search);
+const requestedMode = initialSearch.get("mode");
+if (requestedMode === "villa") initialSearch.set("privateStay", "1");
+if (requestedMode) {
+  initialSearch.delete("mode");
+  history.replaceState(null, "", location.pathname +
+    (initialSearch.toString() ? `?${initialSearch}` : ""));
 }
 
 const state = {
@@ -56,6 +47,7 @@ const state = {
 };
 
 setDefaultDates();
+restoreSearchFromUrl(initialSearch);
 configureChildAgeFields();
 form.children.addEventListener("change", configureChildAgeFields);
 void initialize();
@@ -79,6 +71,28 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeMobileSearch();
 });
 
+function restoreSearchFromUrl(params) {
+  for (const key of ["destination", "arrivalDate", "departureDate", "rooms", "adults", "children"]) {
+    const input = form.elements.namedItem(key);
+    if (!input || !params.has(key)) continue;
+    const value = params.get(key);
+    if (key.includes("Date")) {
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value || "")) continue;
+    } else if (key !== "destination") {
+      if (!/^\\d{1,2}$/.test(value || "")) continue;
+      const number = Number(value);
+      if (number < Number(input.min || 0) || number > Number(input.max || 100)) continue;
+    }
+    input.value = value;
+  }
+  const privacy = form.elements.namedItem("privateStay");
+  if (privacy) privacy.checked = params.get("privateStay") === "1";
+  form.departureDate.min = addDays(form.arrivalDate.value, 1);
+  if (form.departureDate.value <= form.arrivalDate.value) {
+    form.departureDate.value = form.departureDate.min;
+  }
+}
+
 async function initialize() {
   renderLoadingCards();
   const [homepageResult] = await Promise.allSettled([
@@ -87,6 +101,17 @@ async function initialize() {
   ]);
   if (homepageResult.status === "rejected") {
     await loadDestinations();
+  }
+  if (initialSearch.has("childAges")) {
+    const ages = initialSearch.get("childAges").split(",");
+    const fields = document.querySelectorAll("#smartstayChildAgeFields select");
+    if (ages.length === fields.length) {
+      fields.forEach((field, index) => {
+        if (/^\\d{1,2}$/.test(ages[index]) && Number(ages[index]) <= 17) {
+          field.value = ages[index];
+        }
+      });
+    }
   }
   await loadProperties();
 }
