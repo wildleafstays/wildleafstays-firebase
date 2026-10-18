@@ -371,7 +371,7 @@ function configureBookingMode(property) {
   const villa = state.bookingMode === "villa";
   document.querySelector("#unitCountField").classList.toggle("hidden", villa);
   smartMatchSection?.classList.toggle("hidden", villa);
-  document.querySelector("#backToResults").href = "/customer/";
+  // The return link is configured separately using the original search context.
   if (villa && state.units.length !== 1) setUnitCount(1);
   form.unitCount.value = villa ? "1" : String(state.units.length || 1);
 }
