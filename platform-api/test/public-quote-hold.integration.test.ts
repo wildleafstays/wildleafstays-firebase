@@ -1165,6 +1165,23 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
     expect(replay.json()).toEqual(body);
     expect(razorpayGateway.createCalls).toBe(callsBefore + 1);
 
+    // Reusing the same idempotency key with a different guest must fail,
+    // rather than return someone else's reservation and payment order.
+    const tamperedReplay = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: { "idempotency-key": checkoutKey },
+      payload: {
+        leadGuest: {
+          name: "Different Guest",
+          email: "different.guest@example.com",
+          phone: "+919876543210"
+        }
+      }
+    });
+    expect(tamperedReplay.statusCode).toBe(409);
+    expect(razorpayGateway.createCalls).toBe(callsBefore + 1);
+
     const reservationCount = await db
       .selectFrom("reservations")
       .select((eb) => eb.fn.countAll<number>().as("count"))
