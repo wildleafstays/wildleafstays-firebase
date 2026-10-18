@@ -291,28 +291,41 @@ async function loadProperties(destinationOverride = null) {
   renderLoadingCards();
   updateResultsHeading(destination, categoryId, typeId);
 
-  const query = new URLSearchParams({ limit: "100" });
-  if (destination) query.set("destination", destination);
-  if (categoryId) query.set("categoryId", categoryId);
-  if (typeId) query.set("typeId", typeId);
-
   try {
+    const adults = Math.max(1, Number(form.adults.value) || 2);
+    const childAges = selectedChildAges();
+    const children = Math.max(0, Number(form.children.value) || 0);
+    if (childAges.length !== children || childAges.some(age => !Number.isInteger(age))) {
+      throw new Error("Please select the age of each child before searching.");
+    }
     const properties = [];
     let offset = 0;
-    while (true) {
-      query.set("offset", String(offset));
-      const data = await apiRequest(`/v1/public/properties?${query}`, {
-        cache: "default",
+    for (let page = 0; page < 20; page += 1) {
+      if (searchVersion !== state.searchVersion) return;
+      const payload = {
+        arrivalDate: form.arrivalDate.value,
+        departureDate: form.departureDate.value,
+        adults,
+        childAges,
+        requestedRooms: Math.max(1, Number(form.rooms.value) || 1),
+        exclusive: Boolean(form.elements.namedItem("privateStay")?.checked),
+        ...(destination ? {destination} : {}),
+        ...(categoryId ? {categoryId} : {}),
+        ...(typeId ? {typeId} : {}),
+        limit: 25,
+        offset
+      };
+      const response = await apiRequest("/v1/public/smartstay/search", {
+        method: "POST", body: payload
       });
-      const page = data.properties || [];
-      properties.push(...page);
-      if (page.length < 100) break;
-      offset += page.length;
+      if (searchVersion !== state.searchVersion) return;
+      properties.push(...(response.properties || []));
+      if (response.nextOffset === null || response.nextOffset === undefined) break;
+      offset = response.nextOffset;
+      if (page === 19) throw new Error("Too many search results. Refine your destination.");
     }
-    const matched = await matchGuestRequirements(properties);
-    if (searchVersion !== state.searchVersion) return;
-    state.properties = matched;
-    renderProperties(state.properties);
+    state.properties = properties;
+    renderProperties(properties);
   } catch (error) {
     if (searchVersion === state.searchVersion) renderError(error);
   }
