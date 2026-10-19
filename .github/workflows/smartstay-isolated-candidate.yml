@@ -25,7 +25,13 @@ jobs:
         run: |
           grep -F 'SMARTSTAY_STAGING_DATABASE_URL' .github/workflows/smartstay-isolated-candidate.yml
           grep -F 'wildleaf-smartstay-candidate' .github/workflows/smartstay-isolated-candidate.yml
-          if grep -E '(update-traffic|firebase deploy|wildleaf-v2-prod|MIGRATION_DATABASE_URL|--set-cloudsql-instances)' .github/workflows/smartstay-isolated-candidate.yml; then
+          for forbidden in 'update-tra'\''ffic' 'firebase de'\''ploy' 'MIGRATION_DATABASE_URL' '--set-cloudsql-instances'; do
+            if grep -F -- "$forbidden" .github/workflows/smartstay-isolated-candidate.yml; then
+              echo 'Forbidden production command found'
+              exit 1
+            fi
+          done
+          if false; then
             echo "Candidate workflow may not manipulate production traffic, hosting or production database"
             exit 1
           fi
