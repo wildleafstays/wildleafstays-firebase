@@ -1,0 +1,88 @@
+name: SmartStay Isolated Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type STAGING to build an isolated test candidate (never production)"
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - ".github/workflows/smartstay-isolated-candidate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Enforce isolation from production
+        shell: bash
+        run: |
+          grep -F 'SMARTSTAY_STAGING_DATABASE_URL' .github/workflows/smartstay-isolated-candidate.yml
+          grep -F 'wildleaf-smartstay-candidate' .github/workflows/smartstay-isolated-candidate.yml
+          if grep -E '(update-traffic|firebase deploy|wildleaf-v2-prod|MIGRATION_DATABASE_URL|--set-cloudsql-instances)' .github/workflows/smartstay-isolated-candidate.yml; then
+            echo "Candidate workflow may not manipulate production traffic, hosting or production database"
+            exit 1
+          fi
+
+  candidate:
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm == 'STAGING'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT_ID: wildleafstays-web
+      REGION: asia-south1
+      SERVICE: wildleaf-smartstay-candidate
+      IMAGE_REPOSITORY: asia-south1-docker.pkg.dev/wildleafstays-web/wildleaf-platform-api/api
+      WIF_PROVIDER: projects/63965798517/locations/global/workloadIdentityPools/github-actions/providers/wildleaf-prod
+      DEPLOYER_SERVICE_ACCOUNT: wildleaf-github-deployer@wildleafstays-web.iam.gserviceaccount.com
+      RUNTIME_SERVICE_ACCOUNT: wildleaf-platform-api@wildleafstays-web.iam.gserviceaccount.com
+    steps:
+      - uses: actions/checkout@v6
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Verify isolated staging database exists without revealing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud secrets describe SMARTSTAY_STAGING_DATABASE_URL --project="$PROJECT_ID" --format="value(name)"
+          if gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format="value(spec.template.metadata.annotations['run.googleapis.com/cloudsql-instances'])" 2>/dev/null | grep -q 'wildleaf-v2-prod'; then
+            echo "::error::Candidate service points to production Cloud SQL; refusing deployment"
+            exit 1
+          fi
+          echo "Separate staging credential reference exists. Cloud SQL isolation must be reviewed before any write tests."
+      - name: Build immutable candidate image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${IMAGE_REPOSITORY}:candidate-${GITHUB_SHA:0:12}"
+          gcloud builds submit platform-api --project="$PROJECT_ID" --region="$REGION" --tag="$IMAGE" --quiet
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Deploy candidate service only
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --image="$IMAGE" \
+            --service-account="$RUNTIME_SERVICE_ACCOUNT" \
+            --set-secrets="DATABASE_URL=SMARTSTAY_STAGING_DATABASE_URL:latest,RAZORPAY_KEY_ID=RAZORPAY_KEY_ID:3,RAZORPAY_KEY_SECRET=RAZORPAY_KEY_SECRET:3,RAZORPAY_WEBHOOK_SECRET=RAZORPAY_WEBHOOK_SECRET:1" \
+            --set-env-vars="NODE_ENV=production,FIREBASE_PROJECT_ID=$PROJECT_ID,SMARTSTAY_PUBLIC_BETA_TEST_ONLY=true,SMARTSTAY_BETA_TEST_PROPERTY_SLUGS=*" \
+            --no-allow-unauthenticated \
+            --quiet
+          echo "Candidate only; no production traffic, Firebase Hosting or database migrations changed."
