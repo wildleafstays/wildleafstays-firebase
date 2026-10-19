@@ -2318,6 +2318,17 @@ function openRazorpay() {
     );
     return;
   }
+  // Public beta is test-only: never open a real-money checkout in this build.
+  if (
+    typeof active.checkout.keyId !== "string" ||
+    !active.checkout.keyId.startsWith("rzp_test_")
+  ) {
+    renderPendingStatus(
+      "Online payment is unavailable during Wildleaf public testing. No payment has been taken. Contact Wildleaf directly for a real reservation.",
+      false,
+    );
+    return;
+  }
   if (typeof window.Razorpay !== "function") {
     renderPendingStatus(
       "Razorpay could not be loaded. Check your connection, then try opening payment again.",
