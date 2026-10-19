@@ -77,9 +77,9 @@ function restoreSearchFromUrl(params) {
     if (!input || !params.has(key)) continue;
     const value = params.get(key);
     if (key.includes("Date")) {
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value || "")) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) continue;
     } else if (key !== "destination") {
-      if (!/^\\d{1,2}$/.test(value || "")) continue;
+      if (!/^\d{1,2}$/.test(value || "")) continue;
       const number = Number(value);
       if (number < Number(input.min || 0) || number > Number(input.max || 100)) continue;
     }
@@ -107,7 +107,7 @@ async function initialize() {
     const fields = document.querySelectorAll("#smartstayChildAgeFields select");
     if (ages.length === fields.length) {
       fields.forEach((field, index) => {
-        if (/^\\d{1,2}$/.test(ages[index]) && Number(ages[index]) <= 17) {
+        if (/^\d{1,2}$/.test(ages[index]) && Number(ages[index]) <= 17) {
           field.value = ages[index];
         }
       });
