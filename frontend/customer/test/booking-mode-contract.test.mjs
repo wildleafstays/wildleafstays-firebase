@@ -50,7 +50,11 @@ test("SmartStay homepage uses unified discovery with optional privacy", () => {
   assert.doesNotMatch(homeHtml, /id="entirePropertyEntry"/);
   assert.match(homeHtml, /id="privateStay"[^>]*type="checkbox"/);
   assert.match(homeSource, /function allowsEntireProperty\(property\)/);
-  assert.match(homeSource, /exclusiveOnly \? allowsEntireProperty\(property\) : true/);
+  assert.match(homeHtml, /id="stayMode"/);
+  assert.match(homeHtml, /Book individual rooms/);
+  assert.match(homeHtml, /Book an entire property/);
+  assert.match(homeSource, /stayModeSelect\?\.value === "room"/);
+  assert.match(homeSource, /exclusiveOnly \? allowsEntireProperty\(property\)/);
   assert.match(homeSource, /property\.saleMode === "FULL_PROPERTY_ONLY"/);
   assert.match(homeSource, /property\.saleMode === "BOTH"/);
   assert.match(homeSource, /"Explore entire property"/);

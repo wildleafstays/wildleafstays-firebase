@@ -8,6 +8,7 @@ const destinationList = document.querySelector("#destinationList");
 const resultsEyebrow = document.querySelector("#resultsEyebrow");
 const propertyCategorySelect = document.querySelector("#propertyCategory");
 const propertyTypeSelect = document.querySelector("#propertyType");
+const stayModeSelect = document.querySelector("#stayMode");
 const destinationRail = document.querySelector("#destinationRail");
 const mobileSearchTrigger = document.querySelector("#mobileSearchTrigger");
 const mobileSearchClose = document.querySelector("#mobileSearchClose");
@@ -50,6 +51,10 @@ setDefaultDates();
 restoreSearchFromUrl(initialSearch);
 configureChildAgeFields();
 form.children.addEventListener("change", configureChildAgeFields);
+stayModeSelect?.addEventListener("change", () => {
+  form.elements.namedItem("privateStay").checked = stayModeSelect.value === "entire";
+  updateMobileSearchSummary();
+});
 void initialize();
 
 form.addEventListener("submit", (event) => {
@@ -95,6 +100,7 @@ function restoreSearchFromUrl(params) {
   }
   const privacy = form.elements.namedItem("privateStay");
   if (privacy) privacy.checked = params.get("privateStay") === "1";
+  if (stayModeSelect) stayModeSelect.value = privacy?.checked ? "entire" : (params.get("stayMode") === "room" ? "room" : "all");
   form.departureDate.min = addDays(form.arrivalDate.value, 1);
   if (form.departureDate.value <= form.arrivalDate.value) {
     form.departureDate.value = form.departureDate.min;
@@ -580,7 +586,8 @@ function updateResultsHeading(destination, categoryId, typeId) {
 function renderProperties(properties) {
   const exclusiveOnly = Boolean(form.elements.namedItem("privateStay")?.checked);
   const visibleProperties = properties.filter((property) =>
-    exclusiveOnly ? allowsEntireProperty(property) : true,
+    exclusiveOnly ? allowsEntireProperty(property) :
+      stayModeSelect?.value === "room" ? property.saleMode !== "FULL_PROPERTY_ONLY" : true,
   );
   updateHero(visibleProperties);
   results.replaceChildren();
@@ -590,7 +597,7 @@ function renderProperties(properties) {
     const empty = element("div", "empty-state");
     empty.append(
       element("h3", "", "No stays found"),
-      element("p", "", "Try another destination, category or Property Type."),
+      element("p", "", "Try another destination, date or stay mode."),
     );
     results.append(empty);
     return;
@@ -947,7 +954,7 @@ function updateMobileSearchSummary() {
     form.arrivalDate.value && form.departureDate.value
       ? `${shortDate(form.arrivalDate.value)} – ${shortDate(form.departureDate.value)}`
       : "Add dates";
-  const roomLabel = form.elements.namedItem("privateStay")?.checked
+  const roomLabel = stayModeSelect?.value === "entire"
     ? "entire place"
     : `${rooms} ${rooms === 1 ? "room" : "rooms"}`;
   mobileSearchMeta.textContent =
