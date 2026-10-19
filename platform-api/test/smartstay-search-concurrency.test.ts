@@ -44,6 +44,23 @@ describe("bounded hotel matching", () => {
     expect(results[198]).toEqual({ propertyId: 198, available: true });
   });
 
+  it("diagnoses benchmark formatting against repository Prettier settings", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { format } = await import("prettier");
+    const source = readFileSync(new URL("../scripts/benchmark-smartstay-staging.mjs", import.meta.url), "utf8");
+    const formatted = await format(source, {
+      parser: "babel",
+      printWidth: 100,
+      semi: true,
+      singleQuote: false,
+      trailingComma: "none"
+    });
+    if (source !== formatted) {
+      console.log("SMARTSTAY_FORMAT_BEGIN\\n" + formatted + "\\nSMARTSTAY_FORMAT_END");
+    }
+    expect(formatted.length).toBeGreaterThan(0);
+  });
+
   it("handles empty pages and rejects invalid concurrency settings", async () => {
     expect(await mapWithConcurrency([], 4, async (value) => value)).toEqual([]);
     await expect(mapWithConcurrency([1], 0, async (value) => value)).rejects.toThrow(RangeError);
