@@ -12,11 +12,19 @@ const envSchema = z
     DB_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(100).default(10),
     FIREBASE_PROJECT_ID: z.string().min(1),
     FIREBASE_STORAGE_BUCKET: z.string().min(3).optional(),
+    SMARTSTAY_PUBLIC_BETA_TEST_ONLY: z.enum(["true", "false"]).default("false"),
     RAZORPAY_KEY_ID: z.string().min(1).optional(),
     RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional()
   })
   .superRefine((value, ctx) => {
+    if (value.SMARTSTAY_PUBLIC_BETA_TEST_ONLY === "true" && !value.RAZORPAY_KEY_ID?.startsWith("rzp_test_")) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Public beta requires a Razorpay test-mode key",
+        path: ["RAZORPAY_KEY_ID"]
+      });
+    }
     const razorpayValues = [
       value.RAZORPAY_KEY_ID,
       value.RAZORPAY_KEY_SECRET,
