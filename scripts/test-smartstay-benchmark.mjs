@@ -49,3 +49,37 @@ test("benchmark scans 200 mock hotels and reports successful pagination", async 
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("benchmark fails closed when staging has fewer than 200 properties", async () => {
+  const server = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    const payload = JSON.parse(body);
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      properties: Array.from({ length: 25 }, (_, index) => ({ id: payload.offset + index })),
+      scanned: 25,
+      nextOffset: null
+    }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const child = spawn(process.execPath, ["scripts/benchmark-smartstay-staging.mjs"], {
+      env: {
+        ...process.env,
+        SMARTSTAY_BASE_URL: `http://127.0.0.1:${server.address().port}`,
+        SMARTSTAY_ARRIVAL_DATE: "2030-11-10",
+        SMARTSTAY_DEPARTURE_DATE: "2030-11-12"
+      }
+    });
+    let output = "";
+    for await (const chunk of child.stdout) output += chunk;
+    const exitCode = await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(exitCode, 1);
+    const report = JSON.parse(output);
+    assert.equal(report.propertiesScanned, 25);
+    assert.equal(report.passed, false);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
