@@ -20,8 +20,6 @@ describe("bounded hotel matching", () => {
 
   it("handles empty pages and rejects invalid concurrency settings", async () => {
     expect(await mapWithConcurrency([], 4, async (value) => value)).toEqual([]);
-    await expect(mapWithConcurrency([1], 0, async (value) => value)).rejects.toThrow(
-      RangeError
-    );
+    await expect(mapWithConcurrency([1], 0, async (value) => value)).rejects.toThrow(RangeError);
   });
 });
