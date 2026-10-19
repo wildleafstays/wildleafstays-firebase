@@ -512,37 +512,6 @@ jobs:
             --to-revisions="${{ steps.snapshot.outputs.previous_revision }}=100" \
             --quiet
 
-      - name: Restore prior Firebase Hosting release after failure
-        if: always() && (steps.hosting_deploy.outcome == 'failure' || steps.hosting_verify.outcome == 'failure')
-        id: hosting_restore
-        continue-on-error: true
-        shell: bash
-        env:
-          PREVIOUS_VERSION: ${{ steps.hosting_snapshot.outputs.version }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$PREVIOUS_VERSION" ]]; then
-            echo "::error::No saved Hosting release version available."
-            exit 1
-          fi
-          TOKEN="$(gcloud auth print-access-token)"
-          PAYLOAD="$(jq -nc --arg name "$PREVIOUS_VERSION" '{versionName:$name}')"
-          curl --fail --silent --show-error \
-            --request POST \
-            --header "Authorization: Bearer $TOKEN" \
-            --header "Content-Type: application/json" \
-            --data "$PAYLOAD" \
-            "https://firebasehosting.googleapis.com/v1beta1/sites/$PROJECT_ID/releases" \
-            > /tmp/hosting-restore.json
-          jq -e --arg version "$PREVIOUS_VERSION" '.version.name == $version' /tmp/hosting-restore.json >/dev/null
-          echo "Firebase Hosting rollback release created."
-
-      - name: Stop release if Hosting recovery failed
-        if: always() && (steps.hosting_deploy.outcome == 'failure' || steps.hosting_verify.outcome == 'failure') && steps.hosting_restore.outcome != 'success'
-        run: |
-          echo "::error::Firebase Hosting recovery failed; manual rollback required immediately."
-          exit 1
-
       - name: Stop release after failed Hosting deployment
         if: steps.hosting_deploy.outcome == 'failure'
         run: |
@@ -596,6 +565,37 @@ jobs:
         if: steps.hosting_verify.outcome == 'failure'
         run: |
           echo "Hosting verification failed. Backend traffic was restored; Hosting requires manual inspection or recovery."
+          exit 1
+
+      - name: Restore prior Firebase Hosting release after failure
+        if: always() && (steps.hosting_deploy.outcome == 'failure' || steps.hosting_verify.outcome == 'failure')
+        id: hosting_restore
+        continue-on-error: true
+        shell: bash
+        env:
+          PREVIOUS_VERSION: ${{ steps.hosting_snapshot.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PREVIOUS_VERSION" ]]; then
+            echo "::error::No saved Hosting release version available."
+            exit 1
+          fi
+          TOKEN="$(gcloud auth print-access-token)"
+          PAYLOAD="$(jq -nc --arg name "$PREVIOUS_VERSION" '{versionName:$name}')"
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "$PAYLOAD" \
+            "https://firebasehosting.googleapis.com/v1beta1/sites/$PROJECT_ID/releases" \
+            > /tmp/hosting-restore.json
+          jq -e --arg version "$PREVIOUS_VERSION" '.version.name == $version' /tmp/hosting-restore.json >/dev/null
+          echo "Firebase Hosting rollback release created."
+
+      - name: Stop release if Hosting recovery failed
+        if: always() && (steps.hosting_deploy.outcome == 'failure' || steps.hosting_verify.outcome == 'failure') && steps.hosting_restore.outcome != 'success'
+        run: |
+          echo "::error::Firebase Hosting recovery failed; manual rollback required immediately."
           exit 1
 
       - name: Write release summary
