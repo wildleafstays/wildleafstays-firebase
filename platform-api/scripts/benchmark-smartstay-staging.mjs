@@ -49,9 +49,7 @@ for (let page = 0; page < 8; page += 1) {
     exclusive: false,
     limit: 25,
     offset,
-    ...(process.env.SMARTSTAY_DESTINATION
-      ? { destination: process.env.SMARTSTAY_DESTINATION }
-      : {})
+    ...(process.env.SMARTSTAY_DESTINATION ? { destination: process.env.SMARTSTAY_DESTINATION } : {})
   };
   const started = performance.now();
   try {
@@ -89,8 +87,7 @@ for (let page = 0; page < 8; page += 1) {
   }
 }
 const sorted = [...samples].sort((a, b) => a - b);
-const percentile = (p) =>
-  sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] ?? null;
+const percentile = (p) => sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] ?? null;
 const report = {
   target: target.origin,
   pages: samples.length,
