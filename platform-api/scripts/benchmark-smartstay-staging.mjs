@@ -19,9 +19,7 @@ if (
 ) {
   throw new Error("Benchmark requires HTTPS or local HTTP");
 }
-if (
-  /(^|\.)wildleafstays\.com$|(^|\.)firebaseapp\.com$|(^|\.)web\.app$/.test(target.hostname)
-) {
+if (/(^|\.)wildleafstays\.com$|(^|\.)firebaseapp\.com$|(^|\.)web\.app$/.test(target.hostname)) {
   throw new Error("Refusing to benchmark production or public Firebase domains");
 }
 const arrivalDate = process.env.SMARTSTAY_ARRIVAL_DATE;
@@ -68,11 +66,7 @@ for (let page = 0; page < 8; page += 1) {
       break;
     }
     const data = await response.json();
-    if (
-      !Array.isArray(data.properties) ||
-      !Number.isInteger(data.scanned) ||
-      data.scanned < 0
-    ) {
+    if (!Array.isArray(data.properties) || !Number.isInteger(data.scanned) || data.scanned < 0) {
       errors.push({ page, error: "Malformed public search response" });
       break;
     }
@@ -103,8 +97,7 @@ const report = {
   },
   errors,
   p95BudgetMs: budget,
-  passed:
-    totalScanned >= 200 && errors.length === 0 && percentile(0.95) <= budget
+  passed: totalScanned >= 200 && errors.length === 0 && percentile(0.95) <= budget
 };
 console.log(JSON.stringify(report, null, 2));
 if (!report.passed) process.exitCode = 1;
