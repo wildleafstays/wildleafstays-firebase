@@ -230,6 +230,23 @@ jobs:
           echo "previous_revision=$PREVIOUS_REVISION" >> "$GITHUB_OUTPUT"
           echo "Current production revision: $PREVIOUS_REVISION"
 
+      - name: Snapshot existing Firebase Hosting release
+        id: hosting_snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          RESPONSE="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $TOKEN" \
+            "https://firebasehosting.googleapis.com/v1beta1/sites/$PROJECT_ID/releases?pageSize=1")"
+          VERSION_NAME="$(jq -er '.releases[0].version.name // empty' <<< "$RESPONSE")"
+          if [[ "$VERSION_NAME" != sites/*/versions/* ]]; then
+            echo "::error::Cannot identify previous Firebase Hosting version; release blocked."
+            exit 1
+          fi
+          echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "Previous Firebase Hosting version captured for rollback."
+
       - name: Require Razorpay test credentials for public beta
         shell: bash
         run: |
@@ -476,23 +493,6 @@ jobs:
         run: |
           echo "Live API verification failed. Backend traffic was restored to the previous revision."
           exit 1
-
-      - name: Snapshot existing Firebase Hosting release
-        id: hosting_snapshot
-        shell: bash
-        run: |
-          set -euo pipefail
-          TOKEN="$(gcloud auth print-access-token)"
-          RESPONSE="$(curl --fail --silent --show-error \
-            --header "Authorization: Bearer $TOKEN" \
-            "https://firebasehosting.googleapis.com/v1beta1/sites/$PROJECT_ID/releases?pageSize=1")"
-          VERSION_NAME="$(jq -er '.releases[0].version.name // empty' <<< "$RESPONSE")"
-          if [[ "$VERSION_NAME" != sites/*/versions/* ]]; then
-            echo "::error::Cannot identify previous Firebase Hosting version; release blocked."
-            exit 1
-          fi
-          echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "Previous Firebase Hosting version captured for rollback."
 
       - name: Deploy Firebase Hosting
         id: hosting_deploy
