@@ -511,6 +511,15 @@ test("promotion edits invalidate an in-flight recommended quote", () => {
   );
 });
 
+test("changing a booking removes persisted quotes and holds without losing payment recovery", () => {
+  const clearFlow = propertySource.split("function clearQuoteAndLater() {")[1].split("\nfunction showInlineMessage")[0];
+  for (const field of ["quote", "quoteId", "roomMixQuote", "hold", "holdId"]) {
+    assert.match(clearFlow, new RegExp("delete state\\.session\\." + field + ";"));
+  }
+  assert.match(clearFlow, /saveBookingSession\(publicSlug, state\.session\)/);
+  assert.doesNotMatch(clearFlow, /delete state\.session\.activeCheckout/);
+});
+
 test("delayed recommended quotes cannot restore an outdated booking after search edits", () => {
   assert.match(propertySource, /const bookingSearchVersion = state\.recommendationRequestVersion/);
   assert.equal(
