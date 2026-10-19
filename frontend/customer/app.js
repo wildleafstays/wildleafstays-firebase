@@ -71,13 +71,21 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeMobileSearch();
 });
 
+function isValidSearchDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function restoreSearchFromUrl(params) {
   for (const key of ["destination", "arrivalDate", "departureDate", "rooms", "adults", "children"]) {
     const input = form.elements.namedItem(key);
     if (!input || !params.has(key)) continue;
     const value = params.get(key);
     if (key.includes("Date")) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) continue;
+      if (!isValidSearchDate(value)) continue;
+      if (key === "arrivalDate" && value < input.min) continue;
     } else if (key !== "destination") {
       if (!/^\d{1,2}$/.test(value || "")) continue;
       const number = Number(value);
@@ -1019,7 +1027,11 @@ function setDefaultDates() {
 }
 
 function dateValue(date) {
-  return date.toISOString().slice(0, 10);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 function addDays(value, days) {
