@@ -123,6 +123,14 @@ test("SmartStay verifies party totals and labels exclusive-use fallback honestly
   assert.match(homeSource, /This is an entire-property alternative/);
 });
 
+test("shared search links restore numeric dates, guest counts and child ages", () => {
+  assert.ok(homeSource.includes(String.raw`/^\d{4}-\d{2}-\d{2}$/`));
+  assert.ok(homeSource.includes(String.raw`/^\d{1,2}$/`));
+  assert.doesNotMatch(homeSource, /\\\\d/);
+  assert.match(homeSource, /restoreSearchFromUrl\(initialSearch\)/);
+  assert.match(homeSource, /field\.value = ages\[index\]/);
+});
+
 test("SmartStay returns customers to search with their guest preferences", () => {
   assert.match(homeSource, /function restoreSearchFromUrl/);
   assert.match(homeSource, /initialSearch\.set\("privateStay", "1"\)/);
