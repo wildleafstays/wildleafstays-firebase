@@ -183,7 +183,14 @@ async function loadProperty() {
       statusSection.classList.remove("hidden");
       statusSection.scrollIntoView({ block: "nearest" });
       const status = await refreshCheckoutStatus(true);
-      if (status?.outcome === "PAYMENT_PENDING") startStatusPolling();
+      if (status?.outcome === "PAYMENT_PENDING") {
+        startStatusPolling();
+      } else if (!status) {
+        renderPendingStatus(
+          "Wildleaf could not verify this reservation after the page reloaded. Use Check booking status to retry before making another payment.",
+          false,
+        );
+      }
     } else {
       restorePreCheckoutSession();
     }
