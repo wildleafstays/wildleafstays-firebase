@@ -1228,6 +1228,7 @@ export async function registerPublicCatalogRoutes(
     if (
       deps.betaAllowedPropertySlugs !== null &&
       deps.betaAllowedPropertySlugs !== undefined &&
+      !deps.betaAllowedPropertySlugs.includes("*") &&
       !deps.betaAllowedPropertySlugs.includes(slug.toLowerCase())
     ) {
       throw new AppError(
