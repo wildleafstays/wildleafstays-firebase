@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { mapWithConcurrency } from "../../../shared/async/map-with-concurrency.js";
 import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import type { PropertyAssetStorage } from "../../../infrastructure/storage/property-asset-storage.js";
@@ -1328,23 +1329,16 @@ export async function registerPublicCatalogRoutes(
         smartstayIsAlternative?: boolean;
         smartstayCheckUnavailable?: boolean;
       };
-      const outcomes: Array<Listing | null> = Array(page.properties.length).fill(null);
-      let cursor = 0;
-      await Promise.all(
-        Array.from({ length: Math.min(4, page.properties.length) }, async () => {
-          while (cursor < page.properties.length) {
-            const index = cursor++;
-            const property = page.properties[index]!;
+      const outcomes = await mapWithConcurrency(page.properties, 4, async (property): Promise<Listing | null> => {
             const allowsEntire =
               property.saleMode === "BOTH" || property.saleMode === "FULL_PROPERTY_ONLY";
-            if (input.exclusive && !allowsEntire) continue;
+            if (input.exclusive && !allowsEntire) return null;
             const entire =
               input.exclusive ||
               property.saleMode === "FULL_PROPERTY_ONLY" ||
               (input.requestedRooms > 6 && allowsEntire);
             if (!entire && input.requestedRooms > 6) {
-              outcomes[index] = { ...property, smartstayCheckUnavailable: true };
-              continue;
+              return { ...property, smartstayCheckUnavailable: true };
             }
             const cheapest = <T extends { estimatedTotalMinor: number; currencyCode: string }>(
               offers: T[]
@@ -1422,8 +1416,8 @@ export async function registerPublicCatalogRoutes(
                     mode: "villa"
                   };
               }
-              if (!match) continue;
-              outcomes[index] = {
+              if (!match) return null;
+              return {
                 ...property,
                 smartstayEstimateMinor: match.estimatedTotalMinor,
                 smartstayCurrency: match.currencyCode,
@@ -1433,11 +1427,9 @@ export async function registerPublicCatalogRoutes(
               };
             } catch {
               // A matching service failure is not proof of unavailable inventory.
-              outcomes[index] = { ...property, smartstayCheckUnavailable: true };
+              return { ...property, smartstayCheckUnavailable: true };
             }
-          }
-        })
-      );
+      });
       return {
         properties: outcomes.filter((property): property is Listing => property !== null),
         scanned: page.properties.length,
