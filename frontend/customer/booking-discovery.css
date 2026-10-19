@@ -173,3 +173,26 @@
 @media (prefers-reduced-motion: reduce) {
   .property-page .property-mode-alternative { transition: none; }
 }
+
+
+/* Keep taxonomy data available to the results system without crowding primary search. */
+.home-page .search-taxonomy[hidden] { display: none !important; }
+.home-page .search-card .smartstay-mode-choice {
+  min-width: 185px;
+  flex: 1 1 185px;
+}
+.home-page .search-card .smartstay-mode-choice select {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0.5rem 0;
+}
+.home-page .search-card #privateStay[hidden] { display: none !important; }
+@media (min-width: 900px) {
+  .home-page .hero-content { margin-bottom: 2.5rem; }
+  .home-page .search-card { margin-top: 2rem; }
+}
