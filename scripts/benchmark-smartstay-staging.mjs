@@ -6,7 +6,7 @@
  *   SMARTSTAY_BASE_URL=https://<staging-host>
  *   SMARTSTAY_ARRIVAL_DATE=2030-11-10
  *   SMARTSTAY_DEPARTURE_DATE=2030-11-12
- * Optional: SMARTSTAY_DESTINATION, SMARTSTAY_P95_BUDGET_MS (default 5000).
+ * Required for remote targets: SMARTSTAY_STAGING_HOST (exact staging hostname).\n * Optional: SMARTSTAY_DESTINATION, SMARTSTAY_P95_BUDGET_MS (default 5000).
  *
  * Uses public, read-only availability searches. Never targets production.
  */
@@ -19,8 +19,15 @@ if (
 ) {
   throw new Error("Benchmark requires HTTPS or local HTTP");
 }
-if (/(^|\.)wildleafstays\.com$|(^|\.)firebaseapp\.com$|(^|\.)web\.app$/.test(target.hostname)) {
-  throw new Error("Refusing to benchmark production or public Firebase domains");
+const local = ["localhost", "127.0.0.1"].includes(target.hostname);
+const explicitStagingHost = process.env.SMARTSTAY_STAGING_HOST;
+if (
+  !local &&
+  (!explicitStagingHost ||
+    target.hostname !== explicitStagingHost.toLowerCase() ||
+    !/(?:^|[.-])(?:stage|staging|test)(?:[.-]|$)/i.test(target.hostname))
+) {
+  throw new Error("Set SMARTSTAY_STAGING_HOST to the exact staging hostname (must identify a staging/test host)");
 }
 const arrivalDate = process.env.SMARTSTAY_ARRIVAL_DATE;
 const departureDate = process.env.SMARTSTAY_DEPARTURE_DATE;
@@ -57,6 +64,7 @@ for (let page = 0; page < 8; page += 1) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      redirect: "error",
       signal: AbortSignal.timeout(30000)
     });
     const duration = Math.round(performance.now() - started);
