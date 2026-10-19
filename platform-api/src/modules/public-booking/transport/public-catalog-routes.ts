@@ -4,6 +4,7 @@ import type { Kysely } from "kysely";
 import type { Database } from "../../../infrastructure/database/types.js";
 import type { PropertyAssetStorage } from "../../../infrastructure/storage/property-asset-storage.js";
 import {
+  AppError,
   AuthenticationError,
   NotFoundError,
   ValidationError
@@ -38,6 +39,7 @@ export interface PublicCatalogRouteDependencies {
   authentication?: AuthenticationDependencies;
   razorpayOrderGateway?: RazorpayOrderGateway | null;
   razorpayPaymentRecoveryGateway?: RazorpayPaymentRecoveryGateway | null;
+  betaAllowedPropertySlugs?: string[] | null;
   propertyAssetStorage?: PropertyAssetStorage;
 }
 
@@ -1221,6 +1223,20 @@ export async function registerPublicCatalogRoutes(
     deps.db,
     deps.razorpayOrderGateway ?? null
   );
+  // Public beta checkouts must never use unapproved live hotel inventory.
+  const assertBetaTestProperty = (slug: string): void => {
+    if (
+      deps.betaAllowedPropertySlugs !== null &&
+      deps.betaAllowedPropertySlugs !== undefined &&
+      !deps.betaAllowedPropertySlugs.includes(slug.toLowerCase())
+    ) {
+      throw new AppError(
+        "BETA_CHECKOUT_RESTRICTED",
+        503,
+        "Test checkout is available only for designated Wildleaf test properties"
+      );
+    }
+  };
   const idempotency = new IdempotencyService(deps.db);
   const optionalAuthentication = deps.authentication
     ? authenticateIfPresent(deps.authentication)
@@ -1872,6 +1888,7 @@ export async function registerPublicCatalogRoutes(
       publicCheckoutService.assertProviderAvailable();
 
       const key = requirePublicIdempotencyKey(request.headers);
+      assertBetaTestProperty(request.params.publicSlug);
       const metadata = requestMetadata(request, "public-api");
       const body: PublicCheckoutRequest = {
         leadGuest: {
@@ -2112,6 +2129,7 @@ export async function registerPublicCatalogRoutes(
       publicCheckoutService.assertProviderAvailable();
 
       const key = requirePublicIdempotencyKey(request.headers);
+      assertBetaTestProperty(request.params.publicSlug);
       const metadata = requestMetadata(request, "public-api");
       const body: PublicCheckoutRequest = {
         leadGuest: {
