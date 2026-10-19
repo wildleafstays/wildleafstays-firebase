@@ -171,10 +171,10 @@ async function loadProperty() {
     configureBookingMode(data.property);
     renderProperty(data.property);
     propertyContent.classList.remove("hidden");
-    await Promise.allSettled([
-      searchAvailability({ resetBooking: false }),
-      searchRoomRecommendations(),
-    ]);
+    // Search is independent of an existing payment. Never delay restoring a
+    // recoverable booking while rates or recommendations are slow to respond.
+    void searchAvailability({ resetBooking: false });
+    void searchRoomRecommendations();
 
     if (
       state.session.activeCheckout?.reservationId &&
