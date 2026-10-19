@@ -16,12 +16,12 @@ const target = new URL(base);
 if (target.protocol !== "https:" && !(target.protocol === "http:" && ["localhost", "127.0.0.1"].includes(target.hostname))) {
   throw new Error("Benchmark requires HTTPS or local HTTP");
 }
-if (/(^|\\.)wildleafstays\\.com$|(^|\\.)firebaseapp\\.com$|(^|\\.)web\\.app$/.test(target.hostname)) {
+if (/(^|\.)wildleafstays\.com$|(^|\.)firebaseapp\.com$|(^|\.)web\.app$/.test(target.hostname)) {
   throw new Error("Refusing to benchmark production or public Firebase domains");
 }
 const arrivalDate = process.env.SMARTSTAY_ARRIVAL_DATE;
 const departureDate = process.env.SMARTSTAY_DEPARTURE_DATE;
-if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(arrivalDate || "") || !/^\\d{4}-\\d{2}-\\d{2}$/.test(departureDate || "") || departureDate <= arrivalDate) {
+if (!/^\d{4}-\d{2}-\d{2}$/.test(arrivalDate || "") || !/^\d{4}-\d{2}-\d{2}$/.test(departureDate || "") || departureDate <= arrivalDate) {
   throw new Error("Provide valid ordered SMARTSTAY_ARRIVAL_DATE and SMARTSTAY_DEPARTURE_DATE");
 }
 const budget = Number(process.env.SMARTSTAY_P95_BUDGET_MS || 5000);
