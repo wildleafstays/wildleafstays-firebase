@@ -79,6 +79,10 @@ for (let page = 0; page < 8; page += 1) {
       errors.push({ page, error: "Malformed public search response" });
       break;
     }
+    if (data.scanned > 25 || data.properties.length > data.scanned) {
+      errors.push({ page, error: "Invalid page size or scan count" });
+      break;
+    }
     totalScanned += data.scanned;
     if (data.nextOffset === null) break;
     if (!Number.isInteger(data.nextOffset) || data.nextOffset <= offset) {
