@@ -2690,6 +2690,11 @@ function clearResultsAfterSearchChange() {
 function clearQuoteAndLater() {
   state.quote = null;
   state.roomMixQuote = null;
+  // Keep recoverable payment records, but never restore an obsolete quote or
+  // inventory hold after a date, occupancy, room, or promotion change.
+  delete state.session.quote;
+  delete state.session.quoteId;
+  delete state.session.roomMixQuote;
   quoteSection.classList.add("hidden");
   quoteSection.replaceChildren();
   clearHoldAndLater();
@@ -2697,6 +2702,9 @@ function clearQuoteAndLater() {
 
 function clearHoldAndLater() {
   state.hold = null;
+  delete state.session.hold;
+  delete state.session.holdId;
+  saveBookingSession(publicSlug, state.session);
   guestSection.classList.add("hidden");
   guestSection.replaceChildren();
   if (state.countdownTimer) window.clearInterval(state.countdownTimer);
