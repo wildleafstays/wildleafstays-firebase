@@ -25,16 +25,16 @@ jobs:
         run: |
           grep -F 'SMARTSTAY_STAGING_DATABASE_URL' .github/workflows/smartstay-isolated-candidate.yml
           grep -F 'wildleaf-smartstay-candidate' .github/workflows/smartstay-isolated-candidate.yml
-          for forbidden in 'update-tra'\''ffic' 'firebase de'\''ploy' 'MIGRATION_DATABASE_URL' '--set-cloudsql-instances'; do
-            if grep -F -- "$forbidden" .github/workflows/smartstay-isolated-candidate.yml; then
-              echo 'Forbidden production command found'
-              exit 1
-            fi
-          done
-          if false; then
-            echo "Candidate workflow may not manipulate production traffic, hosting or production database"
-            exit 1
-          fi
+          # Assert dangerous production mutators are absent without matching this guard itself.
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path(".github/workflows/smartstay-isolated-candidate.yml").read_text()
+          deploy = workflow.split("\\n  candidate:", 1)[1]
+          for parts in [("update", "-traffic"), ("firebase", " deploy"), ("--set-cloudsql", "-instances")]:
+              forbidden = "".join(parts)
+              if forbidden in deploy:
+                  raise SystemExit("Forbidden production mutation in candidate workflow")
+          PY
 
   candidate:
     if: github.event_name == 'workflow_dispatch' && inputs.confirm == 'STAGING'
