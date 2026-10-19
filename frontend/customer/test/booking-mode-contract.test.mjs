@@ -123,6 +123,15 @@ test("SmartStay verifies party totals and labels exclusive-use fallback honestly
   assert.match(homeSource, /This is an entire-property alternative/);
 });
 
+test("shared search dates must be calendar-valid and use local date defaults", () => {
+  assert.ok(homeSource.includes("function isValidSearchDate(value)"));
+  assert.ok(homeSource.includes("parsed.toISOString().slice(0, 10) === value"));
+  assert.ok(homeSource.includes("if (!isValidSearchDate(value)) continue"));
+  assert.ok(homeSource.includes('key === "arrivalDate" && value < input.min'));
+  assert.ok(homeSource.includes("date.getFullYear()"));
+  assert.ok(homeSource.includes("date.getMonth() + 1"));
+});
+
 test("shared search links restore numeric dates, guest counts and child ages", () => {
   assert.ok(homeSource.includes(String.raw`/^\d{4}-\d{2}-\d{2}$/`));
   assert.ok(homeSource.includes(String.raw`/^\d{1,2}$/`));
