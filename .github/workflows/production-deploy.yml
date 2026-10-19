@@ -486,6 +486,8 @@ jobs:
           exit 1
 
       - name: Verify live static files match this commit
+        id: hosting_verify
+        continue-on-error: true
         shell: bash
         run: |
           CACHE_BUSTER="release=${{ steps.release.outputs.short_sha }}"
@@ -505,6 +507,21 @@ jobs:
           cmp frontend/customer/app.js /tmp/live-customer-app.js
 
           echo "Firebase Hosting static files match the release commit"
+
+      - name: Restore prior backend if live Hosting verification fails
+        if: steps.hosting_verify.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="${{ steps.snapshot.outputs.previous_revision }}=100" \
+            --quiet
+
+      - name: Stop release after Hosting verification failure
+        if: steps.hosting_verify.outcome == 'failure'
+        run: |
+          echo "Hosting verification failed. Backend traffic was restored; Hosting requires manual inspection or recovery."
+          exit 1
 
       - name: Write release summary
         run: |
