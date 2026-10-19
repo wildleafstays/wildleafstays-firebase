@@ -518,11 +518,22 @@ jobs:
             "https://www.wildleafstays.com/customer/app.js?${CACHE_BUSTER}" \
             -o /tmp/live-customer-app.js
 
+          curl --fail --silent --show-error --retry 5 \
+            "https://www.wildleafstays.com/customer/index.html?${CACHE_BUSTER}" \
+            -o /tmp/live-customer-index.html
+          curl --fail --silent --show-error --retry 5 \
+            "https://www.wildleafstays.com/customer/property.html?${CACHE_BUSTER}" \
+            -o /tmp/live-customer-property.html
+
           cmp frontend/admin/index.html /tmp/live-admin-index.html
           cmp frontend/admin/admin.js /tmp/live-admin.js
+          cmp frontend/customer/index.html /tmp/live-customer-index.html
+          cmp frontend/customer/property.html /tmp/live-customer-property.html
           cmp frontend/customer/app.js /tmp/live-customer-app.js
 
-          echo "Firebase Hosting static files match the release commit"
+          grep -F "SMARTSTAY PUBLIC TEST" /tmp/live-customer-index.html >/dev/null
+          grep -F "SMARTSTAY PUBLIC TEST" /tmp/live-customer-property.html >/dev/null
+          echo "Firebase Hosting static files and public-test notices match the release commit"
 
       - name: Restore prior backend if live Hosting verification fails
         if: steps.hosting_verify.outcome == 'failure'
