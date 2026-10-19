@@ -368,6 +368,30 @@ jobs:
           console.log("Candidate public homepage API verified");
           NODE
 
+      - name: Verify SmartStay discovery on candidate before traffic
+        env:
+          CANDIDATE_URL: ${{ steps.candidate.outputs.url }}
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            --max-time 30 \
+            --header "Content-Type: application/json" \
+            --data '{"arrivalDate":"2030-11-10","departureDate":"2030-11-12","adults":2,"childAges":[],"requestedRooms":1,"exclusive":false,"limit":5,"offset":0}' \
+            "$CANDIDATE_URL/v1/public/smartstay/search" \
+            -o /tmp/candidate-smartstay-search.json
+
+          node <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync("/tmp/candidate-smartstay-search.json", "utf8"));
+          if (!Array.isArray(payload.properties) ||
+              !Number.isInteger(payload.scanned) ||
+              payload.scanned < 0 ||
+              payload.scanned > 5 ||
+              !("nextOffset" in payload)) {
+            throw new Error("SmartStay candidate search contract failed");
+          }
+          console.log("SmartStay candidate search API verified (read-only; payment flow not verified)");
+          NODE
+
       - name: Cut backend traffic to verified candidate
         id: cutover
         run: |
