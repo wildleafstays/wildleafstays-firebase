@@ -521,6 +521,21 @@ describe("Atomic room-mix booking core", () => {
           publicRequest
         );
 
+        // Repeated requests must not create extra payment intents or holds.
+        const holdRows = await trx
+          .selectFrom("inventory_holds")
+          .select("id")
+          .where("id", "=", firstHold.hold.id)
+          .execute();
+        expect(holdRows).toHaveLength(1);
+
+        const paymentRows = await trx
+          .selectFrom("payment_intents")
+          .select("id")
+          .where("reservation_id", "=", firstReservation.reservation.id)
+          .execute();
+        expect(paymentRows).toHaveLength(1);
+
         expect(firstPayment.created).toBe(true);
         expect(repeatedPayment.created).toBe(false);
         expect(repeatedPayment.paymentIntent.id).toBe(firstPayment.paymentIntent.id);
@@ -561,9 +576,49 @@ describe("Atomic room-mix booking core", () => {
           publicRequest
         );
 
+        // Payment providers can deliver the same verified callback repeatedly.
+        // The processor must return its canonical success without allocating twice.
+        const replayed = await new VerifiedPaymentProcessor().process(
+          trx,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            reservationId: firstReservation.reservation.id,
+            paymentIntentId: firstPayment.paymentIntent.id,
+            paymentEvidenceId: evidence!.id,
+            providerCapturedAt: new Date()
+          },
+          publicRequest
+        );
+        expect(replayed.processed).toBe(false);
+        expect(replayed.outcome).toBe(PaymentProcessingOutcomes.RESERVATION_CONFIRMED);
+        expect(replayed.inventoryAllocationId).toBe(processed.inventoryAllocationId);
+        expect(replayed.paymentSuccessId).toBe(processed.paymentSuccessId);
+
         expect(processed.outcome).toBe(PaymentProcessingOutcomes.RESERVATION_CONFIRMED);
         expect(processed.reconciliationCaseId).toBeNull();
         expect(processed.inventoryAllocationId).not.toBeNull();
+
+        // Confirming payment must turn the held room mix into one allocation,
+        // not leave orphaned active holds or create duplicate allocations.
+        const allocationRows = await trx
+          .selectFrom("inventory_allocations")
+          .select("id")
+          .where("hold_id", "=", firstHold.hold.id)
+          .execute();
+        expect(allocationRows).toHaveLength(1);
+        expect(allocationRows[0]?.id).toBe(processed.inventoryAllocationId);
+        const canonicalSuccess = await trx
+          .selectFrom("payment_successes")
+          .select(["reservation_id", "payment_intent_id", "inventory_allocation_id", "outcome"])
+          .where("id", "=", processed.paymentSuccessId!)
+          .executeTakeFirstOrThrow();
+        expect(canonicalSuccess).toMatchObject({
+          reservation_id: firstReservation.reservation.id,
+          payment_intent_id: firstPayment.paymentIntent.id,
+          inventory_allocation_id: processed.inventoryAllocationId,
+          outcome: PaymentProcessingOutcomes.RESERVATION_CONFIRMED
+        });
 
         const reservation = await trx
           .selectFrom("reservations")
@@ -620,5 +675,152 @@ describe("Atomic room-mix booking core", () => {
       .where("id", "=", rolledBackRoomMixQuoteId!)
       .executeTakeFirst();
     expect(persisted).toBeUndefined();
+  });
+  it("reconciles captured payment after a room hold expires instead of confirming unavailable rooms", async () => {
+    try {
+      await db.transaction().execute(async (trx) => {
+        const fixture = await createFixture(trx);
+        const request = metadata("public-api");
+        const quoted = await new PublicRoomMixService().createQuote(
+          trx,
+          fixture.publicSlug,
+          {
+            arrivalDate: "2036-03-10",
+            departureDate: "2036-03-11",
+            items: [
+              { rateProductId: fixture.deluxeRateProductId, units: [{ adults: 2, childAges: [] }] },
+              { rateProductId: fixture.superRateProductId, units: [{ adults: 2, childAges: [] }] }
+            ]
+          },
+          request
+        );
+        const hold = await new PublicRoomMixService().createHold(
+          trx,
+          fixture.publicSlug,
+          quoted.roomMixQuote.id,
+          request
+        );
+        const reserved = await new PublicRoomMixReservationService().create(
+          trx,
+          fixture.publicSlug,
+          quoted.roomMixQuote.id,
+          { name: "Expiry Test Guest", email: "expiry@example.invalid", phone: null },
+          request,
+          null
+        );
+        const payment = await new BeginPaymentService().beginPaymentSystem(
+          trx,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            reservationId: reserved.reservation.id
+          },
+          request
+        );
+        const expiry = new Date(Date.now() - 60_000);
+        await trx
+          .updateTable("inventory_holds")
+          .set({ expires_at: expiry })
+          .where("id", "=", hold.hold.id)
+          .execute();
+        const evidence = await new PaymentEvidenceRepository().create(trx, {
+          paymentIntentId: payment.paymentIntent.id,
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          reservationId: reserved.reservation.id,
+          provider: "RAZORPAY",
+          providerEventId: `evt_${randomUUID().replaceAll("-", "")}`,
+          providerPaymentId: `pay_${randomUUID().replaceAll("-", "")}`,
+          providerOrderId: `order_${randomUUID().replaceAll("-", "")}`,
+          amountMinor: quoted.roomMixQuote.totalMinor,
+          currencyCode: "INR",
+          verificationMethod: PaymentVerificationMethods.PROVIDER_API,
+          payloadSha256: "b".repeat(64),
+          request
+        });
+        const processed = await new VerifiedPaymentProcessor().process(
+          trx,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            reservationId: reserved.reservation.id,
+            paymentIntentId: payment.paymentIntent.id,
+            paymentEvidenceId: evidence!.id,
+            providerCapturedAt: new Date()
+          },
+          request
+        );
+        expect(processed.outcome).toBe(PaymentProcessingOutcomes.RECONCILIATION_REQUIRED);
+        expect(processed.inventoryAllocationId).toBeNull();
+        expect(processed.reconciliationCaseId).not.toBeNull();
+        const requiredReview = await trx
+          .selectFrom("payment_reconciliation_cases")
+          .select(["reason_code", "required_action", "status"])
+          .where("id", "=", processed.reconciliationCaseId!)
+          .executeTakeFirstOrThrow();
+        expect(requiredReview).toMatchObject({
+          reason_code: "INVENTORY_HOLD_EXPIRED",
+          required_action: "REFUND_REQUIRED",
+          status: "OPEN"
+        });
+        // Replayed capture evidence must retain its canonical reconciliation
+        // instead of creating another case or unexpectedly confirming rooms.
+        const replayed = await new VerifiedPaymentProcessor().process(
+          trx,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            reservationId: reserved.reservation.id,
+            paymentIntentId: payment.paymentIntent.id,
+            paymentEvidenceId: evidence!.id,
+            providerCapturedAt: new Date()
+          },
+          request
+        );
+        expect(replayed.processed).toBe(false);
+        expect(replayed.outcome).toBe(PaymentProcessingOutcomes.RECONCILIATION_REQUIRED);
+        expect(replayed.reconciliationCaseId).toBe(processed.reconciliationCaseId);
+        expect(replayed.paymentSuccessId).toBe(processed.paymentSuccessId);
+        expect(replayed.inventoryAllocationId).toBeNull();
+        const replayReview = await trx
+          .selectFrom("payment_reconciliation_cases")
+          .select(["reason_code", "required_action", "status"])
+          .where("id", "=", replayed.reconciliationCaseId!)
+          .executeTakeFirstOrThrow();
+        expect(replayReview).toEqual(requiredReview);
+
+        // Repeated provider deliveries cannot proliferate payment successes or
+        // independent reconciliation cases for this one captured transaction.
+        const canonicalSuccesses = await trx
+          .selectFrom("payment_successes")
+          .select("id")
+          .where("payment_intent_id", "=", payment.paymentIntent.id)
+          .execute();
+        expect(canonicalSuccesses).toHaveLength(1);
+        const reconciliationRows = await trx
+          .selectFrom("payment_reconciliation_cases")
+          .select("id")
+          .where("payment_evidence_id", "=", evidence!.id)
+          .execute();
+        expect(reconciliationRows).toHaveLength(1);
+        expect(reconciliationRows[0]?.id).toBe(processed.reconciliationCaseId);
+
+        const allocationRows = await trx
+          .selectFrom("inventory_allocations")
+          .select("id")
+          .where("hold_id", "=", hold.hold.id)
+          .execute();
+        expect(allocationRows).toHaveLength(0);
+        const reservation = await trx
+          .selectFrom("reservations")
+          .select("status")
+          .where("id", "=", reserved.reservation.id)
+          .executeTakeFirstOrThrow();
+        expect(reservation.status).not.toBe("CONFIRMED");
+        throw new RollbackAfterAssertions();
+      });
+    } catch (error) {
+      if (!(error instanceof RollbackAfterAssertions)) throw error;
+    }
   });
 });

@@ -230,6 +230,38 @@ jobs:
           echo "previous_revision=$PREVIOUS_REVISION" >> "$GITHUB_OUTPUT"
           echo "Current production revision: $PREVIOUS_REVISION"
 
+      - name: Snapshot existing Firebase Hosting release
+        id: hosting_snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          RESPONSE="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $TOKEN" \
+            "https://firebasehosting.googleapis.com/v1beta1/sites/$PROJECT_ID/releases?pageSize=1")"
+          VERSION_NAME="$(jq -er '.releases[0].version.name // empty' <<< "$RESPONSE")"
+          if [[ "$VERSION_NAME" != sites/*/versions/* ]]; then
+            echo "::error::Cannot identify previous Firebase Hosting version; release blocked."
+            exit 1
+          fi
+          echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "Previous Firebase Hosting version captured for rollback."
+
+      - name: Require Razorpay test credentials for public beta
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Inspect only the publishable key ID; never print secret material.
+          # A missing Secret Manager permission must fail closed.
+          KEY_ID="$(gcloud secrets versions access 3 \
+            --secret=RAZORPAY_KEY_ID \
+            --project="$PROJECT_ID")"
+          if [[ "$KEY_ID" != rzp_test_* ]]; then
+            echo "::error::Public beta requires Razorpay test-mode credentials. Refusing production release."
+            exit 1
+          fi
+          echo "Razorpay test-mode key prefix verified without exposing credentials"
+
       - name: Build immutable backend image
         run: |
           BUILD_ID="$(gcloud builds submit platform-api \
@@ -302,6 +334,7 @@ jobs:
             --region="$REGION" \
             --image="${{ steps.release.outputs.image }}" \
             --update-secrets="RAZORPAY_KEY_ID=RAZORPAY_KEY_ID:3,RAZORPAY_KEY_SECRET=RAZORPAY_KEY_SECRET:3,RAZORPAY_WEBHOOK_SECRET=RAZORPAY_WEBHOOK_SECRET:1" \
+            --update-env-vars="SMARTSTAY_PUBLIC_BETA_TEST_ONLY=true,SMARTSTAY_BETA_TEST_PROPERTY_SLUGS=*" \
             --no-traffic \
             --tag="${{ steps.release.outputs.tag }}" \
             --quiet
@@ -368,6 +401,30 @@ jobs:
           console.log("Candidate public homepage API verified");
           NODE
 
+      - name: Verify SmartStay discovery on candidate before traffic
+        env:
+          CANDIDATE_URL: ${{ steps.candidate.outputs.url }}
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            --max-time 30 \
+            --header "Content-Type: application/json" \
+            --data '{"arrivalDate":"2030-11-10","departureDate":"2030-11-12","adults":2,"childAges":[],"requestedRooms":1,"exclusive":false,"limit":5,"offset":0}' \
+            "$CANDIDATE_URL/v1/public/smartstay/search" \
+            -o /tmp/candidate-smartstay-search.json
+
+          node <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync("/tmp/candidate-smartstay-search.json", "utf8"));
+          if (!Array.isArray(payload.properties) ||
+              !Number.isInteger(payload.scanned) ||
+              payload.scanned < 0 ||
+              payload.scanned > 5 ||
+              !("nextOffset" in payload)) {
+            throw new Error("SmartStay candidate search contract failed");
+          }
+          console.log("SmartStay candidate search API verified (read-only; payment flow not verified)");
+          NODE
+
       - name: Cut backend traffic to verified candidate
         id: cutover
         run: |
@@ -396,6 +453,32 @@ jobs:
           console.log("Live API verified after cutover");
           NODE
 
+      - name: Verify live SmartStay discovery after cutover
+        id: live_smartstay
+        continue-on-error: true
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            --max-time 30 \
+            --header "Content-Type: application/json" \
+            --data '{"arrivalDate":"2030-11-10","departureDate":"2030-11-12","adults":2,"childAges":[],"requestedRooms":1,"exclusive":false,"limit":5,"offset":0}' \
+            "https://www.wildleafstays.com/v1/public/smartstay/search" \
+            -o /tmp/live-smartstay-search.json
+          node -e 'const p=require("/tmp/live-smartstay-search.json"); if (!Array.isArray(p.properties) || !Number.isInteger(p.scanned) || p.scanned < 0 || p.scanned > 5 || !("nextOffset" in p)) process.exit(1);'
+
+      - name: Roll back backend traffic if SmartStay verification failed
+        if: steps.live_api.outcome == 'success' && steps.live_smartstay.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="${{ steps.snapshot.outputs.previous_revision }}=100" \
+            --quiet
+
+      - name: Stop release after SmartStay rollback
+        if: steps.live_api.outcome == 'success' && steps.live_smartstay.outcome == 'failure'
+        run: exit 1
+
       - name: Roll back backend traffic if live API verification failed
         if: steps.live_api.outcome == 'failure'
         run: |
@@ -412,13 +495,32 @@ jobs:
           exit 1
 
       - name: Deploy Firebase Hosting
+        id: hosting_deploy
+        continue-on-error: true
         run: |
           npx --yes "firebase-tools@$FIREBASE_TOOLS_VERSION" deploy \
             --only hosting \
             --project "$PROJECT_ID" \
             --non-interactive
 
+      - name: Restore prior backend if Hosting deployment failed
+        if: steps.hosting_deploy.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="${{ steps.snapshot.outputs.previous_revision }}=100" \
+            --quiet
+
+      - name: Stop release after failed Hosting deployment
+        if: steps.hosting_deploy.outcome == 'failure'
+        run: |
+          echo "Firebase Hosting deployment failed; previous backend revision restored."
+          exit 1
+
       - name: Verify live static files match this commit
+        id: hosting_verify
+        continue-on-error: true
         shell: bash
         run: |
           CACHE_BUSTER="release=${{ steps.release.outputs.short_sha }}"
@@ -433,11 +535,66 @@ jobs:
             "https://www.wildleafstays.com/customer/app.js?${CACHE_BUSTER}" \
             -o /tmp/live-customer-app.js
 
+          curl --fail --silent --show-error --retry 5 \
+            "https://www.wildleafstays.com/customer/index.html?${CACHE_BUSTER}" \
+            -o /tmp/live-customer-index.html
+          curl --fail --silent --show-error --retry 5 \
+            "https://www.wildleafstays.com/customer/property.html?${CACHE_BUSTER}" \
+            -o /tmp/live-customer-property.html
+
           cmp frontend/admin/index.html /tmp/live-admin-index.html
           cmp frontend/admin/admin.js /tmp/live-admin.js
+          cmp frontend/customer/index.html /tmp/live-customer-index.html
+          cmp frontend/customer/property.html /tmp/live-customer-property.html
           cmp frontend/customer/app.js /tmp/live-customer-app.js
 
-          echo "Firebase Hosting static files match the release commit"
+          grep -F "SMARTSTAY PUBLIC TEST" /tmp/live-customer-index.html >/dev/null
+          grep -F "SMARTSTAY PUBLIC TEST" /tmp/live-customer-property.html >/dev/null
+          echo "Firebase Hosting static files and public-test notices match the release commit"
+
+      - name: Restore prior backend if live Hosting verification fails
+        if: steps.hosting_verify.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="${{ steps.snapshot.outputs.previous_revision }}=100" \
+            --quiet
+
+      - name: Stop release after Hosting verification failure
+        if: steps.hosting_verify.outcome == 'failure'
+        run: |
+          echo "Hosting verification failed. Backend traffic was restored; Hosting requires manual inspection or recovery."
+          exit 1
+
+      - name: Restore prior Firebase Hosting release after failure
+        if: always() && (steps.hosting_deploy.outcome == 'failure' || steps.hosting_verify.outcome == 'failure')
+        id: hosting_restore
+        continue-on-error: true
+        shell: bash
+        env:
+          PREVIOUS_VERSION: ${{ steps.hosting_snapshot.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PREVIOUS_VERSION" ]]; then
+            echo "::error::No saved Hosting release version available."
+            exit 1
+          fi
+          TOKEN="$(gcloud auth print-access-token)"
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $TOKEN" \
+            --url-query "versionName=$PREVIOUS_VERSION" \
+            "https://firebasehosting.googleapis.com/v1beta1/sites/$PROJECT_ID/releases" \
+            > /tmp/hosting-restore.json
+          jq -e --arg version "$PREVIOUS_VERSION" '.version.name == $version' /tmp/hosting-restore.json >/dev/null
+          echo "Firebase Hosting rollback release created."
+
+      - name: Stop release if Hosting recovery failed
+        if: always() && (steps.hosting_deploy.outcome == 'failure' || steps.hosting_verify.outcome == 'failure') && steps.hosting_restore.outcome != 'success'
+        run: |
+          echo "::error::Firebase Hosting recovery failed; manual rollback required immediately."
+          exit 1
 
       - name: Write release summary
         run: |

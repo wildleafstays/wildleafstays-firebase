@@ -1,0 +1,24 @@
+name: SmartStay Performance Harness CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/benchmark-smartstay-staging.mjs"
+      - "scripts/test-smartstay-benchmark.mjs"
+      - ".github/workflows/smartstay-performance-harness-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark-harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Verify 200-property staging benchmark locally
+        run: node --test scripts/test-smartstay-benchmark.mjs

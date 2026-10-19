@@ -83,7 +83,11 @@ function wireEvents() {
     scheduleAvailabilitySearch();
   });
   form.departureDate.addEventListener("change", scheduleAvailabilitySearch);
-  form.promotionCode.addEventListener("input", clearQuoteAndLater);
+  form.promotionCode.addEventListener("input", () => {
+    // A promo edit invalidates pending exact quotes without discarding room availability.
+    state.recommendationRequestVersion += 1;
+    clearQuoteAndLater();
+  });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     void searchAvailability();
@@ -132,6 +136,14 @@ function configureInitialSearch() {
       : clamp(Number(query.get("rooms") || 1), 1, 20);
   const adults = clamp(Number(query.get("adults") || 2), 1, 10);
   const children = clamp(Number(query.get("children") || 0), 0, 6);
+  const parsedChildAges = (query.get("childAges") || "")
+    .split(",")
+    .filter((entry) => entry !== "")
+    .map(Number);
+  const childAges = parsedChildAges.length === children &&
+    parsedChildAges.every((age) => Number.isInteger(age) && age >= 0 && age <= 17)
+    ? parsedChildAges
+    : Array.from({ length: children }, () => 8);
 
   form.arrivalDate.min = today;
   form.arrivalDate.value = arrival;
@@ -141,7 +153,7 @@ function configureInitialSearch() {
   state.units = [
     {
       adults,
-      childAges: Array.from({ length: children }, () => 8),
+      childAges,
     },
   ];
   renderOccupancyUnits();
@@ -159,10 +171,10 @@ async function loadProperty() {
     configureBookingMode(data.property);
     renderProperty(data.property);
     propertyContent.classList.remove("hidden");
-    await Promise.allSettled([
-      searchAvailability({ resetBooking: false }),
-      searchRoomRecommendations(),
-    ]);
+    // Search is independent of an existing payment. Never delay restoring a
+    // recoverable booking while rates or recommendations are slow to respond.
+    void searchAvailability({ resetBooking: false });
+    void searchRoomRecommendations();
 
     if (
       state.session.activeCheckout?.reservationId &&
@@ -171,7 +183,14 @@ async function loadProperty() {
       statusSection.classList.remove("hidden");
       statusSection.scrollIntoView({ block: "nearest" });
       const status = await refreshCheckoutStatus(true);
-      if (status?.outcome === "PAYMENT_PENDING") startStatusPolling();
+      if (status?.outcome === "PAYMENT_PENDING") {
+        startStatusPolling();
+      } else if (!status) {
+        renderPendingStatus(
+          "Wildleaf could not verify this reservation after the page reloaded. Use Check booking status to retry before making another payment.",
+          false,
+        );
+      }
     } else {
       restorePreCheckoutSession();
     }
@@ -203,8 +222,8 @@ function renderProperty(property) {
 
   const villa = state.bookingMode === "villa";
   document.querySelector("#bookingModeBadge").textContent = villa
-    ? "Entire property"
-    : "Book by room";
+    ? "Exclusive entire property"
+    : "Choose rooms for your stay";
   document.querySelector("#propertyOverviewHeading").textContent =
     "About this stay";
   const facts = document.querySelector("#propertyFacts");
@@ -363,8 +382,7 @@ function configureBookingMode(property) {
   const villa = state.bookingMode === "villa";
   document.querySelector("#unitCountField").classList.toggle("hidden", villa);
   smartMatchSection?.classList.toggle("hidden", villa);
-  document.querySelector("#backToResults").href =
-    `/customer/?mode=${state.bookingMode}`;
+  // The return link is configured separately using the original search context.
   if (villa && state.units.length !== 1) setUnitCount(1);
   form.unitCount.value = villa ? "1" : String(state.units.length || 1);
 }
@@ -513,7 +531,7 @@ async function searchRoomRecommendations() {
   const totals = partyTotals();
   const requestedRooms = requestedRoomCount();
   const complexSearch =
-    requestedRooms > 1 || totals.adults + totals.children > 2;
+    requestedRooms > 1 || totals.children > 0 || totals.adults > 2;
   if (!complexSearch || requestedRooms > 6) {
     state.recommendationRequestVersion += 1;
     smartMatchSection?.classList.add("hidden");
@@ -711,6 +729,7 @@ async function startRecommendedBooking(recommendation, button) {
   if (!recommendation?.items?.length) return;
 
   clearQuoteAndLater();
+  const bookingSearchVersion = state.recommendationRequestVersion;
   setBusy(button, true, "Checking exact price…");
 
   try {
@@ -739,6 +758,8 @@ async function startRecommendedBooking(recommendation, button) {
           body,
         },
       );
+
+      if (bookingSearchVersion !== state.recommendationRequestVersion) return;
 
       state.roomMixQuote = null;
       state.quote = data.quote;
@@ -787,6 +808,8 @@ async function startRecommendedBooking(recommendation, button) {
         body,
       },
     );
+
+    if (bookingSearchVersion !== state.recommendationRequestVersion) return;
 
     state.quote = null;
     state.roomMixQuote = data.roomMixQuote;
@@ -889,6 +912,7 @@ async function createRoomMixHold({ scrollToGuest = true } = {}) {
   if (!state.roomMixQuote) return;
 
   const fingerprint = state.roomMixQuote.id;
+  const requestVersion = state.recommendationRequestVersion;
   const key = operationKey(state.session, "room-mix-hold", fingerprint);
   saveBookingSession(publicSlug, state.session);
 
@@ -897,6 +921,7 @@ async function createRoomMixHold({ scrollToGuest = true } = {}) {
       `/v1/public/properties/${encodeURIComponent(publicSlug)}/room-mixes/${state.roomMixQuote.id}/hold`,
       { method: "POST", idempotencyKey: key },
     );
+    if (requestVersion !== state.recommendationRequestVersion || state.roomMixQuote?.id !== fingerprint) return;
     state.hold = data.hold;
     state.session.holdId = data.hold.id;
     state.session.hold = data.hold;
@@ -906,6 +931,7 @@ async function createRoomMixHold({ scrollToGuest = true } = {}) {
       guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   } catch (error) {
+    if (requestVersion !== state.recommendationRequestVersion || state.roomMixQuote?.id !== fingerprint) return;
     renderSectionError(
       quoteSection,
       messageFor(error, "The recommended rooms could not be reserved together."),
@@ -1815,6 +1841,8 @@ async function continueRoomSelection(button) {
 
   const selections = [...state.roomSelections.values()];
   clearQuoteAndLater();
+  const selectionVersion = state.selectionPricingVersion;
+  const bookingSearchVersion = state.recommendationRequestVersion;
   setBusy(button, true, "Checking exact price…");
 
   try {
@@ -1843,6 +1871,8 @@ async function continueRoomSelection(button) {
           body,
         },
       );
+
+      if (selectionVersion !== state.selectionPricingVersion || bookingSearchVersion !== state.recommendationRequestVersion) return;
 
       state.roomMixQuote = null;
       state.quote = data.quote;
@@ -1891,6 +1921,8 @@ async function continueRoomSelection(button) {
       },
     );
 
+    if (selectionVersion !== state.selectionPricingVersion || bookingSearchVersion !== state.recommendationRequestVersion) return;
+
     state.quote = null;
     state.roomMixQuote = data.roomMixQuote;
     state.session.roomMixQuote = data.roomMixQuote;
@@ -1903,6 +1935,7 @@ async function continueRoomSelection(button) {
     renderSelectionRibbon();
     await createRoomMixHold({ scrollToGuest: true });
   } catch (error) {
+    if (selectionVersion !== state.selectionPricingVersion || bookingSearchVersion !== state.recommendationRequestVersion) return;
     showInlineMessage(
       messageFor(error, "This room selection could not be prepared for booking."),
       "error",
@@ -2085,6 +2118,11 @@ function renderQuote(quote, { showHoldAction = true } = {}) {
       quote.cancellationPolicy.policyText ||
         "Cancellation terms are snapshotted with this quote.",
     ),
+    element(
+      "p",
+      "fine-print",
+      "This is your confirmed quote breakdown, including the calculated taxes and fees. No payment is taken until you review the guest details and complete secure checkout.",
+    ),
   );
   let holdButton = null;
   if (showHoldAction) {
@@ -2106,6 +2144,7 @@ async function createHold(button, { scrollToGuest = true } = {}) {
   if (!state.quote) return;
   if (button) setBusy(button, true, "Reserving inventory…");
   const fingerprint = state.quote.id;
+  const requestVersion = state.recommendationRequestVersion;
   const key = operationKey(state.session, "hold", fingerprint);
   saveBookingSession(publicSlug, state.session);
 
@@ -2114,6 +2153,7 @@ async function createHold(button, { scrollToGuest = true } = {}) {
       `/v1/public/properties/${encodeURIComponent(publicSlug)}/quotes/${state.quote.id}/hold`,
       { method: "POST", idempotencyKey: key },
     );
+    if (requestVersion !== state.recommendationRequestVersion || state.quote?.id !== fingerprint) return;
     state.hold = data.hold;
     state.session.holdId = data.hold.id;
     state.session.hold = data.hold;
@@ -2123,6 +2163,7 @@ async function createHold(button, { scrollToGuest = true } = {}) {
       guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   } catch (error) {
+    if (requestVersion !== state.recommendationRequestVersion || state.quote?.id !== fingerprint) return;
     renderSectionError(
       quoteSection,
       messageFor(error, "Inventory could not be reserved."),
@@ -2172,6 +2213,17 @@ function renderGuestForm() {
 }
 
 async function beginCheckout(guestForm, button) {
+  // Never start a second charge while the browser still has a recoverable
+  // pending payment. Resolve the canonical status before creating another order.
+  if (state.session.activeCheckout && !state.session.activeCheckout.outcome) {
+    renderPendingStatus(
+      "An earlier payment is still pending. Check that booking before starting another payment.",
+      Boolean(state.session.activeCheckout.checkout),
+    );
+    void refreshCheckoutStatus(true);
+    return;
+  }
+
   const guestName = guestForm.elements.namedItem("name");
   const guestEmail = guestForm.elements.namedItem("email");
   const guestPhone = guestForm.elements.namedItem("phone");
@@ -2199,6 +2251,8 @@ async function beginCheckout(guestForm, button) {
     return;
   }
 
+  const bookingSearchVersion = state.recommendationRequestVersion;
+  const selectionVersion = state.selectionPricingVersion;
   setBusy(button, true, "Preparing secure payment…");
   const body = { leadGuest };
   const sourceLabel = roomMixQuoteId ? "room-mix" : "quote";
@@ -2225,6 +2279,21 @@ async function beginCheckout(guestForm, button) {
       checkout: data.checkout,
     };
     saveBookingSession(publicSlug, state.session);
+    if (
+      bookingSearchVersion !== state.recommendationRequestVersion ||
+      selectionVersion !== state.selectionPricingVersion ||
+      (roomMixQuoteId
+        ? state.roomMixQuote?.id !== checkoutSourceId
+        : state.quote?.id !== checkoutSourceId)
+    ) {
+      // Preserve the server-created pending booking for recovery, but never
+      // open payment for dates or rooms the guest has since changed.
+      renderPendingStatus(
+        "An earlier booking was prepared after your search changed. Check its status before making another payment.",
+        false,
+      );
+      return;
+    }
     renderPendingStatus(
       "Secure payment is ready. Complete it in the Razorpay window.",
       true,
@@ -2245,6 +2314,17 @@ function openRazorpay() {
   if (!active?.checkout) {
     renderPendingStatus(
       "Payment details are no longer available in this tab. Check the booking status below.",
+      false,
+    );
+    return;
+  }
+  // Public beta is test-only: never open a real-money checkout in this build.
+  if (
+    typeof active.checkout.keyId !== "string" ||
+    !active.checkout.keyId.startsWith("rzp_test_")
+  ) {
+    renderPendingStatus(
+      "Online payment is unavailable during Wildleaf public testing. No payment has been taken. Contact Wildleaf directly for a real reservation.",
       false,
     );
     return;
@@ -2356,9 +2436,19 @@ async function refreshCheckoutStatus(quiet) {
         timeoutMs: 12000,
       },
     );
+    // A response for an earlier reservation must never overwrite the status
+    // of a newer checkout opened while this network request was in flight.
+    if (
+      state.session.activeCheckout?.reservationId !== active.reservationId ||
+      state.session.activeCheckout?.paymentIntentId !== active.paymentIntentId
+    ) return null;
     renderCheckoutOutcome(data);
     return data;
   } catch (error) {
+    if (
+      state.session.activeCheckout?.reservationId !== active.reservationId ||
+      state.session.activeCheckout?.paymentIntentId !== active.paymentIntentId
+    ) return null;
     if (!quiet)
       renderPendingStatus(
         messageFor(error, "Booking status could not be checked yet."),
@@ -2454,11 +2544,42 @@ function renderFinalStatus(kind, title, message, reference) {
 
 function startStatusPolling() {
   stopStatusPolling();
+  const pollingReservationId = state.session.activeCheckout?.reservationId;
+  const pollingPaymentIntentId = state.session.activeCheckout?.paymentIntentId;
+  if (!pollingReservationId || !pollingPaymentIntentId) return;
   state.polling = true;
   state.pollAttempts = 0;
   const poll = async () => {
     state.pollAttempts += 1;
-    await refreshCheckoutStatus(true);
+    const checkedStatus = await refreshCheckoutStatus(true);
+    if (
+      state.session.activeCheckout?.reservationId !== pollingReservationId ||
+      state.session.activeCheckout?.paymentIntentId !== pollingPaymentIntentId
+    ) {
+      stopStatusPolling();
+      return;
+    }
+    // A confirmed, closed, or assistance-required payment may have stopped
+    // polling inside refreshCheckoutStatus; do not replace its final outcome.
+    if (!state.polling) return;
+    // Do not count transport failures as a definitive payment timeout:
+    // keep manual recovery visible instead of asserting an outcome.
+    if (!checkedStatus && state.pollAttempts >= 24) {
+      stopStatusPolling();
+      renderPendingStatus(
+        "Wildleaf could not reach payment verification. Please check your connection and use Check booking status; do not make another payment.",
+        false,
+      );
+      return;
+    }
+    if (state.pollAttempts >= 24) {
+      stopStatusPolling();
+      renderPendingStatus(
+        "Automatic payment checks have paused. Your booking is still unresolved; use Check booking status to retry. Do not make another payment until the result is verified.",
+        false,
+      );
+      return;
+    }
     if (
       state.polling &&
       !state.pollTimer &&
@@ -2485,6 +2606,7 @@ function minimizeCheckoutSession(data) {
   const active = state.session.activeCheckout;
   state.session = {
     activeCheckout: {
+      outcome: data.outcome,
       reservationId: active.reservationId,
       reservationReference: data.reservation.reservationReference,
       paymentIntentId: active.paymentIntentId,
@@ -2562,6 +2684,12 @@ function scheduleAvailabilitySearch() {
 }
 
 function clearResultsAfterSearchChange() {
+  // Invalidate in-flight results immediately, before the debounced replacement
+  // request. Otherwise a stale recommendation can briefly be booked.
+  state.recommendationRequestVersion += 1;
+  state.availabilityRequestVersion += 1;
+  smartRecommendations?.replaceChildren();
+  smartMatchSection?.classList.add("hidden");
   state.availability = null;
   state.roomSelections.clear();
   state.categoryAvailabilityCounts.clear();
@@ -2580,6 +2708,11 @@ function clearResultsAfterSearchChange() {
 function clearQuoteAndLater() {
   state.quote = null;
   state.roomMixQuote = null;
+  // Keep recoverable payment records, but never restore an obsolete quote or
+  // inventory hold after a date, occupancy, room, or promotion change.
+  delete state.session.quote;
+  delete state.session.quoteId;
+  delete state.session.roomMixQuote;
   quoteSection.classList.add("hidden");
   quoteSection.replaceChildren();
   clearHoldAndLater();
@@ -2587,6 +2720,9 @@ function clearQuoteAndLater() {
 
 function clearHoldAndLater() {
   state.hold = null;
+  delete state.session.hold;
+  delete state.session.holdId;
+  saveBookingSession(publicSlug, state.session);
   guestSection.classList.add("hidden");
   guestSection.replaceChildren();
   if (state.countdownTimer) window.clearInterval(state.countdownTimer);

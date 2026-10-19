@@ -242,6 +242,43 @@ describe("Phase 3B atomic inventory holds", () => {
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
   });
 
+  it("serializes simultaneous room and exclusive-property requests in BOTH mode", async () => {
+    const fixture = await createFixture("BOTH", [1]);
+    const categoryId = fixture.roomCategoryIds[0] ?? "";
+
+    const outcomes = await Promise.allSettled([
+      createHold(fixture, [roomItem(categoryId)]),
+      createHold(fixture, [fullPropertyItem])
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(1);
+
+    const rejected = outcomes.find((outcome) => outcome.status === "rejected");
+    expect(rejected).toMatchObject({
+      status: "rejected",
+      reason: { code: "CONFLICT", statusCode: 409 }
+    });
+
+    const holds = await db
+      .selectFrom("inventory_holds")
+      .select("id")
+      .where("property_id", "=", fixture.propertyId)
+      .where("status", "=", "ACTIVE")
+      .execute();
+    expect(holds).toHaveLength(1);
+
+    const bucket = await db
+      .selectFrom("inventory_daily_buckets")
+      .select(["held_quantity", "capacity"])
+      .where("property_id", "=", fixture.propertyId)
+      .where("room_category_id", "=", categoryId)
+      .where("stay_date", "=", "2031-01-01")
+      .executeTakeFirstOrThrow();
+    expect(bucket.held_quantity).toBe(1);
+    expect(bucket.held_quantity).toBeLessThanOrEqual(bucket.capacity);
+  });
+
   it("fails closed when a full-property hold has no active physical rooms", async () => {
     const fixture = await createFixture("FULL_PROPERTY_ONLY", []);
 

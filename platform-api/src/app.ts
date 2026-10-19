@@ -186,7 +186,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       accessRepository
     },
     razorpayOrderGateway: razorpayProvider,
-    razorpayPaymentRecoveryGateway: razorpayProvider
+    razorpayPaymentRecoveryGateway: razorpayProvider,
+    betaAllowedPropertySlugs:
+      deps.config.SMARTSTAY_PUBLIC_BETA_TEST_ONLY === "true"
+        ? deps.config.SMARTSTAY_BETA_TEST_PROPERTY_SLUGS.split(",")
+            .map((slug) => slug.trim().toLowerCase())
+            .filter(Boolean)
+        : null
   });
 
   await registerSessionRoutes(app, {

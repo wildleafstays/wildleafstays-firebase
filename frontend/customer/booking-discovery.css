@@ -118,3 +118,58 @@
     font-size: 1.18rem;
   }
 }
+
+/* SmartStay premium discovery: focus, motion, and consistent cards */
+.home-page .property-card {
+  overflow: hidden;
+  border: 1px solid rgba(31,70,50,.12);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 8px 26px rgba(17,45,30,.055);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.home-page .property-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 38px rgba(17,45,30,.11);
+}
+.home-page .property-card-image { object-fit: cover; transition: transform .4s ease; }
+.home-page .property-card:hover .property-card-image { transform: scale(1.035); }
+.home-page .property-card-body { display: flex; flex-direction: column; align-items: flex-start; }
+.home-page .property-card-body .property-cta { width: 100%; justify-content: center; margin-top: auto; }
+.home-page .smartstay-price-summary { width: 100%; margin-block: .8rem 1rem; }
+.home-page .property-cta:focus-visible,
+.home-page .search-button:focus-visible,
+.home-page .search-card input:focus-visible,
+.home-page .search-card select:focus-visible { outline: 3px solid #cba765; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .home-page .property-card, .home-page .property-card-image { transition: none; }
+  .home-page .property-card:hover, .home-page .property-card:hover .property-card-image { transform: none; }
+}
+@media (max-width: 820px) {
+  .home-page .property-card { border-radius: 18px; }
+  .home-page .property-card:hover { transform: none; }
+}
+
+/* Booking-mode choice shown on each property: easy to see and operate. */
+.property-page .property-mode-alternative {
+  min-height: 48px;
+  border-radius: 12px;
+  padding-inline: 1.1rem;
+  text-wrap: balance;
+  transition: border-color .2s ease, background-color .2s ease;
+}
+.property-page .property-mode-alternative:focus-visible {
+  outline: 3px solid #cba765;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .property-page .property-mode-alternative {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    font-size: .84rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .property-page .property-mode-alternative { transition: none; }
+}

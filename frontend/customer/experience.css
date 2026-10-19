@@ -3507,3 +3507,44 @@ body,
   white-space: nowrap !important;
   border: 0 !important;
 }
+
+/* SmartStay unified listing cards: one property, an explicit bookable arrangement. */
+.home-page .smartstay-offer-label {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: .38rem .7rem;
+  border-radius: 999px;
+  background: #e8f1eb;
+  color: #214c37;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .015em;
+}
+.home-page .smartstay-offer-note {
+  margin: .55rem 0;
+  color: #40564c;
+  font-size: .9rem;
+  line-height: 1.45;
+}
+.home-page .smartstay-price-summary {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  margin: .75rem 0 1rem;
+  padding-top: .75rem;
+  border-top: 1px solid rgba(22, 64, 42, .13);
+}
+.home-page .smartstay-price-value {
+  color: #17382c;
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
+  line-height: 1.2;
+}
+.home-page .smartstay-price-caption {
+  color: #40564c;
+  font-size: .8rem;
+}
+.home-page .smartstay-price-disclaimer {
+  color: #65756c;
+  font-size: .72rem;
+  line-height: 1.5;
+}

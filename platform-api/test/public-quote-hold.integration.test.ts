@@ -56,6 +56,7 @@ class FakeRazorpayGateway implements RazorpayOrderGateway, RazorpayPaymentRecove
   private readonly orders = new Map<string, RazorpayOrder>();
   private readonly payments = new Map<string, RazorpayPayment[]>();
   createCalls = 0;
+  failNextCreate = false;
 
   publicKeyId(): string {
     return "rzp_test_phase6d_public";
@@ -63,6 +64,10 @@ class FakeRazorpayGateway implements RazorpayOrderGateway, RazorpayPaymentRecove
 
   async createOrder(input: RazorpayCreateOrderInput): Promise<RazorpayOrder> {
     this.createCalls += 1;
+    if (this.failNextCreate) {
+      this.failNextCreate = false;
+      throw new Error("Simulated transient Razorpay order failure");
+    }
 
     const existing = this.orders.get(input.receipt);
     if (existing) return existing;
@@ -1160,6 +1165,25 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
     expect(replay.json()).toEqual(body);
     expect(razorpayGateway.createCalls).toBe(callsBefore + 1);
 
+    // Reusing the same idempotency key with a different guest must fail,
+    // rather than return someone else's reservation and payment order.
+    const tamperedReplay = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`,
+      headers: { "idempotency-key": checkoutKey },
+      payload: {
+        leadGuest: {
+          name: "Different Guest",
+          email: "different.guest@example.com",
+          phone: "+919876543210"
+        }
+      }
+    });
+    expect(tamperedReplay.statusCode).toBe(409);
+    expect(tamperedReplay.headers["cache-control"]).toBe("no-store");
+    expect(razorpayGateway.createCalls).toBe(callsBefore + 1);
+    expect(JSON.stringify(tamperedReplay.json())).not.toContain(body.checkout.orderId);
+
     const reservationCount = await db
       .selectFrom("reservations")
       .select((eb) => eb.fn.countAll<number>().as("count"))
@@ -1172,8 +1196,110 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       .where("reservation_id", "=", body.reservation.id)
       .executeTakeFirstOrThrow();
 
+    const providerOrderCount = await db
+      .selectFrom("payment_provider_orders")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("payment_intent_id", "=", body.paymentIntent.id)
+      .executeTakeFirstOrThrow();
+
     expect(Number(reservationCount.count)).toBe(1);
     expect(Number(paymentCount.count)).toBe(1);
+    expect(Number(providerOrderCount.count)).toBe(1);
+  });
+
+  it("recovers a transient Razorpay order failure on HTTP checkout retry without duplicate booking", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2034-03-04", "2034-03-06");
+    const key = `public-checkout-recovery-${randomUUID()}`;
+    const url = `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`;
+    const payload = {
+      leadGuest: { name: "Recovery Guest", email: "recovery@example.com", phone: null }
+    };
+    const callsBefore = razorpayGateway.createCalls;
+    razorpayGateway.failNextCreate = true;
+
+    const failed = await app.inject({
+      method: "POST",
+      url,
+      headers: { "idempotency-key": key },
+      payload
+    });
+    expect(failed.statusCode).toBeGreaterThanOrEqual(500);
+
+    // The first failure may leave the canonical pending reservation, but must
+    // not leave a partially linked provider order or charge-ready checkout.
+    const pendingReservations = await db
+      .selectFrom("reservations")
+      .select(["id", "status"])
+      .where("quote_id", "=", quote.id)
+      .execute();
+    expect(pendingReservations).toHaveLength(1);
+    expect(pendingReservations[0]?.status).toBe("PAYMENT_PENDING");
+
+    // An upstream outage must not persist an incomplete provider-order link.
+    const pendingIntents = await db
+      .selectFrom("payment_intents")
+      .select("id")
+      .where("reservation_id", "=", pendingReservations[0]!.id)
+      .execute();
+    expect(pendingIntents).toHaveLength(1);
+    const prematureOrders = await db
+      .selectFrom("payment_provider_orders")
+      .select("id")
+      .where("payment_intent_id", "=", pendingIntents[0]!.id)
+      .execute();
+    expect(prematureOrders).toHaveLength(0);
+
+    // No payment can be marked successful or allocated before the provider
+    // has created its canonical order and supplied verified capture evidence.
+    const prematureSuccesses = await db
+      .selectFrom("payment_successes")
+      .select("id")
+      .where("reservation_id", "=", pendingReservations[0]!.id)
+      .execute();
+    expect(prematureSuccesses).toHaveLength(0);
+
+    const pendingReservation = await db
+      .selectFrom("reservations")
+      .select("inventory_hold_id")
+      .where("id", "=", pendingReservations[0]!.id)
+      .executeTakeFirstOrThrow();
+    const prematureAllocations = await db
+      .selectFrom("inventory_allocations")
+      .select("id")
+      .where("hold_id", "=", pendingReservation.inventory_hold_id)
+      .execute();
+    expect(prematureAllocations).toHaveLength(0);
+
+    const retry = await app.inject({
+      method: "POST",
+      url,
+      headers: { "idempotency-key": key },
+      payload
+    });
+    expect(retry.statusCode).toBe(201);
+    expect(retry.headers["idempotency-replayed"]).toBe("true");
+    expect(razorpayGateway.createCalls).toBe(callsBefore + 2);
+
+    const recovered = retry.json() as {
+      reservation: { id: string };
+      paymentIntent: { id: string };
+    };
+    const [reservations, paymentIntents, orders] = await Promise.all([
+      db.selectFrom("reservations").select("id").where("quote_id", "=", quote.id).execute(),
+      db
+        .selectFrom("payment_intents")
+        .select("id")
+        .where("reservation_id", "=", recovered.reservation.id)
+        .execute(),
+      db
+        .selectFrom("payment_provider_orders")
+        .select("id")
+        .where("payment_intent_id", "=", recovered.paymentIntent.id)
+        .execute()
+    ]);
+    expect(reservations).toHaveLength(1);
+    expect(paymentIntents).toHaveLength(1);
+    expect(orders).toHaveLength(1);
   });
 
   it("refuses to replace the immutable lead guest on a public checkout retry with a new key", async () => {
@@ -1223,6 +1349,29 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       .executeTakeFirstOrThrow();
 
     expect(Number(count.count)).toBe(1);
+  });
+
+  it("rejects malformed customer checkout at HTTP boundary without creating payment or reservation", async () => {
+    const { quote } = await createPublicQuoteAndHold(fixture, "2034-03-01", "2034-03-03");
+    const callsBefore = razorpayGateway.createCalls;
+    const checkoutUrl = `/v1/public/properties/${fixture.publicSlug}/quotes/${quote.id}/checkout`;
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: checkoutUrl,
+      headers: { "idempotency-key": `bad-public-checkout-${randomUUID()}` },
+      payload: { leadGuest: { name: "", email: "not-an-email", phone: null } }
+    });
+
+    expect(invalid.statusCode).toBe(400);
+    expect(razorpayGateway.createCalls).toBe(callsBefore);
+
+    const reservations = await db
+      .selectFrom("reservations")
+      .select("id")
+      .where("quote_id", "=", quote.id)
+      .execute();
+    expect(reservations).toHaveLength(0);
   });
 
   it("rejects checkout before reservation mutation when Razorpay is unavailable", async () => {
@@ -1344,6 +1493,50 @@ describe("Phase 6D public guest reservation and Razorpay checkout", () => {
       reservation: { status: "CONFIRMED" },
       paymentIntent: { status: "SUCCEEDED" }
     });
+
+    // Provider recovery is safe to poll again; every repeat remains confirmed
+    // and must not create another payment success or inventory allocation.
+    const secondPoll = await app.inject({
+      method: "POST",
+      url: `/v1/public/properties/${fixture.publicSlug}/checkout-status`,
+      payload: {
+        reservationId: prepared.reservation.id,
+        paymentIntentId: prepared.paymentIntent.id
+      }
+    });
+    expect(secondPoll.statusCode).toBe(200);
+    expect(secondPoll.json()).toMatchObject({
+      outcome: "CONFIRMED",
+      reservation: { status: "CONFIRMED" },
+      paymentIntent: { status: "SUCCEEDED" }
+    });
+    const successes = await db
+      .selectFrom("payment_successes")
+      .select(["id", "inventory_allocation_id"])
+      .where("payment_intent_id", "=", prepared.paymentIntent.id)
+      .execute();
+    expect(successes).toHaveLength(1);
+    expect(successes[0]?.inventory_allocation_id).not.toBeNull();
+    const allocations = await db
+      .selectFrom("inventory_allocations")
+      .select("id")
+      .where("id", "=", successes[0]!.inventory_allocation_id!)
+      .execute();
+    expect(allocations).toHaveLength(1);
+
+    const confirmedReservation = await db
+      .selectFrom("reservations")
+      .select(["id", "status", "inventory_hold_id"])
+      .where("id", "=", prepared.reservation.id)
+      .executeTakeFirstOrThrow();
+    expect(confirmedReservation.status).toBe("CONFIRMED");
+    const linkedAllocation = await db
+      .selectFrom("inventory_allocations")
+      .select("id")
+      .where("hold_id", "=", confirmedReservation.inventory_hold_id)
+      .execute();
+    expect(linkedAllocation).toHaveLength(1);
+    expect(linkedAllocation[0]?.id).toBe(successes[0]!.inventory_allocation_id);
 
     const mismatched = await app.inject({
       method: "POST",
