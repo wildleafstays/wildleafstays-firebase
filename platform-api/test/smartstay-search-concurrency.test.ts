@@ -26,7 +26,7 @@ describe("bounded hotel matching", () => {
     const results = await mapWithConcurrency(hotels, 4, async (hotel, index) => {
       active += 1;
       peak = Math.max(peak, active);
-      visits[index] += 1;
+      visits[index] = (visits[index] ?? 0) + 1;
       // Uneven asynchronous completion simulates differing hotel response times.
       for (let tick = 0; tick < (hotel % 5) + 1; tick += 1) {
         await new Promise<void>((resolve) => setImmediate(resolve));
