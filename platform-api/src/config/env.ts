@@ -18,7 +18,10 @@ const envSchema = z
     RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional()
   })
   .superRefine((value, ctx) => {
-    if (value.SMARTSTAY_PUBLIC_BETA_TEST_ONLY === "true" && !value.RAZORPAY_KEY_ID?.startsWith("rzp_test_")) {
+    if (
+      value.SMARTSTAY_PUBLIC_BETA_TEST_ONLY === "true" &&
+      !value.RAZORPAY_KEY_ID?.startsWith("rzp_test_")
+    ) {
       ctx.addIssue({
         code: "custom",
         message: "Public beta requires a Razorpay test-mode key",
