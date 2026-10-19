@@ -1,0 +1,51 @@
+name: SmartStay Staging Load Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_host:
+        description: "Exact staging/test hostname (not production)"
+        required: true
+        type: string
+      arrival_date:
+        description: "Check-in (YYYY-MM-DD)"
+        required: true
+        type: string
+      departure_date:
+        description: "Check-out (YYYY-MM-DD)"
+        required: true
+        type: string
+      destination:
+        description: "Optional destination filter"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  staging-load-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Verify benchmark harness
+        run: node --test scripts/test-smartstay-benchmark.mjs
+      - name: Benchmark 200 staging hotel listings
+        env:
+          SMARTSTAY_BASE_URL: ${{ format('https://{0}', inputs.staging_host) }}
+          SMARTSTAY_STAGING_HOST: ${{ inputs.staging_host }}
+          SMARTSTAY_ARRIVAL_DATE: ${{ inputs.arrival_date }}
+          SMARTSTAY_DEPARTURE_DATE: ${{ inputs.departure_date }}
+          SMARTSTAY_DESTINATION: ${{ inputs.destination }}
+        run: node scripts/benchmark-smartstay-staging.mjs | tee smartstay-staging-benchmark.json
+      - name: Archive benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartstay-staging-benchmark
+          path: smartstay-staging-benchmark.json
+          if-no-files-found: ignore
