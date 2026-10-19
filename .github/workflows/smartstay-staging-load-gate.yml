@@ -41,7 +41,10 @@ jobs:
           SMARTSTAY_ARRIVAL_DATE: ${{ inputs.arrival_date }}
           SMARTSTAY_DEPARTURE_DATE: ${{ inputs.departure_date }}
           SMARTSTAY_DESTINATION: ${{ inputs.destination }}
-        run: node scripts/benchmark-smartstay-staging.mjs | tee smartstay-staging-benchmark.json
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/benchmark-smartstay-staging.mjs | tee smartstay-staging-benchmark.json
       - name: Archive benchmark report
         if: always()
         uses: actions/upload-artifact@v4
