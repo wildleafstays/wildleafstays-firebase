@@ -113,7 +113,7 @@
             <datalist id="destinationList"></datalist>
           </label>
 
-          <label class="search-field search-taxonomy">
+          <label class="search-field search-taxonomy" hidden>
             <span>Property Category</span>
             <select id="propertyCategory" name="propertyCategoryId">
               <option value="">All categories</option>
@@ -156,10 +156,15 @@
             <strong style="display:block;margin-bottom:.4rem">Children’s ages at check-in</strong>
             <div id="smartstayChildAgeFields" style="display:flex;flex-wrap:wrap;gap:.75rem"></div>
           </div>
-          <label class="smartstay-privacy-choice" style="display:flex;align-items:center;gap:.65rem;min-width:0;padding:.65rem 1rem;background:rgba(255,255,255,.12);border-radius:12px;">
-            <input id="privateStay" name="privateStay" type="checkbox" style="width:18px;height:18px;flex:none" />
-            <span><strong>We want the entire place to ourselves</strong><small style="display:block">Optional — leave unchecked to explore rooms and private stays together</small></span>
+          <label class="search-field smartstay-mode-choice">
+            <span>How would you like to stay?</span>
+            <select id="stayMode" name="stayMode">
+              <option value="all">Show all stays</option>
+              <option value="room">Book individual rooms</option>
+              <option value="entire">Book an entire property</option>
+            </select>
           </label>
+          <input id="privateStay" name="privateStay" type="checkbox" hidden aria-hidden="true" tabindex="-1" />
           <button class="button button-primary search-button" type="submit">Find my stay</button>
         </form>
       </section>
