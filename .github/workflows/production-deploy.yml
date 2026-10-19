@@ -420,6 +420,32 @@ jobs:
           console.log("Live API verified after cutover");
           NODE
 
+      - name: Verify live SmartStay discovery after cutover
+        id: live_smartstay
+        continue-on-error: true
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            --max-time 30 \
+            --header "Content-Type: application/json" \
+            --data '{"arrivalDate":"2030-11-10","departureDate":"2030-11-12","adults":2,"childAges":[],"requestedRooms":1,"exclusive":false,"limit":5,"offset":0}' \
+            "https://www.wildleafstays.com/v1/public/smartstay/search" \
+            -o /tmp/live-smartstay-search.json
+          node -e 'const p=require("/tmp/live-smartstay-search.json"); if (!Array.isArray(p.properties) || !Number.isInteger(p.scanned) || p.scanned < 0 || p.scanned > 5 || !("nextOffset" in p)) process.exit(1);'
+
+      - name: Roll back backend traffic if SmartStay verification failed
+        if: steps.live_api.outcome == 'success' && steps.live_smartstay.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="${{ steps.snapshot.outputs.previous_revision }}=100" \
+            --quiet
+
+      - name: Stop release after SmartStay rollback
+        if: steps.live_api.outcome == 'success' && steps.live_smartstay.outcome == 'failure'
+        run: exit 1
+
       - name: Roll back backend traffic if live API verification failed
         if: steps.live_api.outcome == 'failure'
         run: |
