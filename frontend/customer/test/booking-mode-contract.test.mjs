@@ -470,6 +470,14 @@ test("payment polling stops when reservation or payment identity changes", () =>
   assert.match(polling, /stopStatusPolling\(\);[\s\S]*?return;/);
 });
 
+test("pending checkout recovery does not wait for live room discovery", () => {
+  const loader = propertySource.split("async function loadProperty() {")[1].split("\nfunction renderProperty")[0];
+  assert.match(loader, /void searchAvailability\(\{ resetBooking: false \}\)/);
+  assert.match(loader, /void searchRoomRecommendations\(\)/);
+  assert.doesNotMatch(loader, /await Promise\.allSettled/);
+  assert.ok(loader.indexOf("void searchRoomRecommendations()") < loader.indexOf("await refreshCheckoutStatus(true)"));
+});
+
 test("page reload keeps a manual recovery path when checkout status is unreachable", () => {
   const load = propertySource.split("async function loadProperty() {")[1].split("\nfunction renderProperty")[0];
   assert.match(load, /else if \(!status\)/);
