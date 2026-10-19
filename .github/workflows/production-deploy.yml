@@ -462,11 +462,28 @@ jobs:
           exit 1
 
       - name: Deploy Firebase Hosting
+        id: hosting_deploy
+        continue-on-error: true
         run: |
           npx --yes "firebase-tools@$FIREBASE_TOOLS_VERSION" deploy \
             --only hosting \
             --project "$PROJECT_ID" \
             --non-interactive
+
+      - name: Restore prior backend if Hosting deployment failed
+        if: steps.hosting_deploy.outcome == 'failure'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="${{ steps.snapshot.outputs.previous_revision }}=100" \
+            --quiet
+
+      - name: Stop release after failed Hosting deployment
+        if: steps.hosting_deploy.outcome == 'failure'
+        run: |
+          echo "Firebase Hosting deployment failed; previous backend revision restored."
+          exit 1
 
       - name: Verify live static files match this commit
         shell: bash
