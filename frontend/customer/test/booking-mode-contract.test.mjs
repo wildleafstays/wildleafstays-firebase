@@ -470,6 +470,13 @@ test("payment polling stops when reservation or payment identity changes", () =>
   assert.match(polling, /stopStatusPolling\(\);[\s\S]*?return;/);
 });
 
+test("page reload keeps a manual recovery path when checkout status is unreachable", () => {
+  const load = propertySource.split("async function loadProperty() {")[1].split("\nfunction renderProperty")[0];
+  assert.match(load, /else if \(!status\)/);
+  assert.match(load, /Wildleaf could not verify this reservation after the page reloaded/);
+  assert.match(load, /renderPendingStatus\([\s\S]*?false,/);
+});
+
 test("stale payment-status responses cannot overwrite another checkout", () => {
   const statusFlow = propertySource.split("async function refreshCheckoutStatus(quiet) {")[1].split("\nfunction renderCheckoutOutcome")[0];
   assert.equal(
