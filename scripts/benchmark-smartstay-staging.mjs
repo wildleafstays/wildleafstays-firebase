@@ -67,13 +67,14 @@ for (let page = 0; page < 8; page += 1) {
       redirect: "error",
       signal: AbortSignal.timeout(30000)
     });
-    const duration = Math.round(performance.now() - started);
-    samples.push(duration);
     if (!response.ok) {
+      samples.push(Math.round(performance.now() - started));
       errors.push({ page, status: response.status });
       break;
     }
     const data = await response.json();
+    // Include transfer and JSON decoding, not just response-header latency.
+    samples.push(Math.round(performance.now() - started));
     if (!Array.isArray(data.properties) || !Number.isInteger(data.scanned) || data.scanned < 0) {
       errors.push({ page, error: "Malformed public search response" });
       break;
