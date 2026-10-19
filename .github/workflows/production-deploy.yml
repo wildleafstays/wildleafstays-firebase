@@ -230,6 +230,21 @@ jobs:
           echo "previous_revision=$PREVIOUS_REVISION" >> "$GITHUB_OUTPUT"
           echo "Current production revision: $PREVIOUS_REVISION"
 
+      - name: Require Razorpay test credentials for public beta
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Inspect only the publishable key ID; never print secret material.
+          # A missing Secret Manager permission must fail closed.
+          KEY_ID="$(gcloud secrets versions access 3 \
+            --secret=RAZORPAY_KEY_ID \
+            --project="$PROJECT_ID")"
+          if [[ "$KEY_ID" != rzp_test_* ]]; then
+            echo "::error::Public beta requires Razorpay test-mode credentials. Refusing production release."
+            exit 1
+          fi
+          echo "Razorpay test-mode key prefix verified without exposing credentials"
+
       - name: Build immutable backend image
         run: |
           BUILD_ID="$(gcloud builds submit platform-api \
