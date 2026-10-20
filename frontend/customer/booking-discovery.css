@@ -254,3 +254,17 @@
 @media(prefers-reduced-motion:reduce) {
  .home-page .stay-mode-tab,.home-page .property-card { transition:none!important; }
 }
+
+/* Flatten category rails visually into a single location-wide responsive grid.
+   Keep the existing taxonomy fallback and backend eligibility code unchanged. */
+.home-page #stays:not([hidden]) #results {
+ display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:22px;
+}
+.home-page #stays #results > .property-category-section,
+.home-page #stays #results .property-category-rail { display:contents; }
+.home-page #stays #results .property-category-heading { display:none; }
+.home-page #stays #results > .empty-state { grid-column:1/-1; }
+@media (max-width:1020px) { .home-page #stays:not([hidden]) #results { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:650px) { .home-page #stays:not([hidden]) #results { grid-template-columns:minmax(0,1fr); gap:16px; } }
