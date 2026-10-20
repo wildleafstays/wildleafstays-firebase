@@ -4,7 +4,12 @@ import type { ActorContext } from "../../access/domain/actor-context.js";
 import { AuthorizationService } from "../../access/domain/authorization-service.js";
 import { Permissions } from "../../access/domain/permissions.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError
+} from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import { assertOwnerPropertyEditable } from "../../properties/application/owner-responsibility-service.js";
