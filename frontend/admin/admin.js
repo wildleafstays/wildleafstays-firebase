@@ -1057,6 +1057,9 @@ async function showScreen(name) {
   const [eyebrow, title] = screenCopy[name];
   byId("screenEyebrow").textContent = eyebrow;
   byId("screenTitle").textContent = title;
+  document.querySelectorAll("[data-command-target]").forEach((button) => {
+    button.hidden = !availableScreens(state.session).includes(button.dataset.commandTarget);
+  });
 
   if (name === "dashboard") await loadDashboard();
   if (name === "properties") await loadProperties();
