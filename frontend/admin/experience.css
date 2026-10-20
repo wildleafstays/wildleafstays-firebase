@@ -1115,3 +1115,30 @@ input[type="file"] {
   #controlScreen .command-intro-compact { align-items: start; }
   #controlScreen .command-refresh { margin-left: auto; }
 }
+
+/* Single workspace: no permanent sidebar or duplicate flow. */
+#portal.portal { display:block; min-height:100vh; }
+#portal .sidebar { display:none !important; }
+#portal .workspace { width:100%; max-width:none; margin:0; padding:0 34px 50px; min-width:0; }
+#portal .workspace-head { display:none !important; }
+#portal .unified-portal-bar {
+  position:sticky; top:0; z-index:30;
+  display:flex; align-items:center; gap:18px;
+  padding:15px 0; margin:0 0 25px;
+  border-bottom:1px solid #e1e9e5;
+  background:#f7f9f7;
+}
+#portal .unified-portal-brand { color:#154839; font-size:1.12rem; }
+#portal .unified-portal-tools { margin-left:auto; display:flex; align-items:center; gap:16px; color:#61766e; min-width:0; }
+#portal .unified-portal-tools #accountEmail { overflow-wrap:anywhere; font-size:.8rem; }
+#portal .unified-portal-tools #logoutButton { flex-shrink:0; }
+#portal #commandHomeButton[hidden] { display:none !important; }
+#controlScreen .command-quick-link[hidden] { display:none !important; }
+#portal .screen .section-intro { scroll-margin-top:90px; }
+@media(max-width:800px) {
+  #portal .workspace { padding:0 16px 35px; }
+  #portal .unified-portal-bar { flex-wrap:wrap; gap:10px; }
+  #portal .unified-portal-brand { font-size:1rem; }
+  #portal .unified-portal-tools { flex-basis:100%; justify-content:flex-end; }
+  #portal .unified-portal-tools #accountEmail { font-size:.72rem; }
+}
