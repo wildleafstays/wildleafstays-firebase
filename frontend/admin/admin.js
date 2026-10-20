@@ -777,11 +777,7 @@ function setupSingleCommandNavigation() {
   button.addEventListener("click", () => void run(() => showScreen("control")));
   const container = document.querySelector("#portal .workspace");
   container?.prepend(button);
-  const accountControls = document.querySelector("#portal .sidebar-foot");
-  if (accountControls && container) {
-    accountControls.classList.add("command-account-controls");
-    container.append(accountControls);
-  }
+
 }
 setupSingleCommandNavigation();
 
@@ -1094,6 +1090,14 @@ async function showScreen(name) {
   byId("screenTitle").textContent = title;
   const isSuperAdmin = (state.session?.platformRoles || []).includes("SUPER_ADMIN");
   portal.classList.toggle("command-center-mode", isSuperAdmin);
+  const accountControls = byId("portal").querySelector(".sidebar-foot");
+  if (accountControls) {
+    accountControls.classList.toggle("command-account-controls", isSuperAdmin);
+    const target = isSuperAdmin
+      ? byId("portal").querySelector(".workspace")
+      : byId("portal").querySelector(".sidebar");
+    if (target && accountControls.parentElement !== target) target.append(accountControls);
+  }
   const back = byId("commandBackButton");
   if (back) back.hidden = !isSuperAdmin || name === "control";
   if (isSuperAdmin && name !== "control") {
