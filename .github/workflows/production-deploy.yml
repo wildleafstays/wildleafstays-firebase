@@ -523,55 +523,59 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          CACHE_BUSTER="release=${{ steps.release.outputs.short_sha }}"
-
-          curl --fail --silent --show-error --retry 5 \
-            "https://www.wildleafstays.com/admin/index.html?${CACHE_BUSTER}" \
-            -o /tmp/live-admin-index.html
-          curl --fail --silent --show-error --retry 5 \
-            "https://www.wildleafstays.com/admin/admin.js?${CACHE_BUSTER}" \
-            -o /tmp/live-admin.js
-          curl --fail --silent --show-error --retry 5 \
-            "https://www.wildleafstays.com/customer/app.js?${CACHE_BUSTER}" \
-            -o /tmp/live-customer-app.js
-
-          curl --fail --silent --show-error --retry 5 \
-            "https://www.wildleafstays.com/customer/index.html?${CACHE_BUSTER}" \
-            -o /tmp/live-customer-index.html
-          curl --fail --silent --show-error --retry 5 \
-            "https://www.wildleafstays.com/customer/property.html?${CACHE_BUSTER}" \
-            -o /tmp/live-customer-property.html
-
-          # Report the exact mismatched path without dumping private content.
-          mismatch=0
-          for pair in \
-            "frontend/admin/index.html:/tmp/live-admin-index.html" \
-            "frontend/admin/admin.js:/tmp/live-admin.js" \
-            "frontend/customer/index.html:/tmp/live-customer-index.html" \
-            "frontend/customer/property.html:/tmp/live-customer-property.html" \
-            "frontend/customer/app.js:/tmp/live-customer-app.js"; do
-            expected="${pair%%:*}"
-            actual="${pair#*:}"
-            if cmp -s "$expected" "$actual"; then
-              echo "MATCH: $expected"
-            else
-              echo "::error::Live Hosting mismatch: $expected"
-              printf 'Expected SHA256: '
-              sha256sum "$expected" | cut -d' ' -f1
-              printf 'Served SHA256: '
-              sha256sum "$actual" | cut -d' ' -f1
+          # Hosting edge caches may briefly lag a newly finalized release. Preserve
+          # exact byte comparisons and fail closed after a bounded retry window.
+          set -euo pipefail
+          paths=(
+            "admin/index.html"
+            "admin/admin.js"
+            "customer/index.html"
+            "customer/property.html"
+            "customer/app.js"
+          )
+          verified=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            echo "Checking custom-domain Hosting consistency (attempt $attempt of 8)"
+            mismatch=0
+            for path in "${paths[@]}"; do
+              expected="frontend/$path"
+              served="/tmp/live-${path//\//-}"
+              url="https://www.wildleafstays.com/$path?release=${{ steps.release.outputs.short_sha }}&verify_attempt=$attempt"
+              if ! curl --fail --silent --show-error --retry 2 --retry-delay 2 --max-time 30 "$url" -o "$served"; then
+                echo "Hosting fetch failed: $path (attempt $attempt)"
+                mismatch=1
+              elif ! cmp -s "$expected" "$served"; then
+                echo "Not yet matching: $path (attempt $attempt)"
+                mismatch=1
+              else
+                echo "MATCH: $path"
+              fi
+            done
+            if ! grep -Fq "SMARTSTAY PUBLIC TEST" /tmp/live-customer-index.html ||
+               ! grep -Fq "SMARTSTAY PUBLIC TEST" /tmp/live-customer-property.html; then
+              echo "Required public-test notice is not yet confirmed"
               mismatch=1
             fi
-          done
-
-          for page in /tmp/live-customer-index.html /tmp/live-customer-property.html; do
-            if ! grep -Fq "SMARTSTAY PUBLIC TEST" "$page"; then
-              echo "::error::Required SmartStay public-test notice missing in $page"
-              mismatch=1
+            if (( mismatch == 0 )); then
+              verified=1
+              break
             fi
+            if (( attempt < 8 )); then sleep 15; fi
           done
-          if (( mismatch != 0 )); then
-            echo "::error::Failing closed: Hosting content does not match the release. Existing rollback steps will run."
+          if (( verified != 1 )); then
+            echo "::error::Custom-domain Hosting did not converge to the release after eight checks."
+            for path in "${paths[@]}"; do
+              expected="frontend/$path"
+              served="/tmp/live-${path//\//-}"
+              if [[ ! -f "$served" ]] || ! cmp -s "$expected" "$served"; then
+                echo "::error::Live Hosting mismatch: $path"
+                echo "Expected SHA256: $(sha256sum "$expected" | cut -d' ' -f1)"
+                if [[ -f "$served" ]]; then
+                  echo "Served SHA256: $(sha256sum "$served" | cut -d' ' -f1)"
+                fi
+              fi
+            done
+            echo "::error::Failing closed; existing backend and Hosting rollback steps will run."
             exit 1
           fi
           echo "Firebase Hosting static files and public-test notices match the release commit"
