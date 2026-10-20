@@ -742,8 +742,13 @@ function setupCommandCenterWorkspaces() {
   quick.className = "command-quick-links";
   quick.setAttribute("aria-label", "Management workspaces");
   const choices = [
-    ["Properties and approvals", "Review properties awaiting verification", "reviews"],
+    ["All properties", "View and manage your registered properties", "properties"],
+    ["Property approvals", "Review pending property verification requests", "reviews"],
     ["Website studio", "Manage campaign slides and destination content", "homepage"],
+    ["Property reservations", "Manage reservations for a selected property", "reservations"],
+    ["Rates & inventory", "Open property rates and availability calendar", "calendar"],
+    ["My hotel dashboard", "Property operations and daily performance", "dashboard"],
+    ["Business setup", "Manage your business onboarding", "business"],
   ];
   for (const [label, description, target] of choices) {
     const button = document.createElement("button");
@@ -761,6 +766,38 @@ function setupCommandCenterWorkspaces() {
 }
 
 setupCommandCenterWorkspaces();
+
+function setupUnifiedPortalNavigation() {
+  const workspace = document.querySelector("#portal .workspace");
+  const header = document.querySelector("#portal .workspace-head");
+  if (!workspace || !header || byId("unifiedPortalBar")) return;
+  const bar = document.createElement("header");
+  bar.id = "unifiedPortalBar";
+  bar.className = "unified-portal-bar";
+  const home = document.createElement("button");
+  home.type = "button";
+  home.id = "commandHomeButton";
+  home.className = "button-secondary";
+  home.textContent = "← Back to Command Center";
+  home.addEventListener("click", () => {
+    const target = availableScreens(state.session).includes("control") ? "control" :
+      availableScreens(state.session).includes("dashboard") ? "dashboard" :
+      availableScreens(state.session)[0];
+    void run(() => showScreen(target));
+  });
+  const brand = textElement("strong", "unified-portal-brand", "Wildleaf Management");
+  const tools = document.createElement("span");
+  tools.className = "unified-portal-tools";
+  const account = byId("accountEmail");
+  const logout = byId("logoutButton");
+  if (account) tools.append(account);
+  if (logout) tools.append(logout);
+  bar.append(home, brand, tools);
+  header.before(bar);
+}
+
+setupUnifiedPortalNavigation();
+
 
 
 function setupHomepageCreateSlidePanels() {
@@ -1011,7 +1048,7 @@ auth.onAuthStateChanged(async (user) => {
   portal.classList.remove("hidden");
   await run(async () => {
     await loadSession();
-    await showScreen(availableScreens(state.session)[0]);
+    await showScreen(availableScreens(state.session).includes("control") ? "control" : availableScreens(state.session)[0]);
   });
 });
 
@@ -1068,6 +1105,13 @@ async function showScreen(name) {
   const [eyebrow, title] = screenCopy[name];
   byId("screenEyebrow").textContent = eyebrow;
   byId("screenTitle").textContent = title;
+  const rootScreen = availableScreens(state.session).includes("control") ? "control" :
+    availableScreens(state.session).includes("dashboard") ? "dashboard" :
+    availableScreens(state.session)[0];
+  const homeButton = byId("commandHomeButton");
+  if (homeButton) homeButton.hidden = name === rootScreen;
+  const barTitle = byId("unifiedPortalBar")?.querySelector(".unified-portal-brand");
+  if (barTitle) barTitle.textContent = name === rootScreen ? "Wildleaf Management" : title;
   portal.classList.toggle("command-center-mode", name === "control" && (state.session?.platformRoles || []).includes("SUPER_ADMIN"));
   document.querySelectorAll("[data-command-target]").forEach((button) => {
     button.hidden = !availableScreens(state.session).includes(button.dataset.commandTarget);
