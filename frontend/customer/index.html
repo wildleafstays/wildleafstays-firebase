@@ -31,7 +31,6 @@
       <nav class="site-nav desktop-nav" aria-label="Primary navigation">
         <a href="#destinations">Destinations</a>
         <a href="#stays">Stays</a>
-        <a href="#why-wildleaf">Why Wildleaf</a>
         <a href="#contact">Contact</a>
       </nav>
 
@@ -156,14 +155,7 @@
             <strong style="display:block;margin-bottom:.4rem">Children’s ages at check-in</strong>
             <div id="smartstayChildAgeFields" style="display:flex;flex-wrap:wrap;gap:.75rem"></div>
           </div>
-          <label class="search-field smartstay-mode-choice">
-            <span>How would you like to stay?</span>
-            <select id="stayMode" name="stayMode">
-              <option value="all">Show all stays</option>
-              <option value="room">Book individual rooms</option>
-              <option value="entire">Book an entire property</option>
-            </select>
-          </label>
+          <select id="stayMode" name="stayMode" class="sr-only" aria-label="Stay mode"><option value="all">All stays</option><option value="entire">Entire villas</option><option value="room">Book by room</option></select>
           <input id="privateStay" name="privateStay" type="checkbox" hidden aria-hidden="true" tabindex="-1" />
           <button class="button button-primary search-button" type="submit">Find my stay</button>
         </form>
@@ -178,33 +170,18 @@
       </section>
 
       <section id="stays" class="section stays-section" aria-label="Stay categories">
+        <div class="discovery-toolbar" id="discoveryToolbar" hidden>
+          <div class="discovery-heading-minimal"><p class="eyebrow">DISCOVER WILDLEAF</p><h2 id="discoveryLocationTitle">Available stays</h2></div>
+          <div class="stay-mode-tabs" role="group" aria-label="Choose how to book">
+            <button type="button" class="stay-mode-tab is-active" data-stay-mode="all" aria-pressed="true">All Stays</button>
+            <button type="button" class="stay-mode-tab" data-stay-mode="entire" aria-pressed="false">Entire Villas</button>
+            <button type="button" class="stay-mode-tab" data-stay-mode="room" aria-pressed="false">Book By Room</button>
+          </div>
+        </div>
         <p id="resultsStatus" class="sr-only" role="status">Loading live properties…</p>
         <div id="results" class="property-category-sections" aria-live="polite"></div>
       </section>
 
-      <section id="why-wildleaf" class="section promise-section">
-        <div class="promise-intro">
-          <p class="eyebrow">Book with confidence</p>
-          <h2>Beautiful stays.<br />Clear decisions.</h2>
-        </div>
-        <div class="promise-grid">
-          <article>
-            <span>01</span>
-            <h3>Live availability</h3>
-            <p>See current availability for the dates and stay type you actually want.</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h3>Transparent pricing</h3>
-            <p>See the stay price clearly before you move into the secure booking flow.</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h3>Verified confirmation</h3>
-            <p>Your reservation is confirmed only after secure payment is verified.</p>
-          </article>
-        </div>
-      </section>
     </main>
 
     <footer id="contact" class="site-footer">
