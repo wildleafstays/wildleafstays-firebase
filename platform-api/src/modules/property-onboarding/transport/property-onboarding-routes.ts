@@ -200,6 +200,33 @@ export async function registerPropertyOnboardingRoutes(
   const service = new PropertyOnboardingService();
   const uploads = new PropertyAssetUploadService(deps.propertyAssetStorage, service);
 
+  app.get<{ Querystring: { cursor?: string; limit?: number } }>(
+    "/v1/platform/hotels/directory",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Platform Hotel Directory"],
+        summary: "List all hotels and owner contact details for Wildleaf Super Admin",
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            cursor: { type: "string", format: "uuid" },
+            limit: { type: "integer", minimum: 1, maximum: 50, default: 30 }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      if (!request.actor) throw new AuthenticationError();
+      void reply.header("cache-control", "private, no-store");
+      return service.listPlatformHotelDirectory(
+        deps.db, request.actor, request.query.cursor, request.query.limit
+      );
+    }
+  );
+
   app.get<{ Querystring: PlatformReviewQueueQuery }>(
     "/v1/platform/property-reviews",
     {
