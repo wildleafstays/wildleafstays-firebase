@@ -691,6 +691,8 @@ function setupHomepageCreateSlidePanels() {
     summary.textContent = label;
     form.replaceWith(wrap);
     wrap.append(summary, form);
+    const list = byId(formId === "homepageHeroCreateForm" ? "homepageHeroList" : "entirePropertyHeroList");
+    if (list) list.after(wrap);
   }
 }
 
