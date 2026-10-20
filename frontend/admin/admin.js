@@ -5001,13 +5001,22 @@ function renderReviewList() {
   const list = byId("reviewList");
   list.replaceChildren();
   if (!state.reviewItems.length) {
-    list.append(
+    const empty = document.createElement("div");
+    empty.className = "empty-state card review-queue-empty";
+    empty.append(
+      textElement("strong", "", "No properties awaiting this review"),
       textElement(
         "p",
-        "empty-state card",
-        "No properties match this review status.",
+        "",
+        "This queue includes submitted and review-stage properties only. Draft and live hotels remain available in All Hotels.",
       ),
     );
+    if (availableScreens(state.session).includes("hotels")) {
+      const openDirectory = button("View all hotels", () => void run(() => showScreen("hotels")));
+      openDirectory.type = "button";
+      empty.append(openDirectory);
+    }
+    list.append(empty);
     return;
   }
   for (const item of state.reviewItems) {
