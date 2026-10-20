@@ -638,79 +638,14 @@ function renderProperties(properties) {
     return;
   }
 
-  const orderedCategories = [...(state.propertyTaxonomy.categories || [])]
-    .filter((category) => category.enabled)
-    .sort(
-      (left, right) =>
-        Number(left.sortOrder || 0) - Number(right.sortOrder || 0) ||
-        left.name.localeCompare(right.name),
-    );
-
-  let renderedCount = 0;
-  for (const category of orderedCategories) {
-    const categoryProperties = visibleProperties.filter(
-      (property) => property.propertyCategoryId === category.id,
-    );
-    if (!categoryProperties.length) continue;
-
-    const section = element("section", "property-category-section");
-    section.dataset.categoryId = category.id;
-
-    const heading = element("div", "property-category-heading");
-    heading.append(
-      element("h2", "", category.homepageHeading || category.name),
-      element(
-        "span",
-        "property-category-count",
-        `${categoryProperties.length} ${categoryProperties.length === 1 ? "property" : "properties"}`,
-      ),
-    );
-
-    const rail = element("div", "property-category-rail");
-    categoryProperties.forEach((property, index) => {
-      rail.append(propertyCard(property, index));
-      renderedCount += 1;
-    });
-
-    section.append(heading, rail);
-    results.append(section);
-  }
-
-  // Published stays must not disappear when taxonomy is missing, inactive,
-  // or temporarily unavailable. The search backend already vetted these stays.
-  const categorizedIds = new Set(orderedCategories.map((category) => category.id));
-  const uncategorized = visibleProperties.filter((property) =>
-    !categorizedIds.has(property.propertyCategoryId)
-  );
-  if (uncategorized.length) {
-    const section = element("section", "property-category-section");
-    section.dataset.categoryId = "other-stays";
-    const heading = element("div", "property-category-heading");
-    heading.append(
-      element("h2", "", "More Wildleaf stays"),
-      element("span", "property-category-count",
-        `${uncategorized.length} ${uncategorized.length === 1 ? "property" : "properties"}`)
-    );
-    const rail = element("div", "property-category-rail");
-    uncategorized.forEach((property, index) => {
-      rail.append(propertyCard(property, renderedCount + index));
-    });
-    section.append(heading, rail);
-    results.append(section);
-    renderedCount += uncategorized.length;
-  }
-
-  if (!renderedCount) {
-    resultsStatus.textContent = "No visible property categories match these filters.";
-    results.append(
-      element(
-        "div",
-        "empty-state",
-        "No category section is currently available for these properties.",
-      ),
-    );
-    return;
-  }
+  // One location-wide, visual-first directory; property eligibility remains
+  // entirely controlled by the existing search and stay-mode filters.
+  const section = element("section", "property-category-section discovery-all-stays");
+  const rail = element("div", "property-category-rail");
+  visibleProperties.forEach((property, index) => rail.append(propertyCard(property, index)));
+  section.append(rail);
+  results.append(section);
+  const renderedCount = visibleProperties.length;
 
   const unverified = visibleProperties.filter((property) => property.smartstayCheckUnavailable).length;
   const verified = renderedCount - unverified;
