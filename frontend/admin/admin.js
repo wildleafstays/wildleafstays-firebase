@@ -687,15 +687,6 @@ function setupCommandCenterWorkspaces() {
   if (intro) intro.classList.add("command-intro-compact");
   const title = screen.querySelector(".section-intro h2");
   if (title) title.textContent = "Wildleaf Command Center";
-  if (intro && !byId("commandRefreshButton")) {
-    const refresh = document.createElement("button");
-    refresh.id = "commandRefreshButton";
-    refresh.type = "button";
-    refresh.className = "button-secondary command-refresh";
-    refresh.textContent = "Refresh";
-    refresh.addEventListener("click", () => byId("refreshButton").click());
-    intro.append(refresh);
-  }
   const metrics = byId("controlCenterMetrics");
   const gst = byId("platformGstRulesCard");
   const filters = byId("controlCenterFilters");
@@ -745,11 +736,6 @@ function setupCommandCenterWorkspaces() {
     ["All Hotels", "Every hotel, owner email, hotel contact, rooms and amenities", "hotels"],
     ["Property approvals & submitted hotels", "Inspect property submissions and existing review details", "reviews"],
     ["Website studio", "Manage campaign slides and destination content", "homepage"],
-    ["My properties", "Manage properties associated with your business account", "properties"],
-    ["Property reservations", "Manage property-specific booking operations", "reservations"],
-    ["Rates & inventory", "Manage an authorized property's inventory calendar", "calendar"],
-    ["Property dashboard", "Daily performance for an authorized property", "dashboard"],
-    ["Business setup", "Manage the business account onboarding", "business"],
   ];
   for (const [label, description, target] of choices) {
     const button = document.createElement("button");
