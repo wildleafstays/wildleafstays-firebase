@@ -757,6 +757,18 @@ function propertyCard(property, index) {
       : property.smartstaySuggestedMode === "villa"
         ? "Entire place to yourself"
         : "Rooms available";
+  const facts = element("div", "listing-facts");
+  const bookingKind = property.smartstaySuggestedMode === "villa"
+    ? "⌂ Entire property"
+    : property.smartstaySuggestedMode === "hotel"
+      ? "▦ Rooms"
+      : "⌂ Stay";
+  facts.append(
+    element("span", "listing-fact", bookingKind),
+    element("span", "listing-fact", property.smartstayCheckUnavailable
+      ? "◌ Verify availability" : "✓ Dates checked"),
+  );
+  body.append(facts);
   body.append(element("span", "smartstay-offer-label", offerType));
 
   if (property.smartstayCheckUnavailable) {
