@@ -1115,3 +1115,28 @@ input[type="file"] {
   #controlScreen .command-intro-compact { align-items: start; }
   #controlScreen .command-refresh { margin-left: auto; }
 }
+
+/* Super admin navigation is hub-and-spoke, never a second sidebar flow. */
+.portal.command-center-mode { grid-template-columns: minmax(0, 1fr) !important; }
+.portal.command-center-mode > .sidebar { display: none !important; }
+.portal.command-center-mode .workspace { min-width: 0; width: 100%; max-width: none; }
+.portal.command-center-mode:has(#controlScreen:not(.hidden)) .workspace-head { display: none; }
+.portal.command-center-mode:has(.screen:not(#controlScreen):not(.hidden)) .workspace-head { display: flex; }
+.portal.command-center-mode .command-back { display: inline-flex; margin: 0 0 20px; }
+.portal.command-center-mode .command-back[hidden] { display: none; }
+.portal .command-account-controls { display: none; }
+.portal.command-center-mode .command-account-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 36px 0 4px;
+  padding: 18px 0 8px;
+  border-top: 1px solid #dce7e1;
+}
+.portal.command-center-mode .command-account-controls a { color: #076e60; }
+@media(max-width:700px) {
+ .portal.command-center-mode .workspace { padding: 16px; }
+ .portal.command-center-mode .command-account-controls { justify-content: flex-start; }
+}
