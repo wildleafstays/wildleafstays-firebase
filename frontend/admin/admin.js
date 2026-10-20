@@ -5559,6 +5559,52 @@ function renderHomepageDestinationImages() {
 }
 
 
+function taxonomyEditorDisclosure(label, description, card, list) {
+  const details = document.createElement("details");
+  details.className = "partner-taxonomy-item";
+  const summary = document.createElement("summary");
+  const title = textElement("strong", "", label);
+  const context = textElement("small", "muted", description);
+  const titleGroup = document.createElement("span");
+  titleGroup.className = "partner-taxonomy-label";
+  titleGroup.append(title, context);
+  summary.append(titleGroup);
+  details.append(summary, card);
+  details.addEventListener("toggle", () => {
+    if (!details.open) return;
+    list.querySelectorAll("details.partner-taxonomy-item").forEach((other) => {
+      if (other !== details) other.open = false;
+    });
+  });
+  list.append(details);
+}
+
+function setupTaxonomyCreateDisclosures() {
+  const grid = document.querySelector("#homepageScreen .taxonomy-admin-grid");
+  if (!grid || grid.dataset.disclosuresReady === "true") return;
+  grid.dataset.disclosuresReady = "true";
+  for (const [id, label] of [
+    ["propertyCategoryCreateForm", "Add new property category"],
+    ["propertyTypeCreateForm", "Add new property type"],
+  ]) {
+    const form = byId(id);
+    if (!form) continue;
+    const details = document.createElement("details");
+    details.className = "partner-taxonomy-create";
+    details.append(textElement("summary", "", label));
+    form.replaceWith(details);
+    details.append(form);
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      grid.querySelectorAll("details.partner-taxonomy-create").forEach((other) => {
+        if (other !== details) other.open = false;
+      });
+    });
+  }
+}
+
+setupTaxonomyCreateDisclosures();
+
 function renderPropertyTaxonomyManager() {
   const typeCategorySelect = byId("taxonomyTypeCategory");
   populateTaxonomyCategorySelect(typeCategorySelect, typeCategorySelect.value, {
@@ -5568,7 +5614,7 @@ function renderPropertyTaxonomyManager() {
 
   const categoryList = byId("propertyCategoryAdminList");
   categoryList.replaceChildren();
-  for (const category of state.propertyTaxonomy.categories || []) {
+  for (const [index, category] of (state.propertyTaxonomy.categories || []).entries()) {
     const card = document.createElement("article");
     card.className = "homepage-content-item taxonomy-content-item";
 
@@ -5625,12 +5671,12 @@ function renderPropertyTaxonomyManager() {
     });
 
     card.append(status, form);
-    categoryList.append(card);
+    taxonomyEditorDisclosure(`Category ${index + 1}: ${category.name}`, category.enabled ? "Active" : "Disabled", card, categoryList);
   }
 
   const typeList = byId("propertyTypeAdminList");
   typeList.replaceChildren();
-  for (const propertyType of state.propertyTaxonomy.types || []) {
+  for (const [index, propertyType] of (state.propertyTaxonomy.types || []).entries()) {
     const parent = taxonomyCategoryById(propertyType.categoryId);
     const card = document.createElement("article");
     card.className = "homepage-content-item taxonomy-content-item";
@@ -5674,7 +5720,7 @@ function renderPropertyTaxonomyManager() {
     });
 
     card.append(heading, form);
-    typeList.append(card);
+    taxonomyEditorDisclosure(`Type ${index + 1}: ${propertyType.name}`, `Under ${parent?.name || "Unknown category"} · ${propertyType.enabled ? "Active" : "Disabled"}`, card, typeList);
   }
 }
 
