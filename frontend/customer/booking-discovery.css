@@ -268,3 +268,16 @@
 .home-page #stays #results > .empty-state { grid-column:1/-1; }
 @media (max-width:1020px) { .home-page #stays:not([hidden]) #results { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:650px) { .home-page #stays:not([hidden]) #results { grid-template-columns:minmax(0,1fr); gap:16px; } }
+
+.home-page .listing-facts { display:flex; gap:7px; flex-wrap:wrap; margin:4px 0 2px; }
+.home-page .listing-fact {
+ display:inline-flex; align-items:center; min-height:29px; padding:5px 10px;
+ background:#f2f7f3; border:1px solid #e0eae1; color:#305746;
+ border-radius:999px; font-size:.72rem; font-weight:750; letter-spacing:.005em;
+}
+.home-page .smartstay-offer-label { display:inline-flex; align-items:center; border-radius:8px; padding:5px 8px; font-size:.72rem; }
+.home-page .property-card-body .smartstay-offer-note { color:#64756a; font-size:.73rem; }
+.home-page .property-card .smartstay-price-summary {
+ display:grid; grid-template-columns:1fr; gap:3px; align-items:start;
+}
+.home-page .property-card .smartstay-price-disclaimer { color:#819086; font-size:.65rem; line-height:1.35; }
