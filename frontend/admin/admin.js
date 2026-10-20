@@ -678,6 +678,27 @@ function setupHomepageDisclosurePanels() {
 
 setupHomepageDisclosurePanels();
 
+function setupHomepageCreateSlidePanels() {
+  for (const [formId, label] of [
+    ["homepageHeroCreateForm", "Add a new homepage campaign slide"],
+    ["entirePropertyHeroCreateForm", "Add a new entire-property campaign slide"],
+  ]) {
+    const form = byId(formId);
+    if (!form || form.closest(".partner-create-slide")) continue;
+    const wrap = document.createElement("details");
+    wrap.className = "partner-create-slide";
+    const summary = document.createElement("summary");
+    summary.textContent = label;
+    form.replaceWith(wrap);
+    wrap.append(summary, form);
+    const list = byId(formId === "homepageHeroCreateForm" ? "homepageHeroList" : "entirePropertyHeroList");
+    if (list) list.after(wrap);
+  }
+}
+
+setupHomepageCreateSlidePanels();
+
+
 
 function setEditorSectionStatus(sectionKey, label, complete = false) {
   const status = byId(`editorSectionStatus-${sectionKey}`);
@@ -5166,6 +5187,7 @@ function renderHeroSlidesForPlacement(placement, listId, emptyMessage) {
   const list = byId(listId);
   if (!list) return;
   list.replaceChildren();
+  list.classList.add("partner-slide-stack");
   const slides = (state.homepageContent.heroSlides || []).filter(
     (slide) => slide.placement === placement,
   );
@@ -5174,7 +5196,7 @@ function renderHeroSlidesForPlacement(placement, listId, emptyMessage) {
     return;
   }
 
-  for (const slide of slides) {
+  for (const [index, slide] of slides.entries()) {
     const card = document.createElement("article");
     card.className = "homepage-content-item";
 
@@ -5328,8 +5350,37 @@ function renderHeroSlidesForPlacement(placement, listId, emptyMessage) {
     actions.className = "homepage-content-actions";
     actions.append(imageForm, archive);
 
-    card.append(preview, status, form, actions);
-    list.append(card);
+    const disclosure = document.createElement("details");
+    disclosure.className = "partner-slide";
+    disclosure.dataset.slideId = slide.id;
+    const summary = document.createElement("summary");
+    summary.className = "partner-slide-summary";
+    const thumb = document.createElement("img");
+    thumb.className = "partner-slide-thumb";
+    thumb.src = image.src;
+    thumb.alt = "";
+    thumb.loading = "lazy";
+    const summaryText = document.createElement("span");
+    summaryText.className = "partner-slide-titleblock";
+    summaryText.append(
+      textElement("strong", "", `Campaign slide ${index + 1}`),
+      textElement("small", "", slide.headline || "Untitled campaign"),
+    );
+    const summaryMeta = document.createElement("span");
+    summaryMeta.className = slide.enabled ? "partner-slide-state enabled" : "partner-slide-state";
+    summaryMeta.textContent = slide.enabled ? "Published" : "Hidden";
+    summary.append(thumb, summaryText, summaryMeta);
+    const body = document.createElement("div");
+    body.className = "partner-slide-body";
+    body.append(preview, status, form, actions);
+    disclosure.append(summary, body);
+    disclosure.addEventListener("toggle", () => {
+      if (!disclosure.open) return;
+      list.querySelectorAll("details.partner-slide").forEach((other) => {
+        if (other !== disclosure) other.open = false;
+      });
+    });
+    list.append(disclosure);
   }
 }
 
@@ -5508,6 +5559,52 @@ function renderHomepageDestinationImages() {
 }
 
 
+function taxonomyEditorDisclosure(label, description, card, list) {
+  const details = document.createElement("details");
+  details.className = "partner-taxonomy-item";
+  const summary = document.createElement("summary");
+  const title = textElement("strong", "", label);
+  const context = textElement("small", "muted", description);
+  const titleGroup = document.createElement("span");
+  titleGroup.className = "partner-taxonomy-label";
+  titleGroup.append(title, context);
+  summary.append(titleGroup);
+  details.append(summary, card);
+  details.addEventListener("toggle", () => {
+    if (!details.open) return;
+    list.querySelectorAll("details.partner-taxonomy-item").forEach((other) => {
+      if (other !== details) other.open = false;
+    });
+  });
+  list.append(details);
+}
+
+function setupTaxonomyCreateDisclosures() {
+  const grid = document.querySelector("#homepageScreen .taxonomy-admin-grid");
+  if (!grid || grid.dataset.disclosuresReady === "true") return;
+  grid.dataset.disclosuresReady = "true";
+  for (const [id, label] of [
+    ["propertyCategoryCreateForm", "Add new property category"],
+    ["propertyTypeCreateForm", "Add new property type"],
+  ]) {
+    const form = byId(id);
+    if (!form) continue;
+    const details = document.createElement("details");
+    details.className = "partner-taxonomy-create";
+    details.append(textElement("summary", "", label));
+    form.replaceWith(details);
+    details.append(form);
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      grid.querySelectorAll("details.partner-taxonomy-create").forEach((other) => {
+        if (other !== details) other.open = false;
+      });
+    });
+  }
+}
+
+setupTaxonomyCreateDisclosures();
+
 function renderPropertyTaxonomyManager() {
   const typeCategorySelect = byId("taxonomyTypeCategory");
   populateTaxonomyCategorySelect(typeCategorySelect, typeCategorySelect.value, {
@@ -5517,7 +5614,7 @@ function renderPropertyTaxonomyManager() {
 
   const categoryList = byId("propertyCategoryAdminList");
   categoryList.replaceChildren();
-  for (const category of state.propertyTaxonomy.categories || []) {
+  for (const [index, category] of (state.propertyTaxonomy.categories || []).entries()) {
     const card = document.createElement("article");
     card.className = "homepage-content-item taxonomy-content-item";
 
@@ -5574,12 +5671,12 @@ function renderPropertyTaxonomyManager() {
     });
 
     card.append(status, form);
-    categoryList.append(card);
+    taxonomyEditorDisclosure(`Category ${index + 1}: ${category.name}`, category.enabled ? "Active" : "Disabled", card, categoryList);
   }
 
   const typeList = byId("propertyTypeAdminList");
   typeList.replaceChildren();
-  for (const propertyType of state.propertyTaxonomy.types || []) {
+  for (const [index, propertyType] of (state.propertyTaxonomy.types || []).entries()) {
     const parent = taxonomyCategoryById(propertyType.categoryId);
     const card = document.createElement("article");
     card.className = "homepage-content-item taxonomy-content-item";
@@ -5623,7 +5720,7 @@ function renderPropertyTaxonomyManager() {
     });
 
     card.append(heading, form);
-    typeList.append(card);
+    taxonomyEditorDisclosure(`Type ${index + 1}: ${propertyType.name}`, `Under ${parent?.name || "Unknown category"} · ${propertyType.enabled ? "Active" : "Disabled"}`, card, typeList);
   }
 }
 
