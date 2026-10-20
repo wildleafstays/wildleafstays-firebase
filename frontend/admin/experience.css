@@ -1140,3 +1140,20 @@ input[type="file"] {
  .portal.command-center-mode .workspace { padding: 16px; }
  .portal.command-center-mode .command-account-controls { justify-content: flex-start; }
 }
+
+/* Super Admin portfolio: one hotel record open at a time. */
+#hotelsScreen .command-directory { display:grid;gap:12px;margin:22px 0; }
+#hotelsScreen .command-hotel { border:1px solid #d6e5dd;border-radius:18px;overflow:hidden;background:#fff; }
+#hotelsScreen .command-hotel[open] { border-color:#5ab3a3;box-shadow:0 8px 24px rgba(11,81,73,.08); }
+#hotelsScreen .command-hotel > summary { list-style:none;display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;padding:20px 24px;color:#133e34; }
+#hotelsScreen .command-hotel > summary::-webkit-details-marker { display:none; }
+#hotelsScreen .command-hotel > summary::after { content:"+";color:#008c76;font-size:26px; }
+#hotelsScreen .command-hotel[open] > summary::after { content:"−"; }
+#hotelsScreen .command-hotel > summary:focus-visible { outline:3px solid #dbaa64;outline-offset:-3px; }
+#hotelsScreen .command-hotel-caption { display:grid;gap:5px;flex:1; }
+#hotelsScreen .command-hotel-caption small { color:#687c76; }
+#hotelsScreen .command-hotel-count { border-radius:30px;padding:6px 10px;background:#e6f7f2;font-size:.8rem;white-space:nowrap; }
+#hotelsScreen .command-hotel-body { padding:22px 24px;border-top:1px solid #e7eeea;display:grid;gap:10px; }
+#hotelsScreen .command-hotel-body h4 { margin:17px 0 2px; }
+#hotelsScreen .command-hotel-body p { margin:0;overflow-wrap:anywhere; }
+@media(max-width:650px){ #hotelsScreen .command-hotel > summary { flex-wrap:wrap;padding:16px; } #hotelsScreen .command-hotel-body { padding:16px; }}
