@@ -678,6 +678,80 @@ function setupHomepageDisclosurePanels() {
 
 setupHomepageDisclosurePanels();
 
+/* Command Center UI only: move existing nodes, never duplicate forms or permissions. */
+function setupCommandCenterWorkspaces() {
+  const screen = byId("controlScreen");
+  if (!screen || screen.dataset.commandReady === "true") return;
+  screen.dataset.commandReady = "true";
+  const title = screen.querySelector(".section-intro h2");
+  if (title) title.textContent = "Wildleaf Command Center";
+  const metrics = byId("controlCenterMetrics");
+  const gst = byId("platformGstRulesCard");
+  const filters = byId("controlCenterFilters");
+  const list = byId("controlCenterReservationList");
+  const more = byId("loadMoreControlCenterReservations");
+  if (!metrics || !gst || !filters || !list || !more) return;
+
+  function workspace(label, description, nodes) {
+    const details = document.createElement("details");
+    details.className = "command-workspace";
+    const summary = document.createElement("summary");
+    const title = textElement("strong", "", label);
+    const caption = textElement("small", "", description);
+    const copy = document.createElement("span");
+    copy.className = "command-workspace-copy";
+    copy.append(title, caption);
+    summary.append(copy);
+    const body = document.createElement("div");
+    body.className = "command-workspace-body";
+    nodes[0].before(details);
+    body.append(...nodes);
+    details.append(summary, body);
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      screen.querySelectorAll(".command-workspace").forEach((other) => {
+        if (other !== details) other.open = false;
+      });
+    });
+    return details;
+  }
+
+  workspace(
+    "All reservations",
+    "Search all properties, review booking statuses and manage guest movements",
+    [filters, list, more],
+  );
+  workspace(
+    "Platform GST & statutory settings",
+    "Super-admin configuration · open only when needed",
+    [gst],
+  );
+
+  const quick = document.createElement("section");
+  quick.className = "command-quick-links";
+  quick.setAttribute("aria-label", "Management workspaces");
+  const choices = [
+    ["Properties and approvals", "Review properties awaiting verification", "reviews"],
+    ["Website studio", "Manage campaign slides and destination content", "homepage"],
+  ];
+  for (const [label, description, target] of choices) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "command-quick-link";
+    button.dataset.commandTarget = target;
+    button.append(textElement("strong", "", label), textElement("small", "", description));
+    button.addEventListener("click", () => {
+      if (!availableScreens(state.session).includes(target)) return;
+      void run(() => showScreen(target));
+    });
+    quick.append(button);
+  }
+  metrics.after(quick);
+}
+
+setupCommandCenterWorkspaces();
+
+
 function setupHomepageCreateSlidePanels() {
   for (const [formId, label] of [
     ["homepageHeroCreateForm", "Add a new homepage campaign slide"],
