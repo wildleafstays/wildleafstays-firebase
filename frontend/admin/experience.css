@@ -1095,3 +1095,23 @@ input[type="file"] {
  #controlScreen .command-workspace > summary { padding:17px; }
  #controlScreen .command-workspace-body { padding:12px; }
 }
+
+/* Super-admin Command Center: one title, no duplicate sidebar navigation. */
+.portal.command-center-mode .workspace-head { display: none; }
+.portal.command-center-mode .sidebar nav { display: none; }
+#controlScreen .command-intro-compact {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+  margin-bottom: 20px;
+}
+#controlScreen .command-intro-compact > div { flex: 1 1 280px; }
+#controlScreen .command-intro-compact .eyebrow { display: none; }
+#controlScreen .command-intro-compact h2 { margin: 0; }
+#controlScreen .command-refresh { align-self: center; }
+.portal.command-center-mode .workspace { padding-top: 20px; }
+@media(max-width:700px) {
+  #controlScreen .command-intro-compact { align-items: start; }
+  #controlScreen .command-refresh { margin-left: auto; }
+}
