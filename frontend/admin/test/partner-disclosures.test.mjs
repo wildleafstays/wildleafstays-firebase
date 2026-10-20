@@ -16,8 +16,8 @@ test("homepage sections use native click-to-open disclosures without altering fo
   for (const id of [
     "homepageHeroCreateForm",
     "homepageHeroList",
-    "homepageEntireHeroCreateForm",
-    "homepageDestinationCreateForm",
+    "entirePropertyHeroCreateForm",
+    "homepageDestinationForm",
   ]) {
     assert.ok(html.includes(id), `Original portal control ${id} remains available`);
   }
