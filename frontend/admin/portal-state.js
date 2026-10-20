@@ -44,6 +44,7 @@ export function editableProperty(status) {
 export function availableScreens(session) {
   const screens = [];
   if (canUseControlCenter(session)) screens.push("control");
+  if ((session?.platformRoles || []).includes("SUPER_ADMIN")) screens.push("hotels");
   if (canManageHomepageContent(session)) screens.push("homepage");
   if (canReviewProperties(session)) screens.push("reviews");
   if ((session?.organizations || []).length > 0)

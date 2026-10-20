@@ -32,7 +32,7 @@ test("role-aware navigation separates hotel owners from Wildleaf reviewers", () 
     "reservations",
     "calendar",
   ]);
-  assert.deepEqual(availableScreens(reviewer), ["control", "homepage", "reviews"]);
+  assert.deepEqual(availableScreens(reviewer), ["control", "hotels", "homepage", "reviews"]);
   assert.equal(canReviewProperties(owner), false);
   assert.equal(canReviewProperties(reviewer), true);
   assert.equal(canUseControlCenter(reviewer), true);
