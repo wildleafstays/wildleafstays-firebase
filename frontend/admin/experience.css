@@ -1118,6 +1118,7 @@ input[type="file"] {
 
 /* Single workspace: no permanent sidebar or duplicate flow. */
 #portal.portal { display:block; min-height:100vh; }
+#portal.portal.hidden { display:none !important; }
 #portal .sidebar { display:none !important; }
 #portal .workspace { width:100%; max-width:none; margin:0; padding:0 34px 50px; min-width:0; }
 #portal .workspace-head { display:none !important; }
