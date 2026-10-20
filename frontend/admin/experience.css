@@ -1157,3 +1157,12 @@ input[type="file"] {
 #hotelsScreen .command-hotel-body h4 { margin:17px 0 2px; }
 #hotelsScreen .command-hotel-body p { margin:0;overflow-wrap:anywhere; }
 @media(max-width:650px){ #hotelsScreen .command-hotel > summary { flex-wrap:wrap;padding:16px; } #hotelsScreen .command-hotel-body { padding:16px; }}
+
+/* One heading per Super Admin workspace. Hide the secondary global header,
+   while preserving each screen's own title, filters and Back navigation. */
+.portal.command-center-mode .workspace-head,
+.portal.command-center-mode:has(.screen:not(#controlScreen):not(.hidden)) .workspace-head {
+  display: none !important;
+}
+.portal.command-center-mode #commandRefreshButton { display: none !important; }
+.portal.command-center-mode .command-back { margin-bottom: 14px; }
