@@ -1068,3 +1068,30 @@ input[type="file"] {
   #homepageScreen .partner-taxonomy-item > summary,
   #homepageScreen .partner-taxonomy-create > summary { padding: 14px; }
 }
+
+/* Wildleaf Command Center — operational overview first, details on demand. */
+#controlScreen .section-intro { margin-bottom: 20px; }
+#controlScreen .metric-grid { margin-bottom: 24px; }
+#controlScreen .command-quick-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:22px; }
+#controlScreen .command-quick-link { text-align:left;display:grid;gap:5px;padding:19px 22px;min-height:90px;background:linear-gradient(110deg,#eaf8f4,#fffaf0);border:1px solid #cde6dc;border-radius:16px;color:#154739;cursor:pointer; }
+#controlScreen .command-quick-link strong { font-size:1rem; }
+#controlScreen .command-quick-link small { color:#607775;font-size:.82rem; }
+#controlScreen .command-quick-link:hover { border-color:#35a38e;box-shadow:0 5px 18px rgba(0,80,62,.1); }
+#controlScreen .command-workspace { margin:0 0 14px;border:1px solid #d5e5df;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 5px 20px rgba(24,54,42,.045); }
+#controlScreen .command-workspace > summary { display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;list-style:none;padding:22px 24px;color:#143e32; }
+#controlScreen .command-workspace > summary::-webkit-details-marker { display:none; }
+#controlScreen .command-workspace > summary::after { content:"+";font-size:25px;color:#008776; }
+#controlScreen .command-workspace[open] > summary::after { content:"−"; }
+#controlScreen .command-workspace > summary:hover { background:#f0faf7; }
+#controlScreen .command-workspace > summary:focus-visible,
+#controlScreen .command-quick-link:focus-visible { outline:3px solid #e4a34c;outline-offset:-3px; }
+#controlScreen .command-workspace-copy { display:grid;gap:5px; }
+#controlScreen .command-workspace-copy strong { font-size:1.13rem; }
+#controlScreen .command-workspace-copy small { color:#667c74;font-size:.86rem; }
+#controlScreen .command-workspace-body { border-top:1px solid #e5eee9;padding:18px; }
+#controlScreen .command-workspace-body > .card { margin-bottom:16px; }
+@media (max-width:800px) {
+ #controlScreen .command-quick-links { grid-template-columns:minmax(0,1fr); }
+ #controlScreen .command-workspace > summary { padding:17px; }
+ #controlScreen .command-workspace-body { padding:12px; }
+}
