@@ -742,8 +742,13 @@ function setupCommandCenterWorkspaces() {
   quick.className = "command-quick-links";
   quick.setAttribute("aria-label", "Management workspaces");
   const choices = [
-    ["Properties and approvals", "Review properties awaiting verification", "reviews"],
+    ["Property approvals & submitted hotels", "Inspect property submissions and existing review details", "reviews"],
     ["Website studio", "Manage campaign slides and destination content", "homepage"],
+    ["My properties", "Manage properties associated with your business account", "properties"],
+    ["Property reservations", "Manage property-specific booking operations", "reservations"],
+    ["Rates & inventory", "Manage an authorized property's inventory calendar", "calendar"],
+    ["Property dashboard", "Daily performance for an authorized property", "dashboard"],
+    ["Business setup", "Manage the business account onboarding", "business"],
   ];
   for (const [label, description, target] of choices) {
     const button = document.createElement("button");
@@ -761,6 +766,20 @@ function setupCommandCenterWorkspaces() {
 }
 
 setupCommandCenterWorkspaces();
+function setupSingleCommandNavigation() {
+  if (byId("commandBackButton")) return;
+  const button = document.createElement("button");
+  button.id = "commandBackButton";
+  button.type = "button";
+  button.className = "button-secondary command-back";
+  button.textContent = "← Back to Command Center";
+  button.hidden = true;
+  button.addEventListener("click", () => void run(() => showScreen("control")));
+  const container = document.querySelector("#portal .workspace");
+  container?.prepend(button);
+}
+setupSingleCommandNavigation();
+
 
 
 function setupHomepageCreateSlidePanels() {
@@ -1068,7 +1087,14 @@ async function showScreen(name) {
   const [eyebrow, title] = screenCopy[name];
   byId("screenEyebrow").textContent = eyebrow;
   byId("screenTitle").textContent = title;
-  portal.classList.toggle("command-center-mode", name === "control" && (state.session?.platformRoles || []).includes("SUPER_ADMIN"));
+  const isSuperAdmin = (state.session?.platformRoles || []).includes("SUPER_ADMIN");
+  portal.classList.toggle("command-center-mode", isSuperAdmin);
+  const back = byId("commandBackButton");
+  if (back) back.hidden = !isSuperAdmin || name === "control";
+  if (isSuperAdmin && name !== "control") {
+    // All secondary screens return to the single Wildleaf Command Center.
+    back?.setAttribute("aria-label", "Back to Wildleaf Command Center");
+  }
   document.querySelectorAll("[data-command-target]").forEach((button) => {
     button.hidden = !availableScreens(state.session).includes(button.dataset.commandTarget);
   });
