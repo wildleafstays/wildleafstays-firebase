@@ -222,7 +222,10 @@ export async function registerPropertyOnboardingRoutes(
       if (!request.actor) throw new AuthenticationError();
       void reply.header("cache-control", "private, no-store");
       return service.listPlatformHotelDirectory(
-        deps.db, request.actor, request.query.cursor, request.query.limit
+        deps.db,
+        request.actor,
+        request.query.cursor,
+        request.query.limit
       );
     }
   );
