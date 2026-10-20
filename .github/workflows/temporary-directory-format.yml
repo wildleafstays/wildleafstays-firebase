@@ -1,0 +1,31 @@
+name: Temporary Directory Formatter
+on:
+  push:
+    branches:
+      - feat/admin-all-hotels-directory-20261020
+    paths:
+      - .github/workflows/temporary-directory-format.yml
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform-api/package-lock.json
+      - run: npm ci
+        working-directory: platform-api
+      - run: npx prettier --write src/modules/property-onboarding/application/property-onboarding-service.ts src/modules/property-onboarding/transport/property-onboarding-routes.ts
+        working-directory: platform-api
+      - name: Save formatting only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add platform-api/src/modules/property-onboarding/application/property-onboarding-service.ts platform-api/src/modules/property-onboarding/transport/property-onboarding-routes.ts
+          git diff --cached --quiet || (git commit -m "style: apply project Prettier to directory code" && git push origin HEAD:feat/admin-all-hotels-directory-20261020)
