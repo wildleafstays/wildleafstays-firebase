@@ -542,14 +542,38 @@ jobs:
             "https://www.wildleafstays.com/customer/property.html?${CACHE_BUSTER}" \
             -o /tmp/live-customer-property.html
 
-          cmp frontend/admin/index.html /tmp/live-admin-index.html
-          cmp frontend/admin/admin.js /tmp/live-admin.js
-          cmp frontend/customer/index.html /tmp/live-customer-index.html
-          cmp frontend/customer/property.html /tmp/live-customer-property.html
-          cmp frontend/customer/app.js /tmp/live-customer-app.js
+          # Report the exact mismatched path without dumping private content.
+          mismatch=0
+          for pair in \
+            "frontend/admin/index.html:/tmp/live-admin-index.html" \
+            "frontend/admin/admin.js:/tmp/live-admin.js" \
+            "frontend/customer/index.html:/tmp/live-customer-index.html" \
+            "frontend/customer/property.html:/tmp/live-customer-property.html" \
+            "frontend/customer/app.js:/tmp/live-customer-app.js"; do
+            expected="${pair%%:*}"
+            actual="${pair#*:}"
+            if cmp -s "$expected" "$actual"; then
+              echo "MATCH: $expected"
+            else
+              echo "::error::Live Hosting mismatch: $expected"
+              printf 'Expected SHA256: '
+              sha256sum "$expected" | cut -d' ' -f1
+              printf 'Served SHA256: '
+              sha256sum "$actual" | cut -d' ' -f1
+              mismatch=1
+            fi
+          done
 
-          grep -F "SMARTSTAY PUBLIC TEST" /tmp/live-customer-index.html >/dev/null
-          grep -F "SMARTSTAY PUBLIC TEST" /tmp/live-customer-property.html >/dev/null
+          for page in /tmp/live-customer-index.html /tmp/live-customer-property.html; do
+            if ! grep -Fq "SMARTSTAY PUBLIC TEST" "$page"; then
+              echo "::error::Required SmartStay public-test notice missing in $page"
+              mismatch=1
+            fi
+          done
+          if (( mismatch != 0 )); then
+            echo "::error::Failing closed: Hosting content does not match the release. Existing rollback steps will run."
+            exit 1
+          fi
           echo "Firebase Hosting static files and public-test notices match the release commit"
 
       - name: Restore prior backend if live Hosting verification fails
