@@ -55,11 +55,45 @@ stayModeSelect?.addEventListener("change", () => {
   form.elements.namedItem("privateStay").checked = stayModeSelect.value === "entire";
   updateMobileSearchSummary();
 });
+
+// Stay-style choice belongs to the results experience, not the homepage search.
+const discoveryToolbar = document.querySelector("#discoveryToolbar");
+const discoveryLocationTitle = document.querySelector("#discoveryLocationTitle");
+const resultsSection = document.querySelector("#stays");
+const modeTabs = [...document.querySelectorAll("[data-stay-mode]")];
+function syncDiscoveryMode() {
+  const current = stayModeSelect?.value || "all";
+  for (const tab of modeTabs) {
+    const active = tab.dataset.stayMode === current;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-pressed", String(active));
+  }
+}
+function showDiscoveryResults() {
+  if (resultsSection) resultsSection.hidden = false;
+  if (discoveryToolbar) discoveryToolbar.hidden = false;
+  if (discoveryLocationTitle) {
+    discoveryLocationTitle.textContent = form.destination.value.trim()
+      ? `Stays in ${form.destination.value.trim()}`
+      : "Explore all stays";
+  }
+  syncDiscoveryMode();
+}
+modeTabs.forEach((tab) => tab.addEventListener("click", () => {
+  if (!stayModeSelect) return;
+  stayModeSelect.value = tab.dataset.stayMode;
+  form.elements.namedItem("privateStay").checked = stayModeSelect.value === "entire";
+  syncDiscoveryMode();
+  void loadProperties();
+}));
+if (resultsSection) resultsSection.hidden = !initialSearch.has("destination");
+
 void initialize();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   closeMobileSearch();
+  showDiscoveryResults();
   void loadProperties();
   document.querySelector("#stays")?.scrollIntoView({
     block: "start",
@@ -127,6 +161,7 @@ async function initialize() {
       });
     }
   }
+  if (initialSearch.has("destination")) showDiscoveryResults();
   await loadProperties();
 }
 
