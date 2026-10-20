@@ -742,6 +742,7 @@ function setupCommandCenterWorkspaces() {
   quick.className = "command-quick-links";
   quick.setAttribute("aria-label", "Management workspaces");
   const choices = [
+    ["All Hotels", "Every hotel, owner email, hotel contact, rooms and amenities", "hotels"],
     ["Property approvals & submitted hotels", "Inspect property submissions and existing review details", "reviews"],
     ["Website studio", "Manage campaign slides and destination content", "homepage"],
     ["My properties", "Manage properties associated with your business account", "properties"],
@@ -1073,6 +1074,7 @@ const screenCopy = {
   homepage: ["Wildleaf management", "Homepage content"],
   editor: ["Partner portal", "Property registration"],
   reviews: ["Wildleaf management", "Property reviews"],
+  hotels: ["Wildleaf management", "All Hotels"],
 };
 
 async function showScreen(name) {
@@ -1113,6 +1115,7 @@ async function showScreen(name) {
   if (name === "reservations") await loadReservations(false);
   if (name === "calendar") await loadCalendarWorkspace();
   if (name === "control") await loadControlCenter(false);
+  if (name === "hotels") await loadHotelDirectory(false);
   if (name === "homepage") await loadHomepageContent();
   if (name === "reviews") await loadReviews(false);
 }
@@ -3569,6 +3572,81 @@ async function loadPlatformGstRules() {
   state.platformGstRules = result.rules || [];
   renderPlatformGstRules();
 }
+
+let hotelDirectoryItems = [];
+let hotelDirectoryCursor = null;
+async function loadHotelDirectory(append) {
+  if (!append) {
+    hotelDirectoryItems = [];
+    hotelDirectoryCursor = null;
+  }
+  const qs = new URLSearchParams({ limit: "30" });
+  if (append && hotelDirectoryCursor) qs.set("cursor", hotelDirectoryCursor);
+  const page = await api(`/v1/platform/hotels/directory?${qs}`);
+  hotelDirectoryItems = [...hotelDirectoryItems, ...(page.items || [])];
+  hotelDirectoryCursor = page.nextCursor;
+  renderHotelDirectory();
+}
+function renderHotelDirectory() {
+  const list = byId("hotelDirectoryList");
+  const query = byId("hotelDirectorySearch").value.trim().toLowerCase();
+  list.replaceChildren();
+  const hotels = hotelDirectoryItems.filter(item =>
+    [item.name, item.legalBusinessName, item.city, item.tradingName]
+      .some(value => String(value || "").toLowerCase().includes(query))
+  );
+  if (!hotels.length) list.append(textElement("p", "empty-state", "No matching hotels in the loaded directory."));
+  for (const [index, hotel] of hotels.entries()) {
+    const details = document.createElement("details");
+    details.className = "command-hotel";
+    const summary = document.createElement("summary");
+    const name = textElement("strong", "", hotel.name);
+    const context = textElement("small", "", [hotel.city, hotel.stateRegion, hotel.status].filter(Boolean).join(" · "));
+    const caption = document.createElement("span");
+    caption.className = "command-hotel-caption";
+    caption.append(name, context);
+    summary.append(caption, textElement("span", "command-hotel-count", `${hotel.totalPhysicalUnits} units`));
+    const body = document.createElement("div");
+    body.className = "command-hotel-body";
+    const fields = [
+      ["Business", hotel.legalBusinessName],
+      ["Trading name", hotel.tradingName],
+      ["Hotel email", hotel.hotelContactEmail],
+      ["Hotel phone", hotel.hotelContactPhone],
+      ["Address", [hotel.addressLine1, hotel.city, hotel.stateRegion].filter(Boolean).join(", ")],
+      ["Booking mode", hotel.saleMode],
+      ["Description", hotel.description],
+    ];
+    for (const [label, value] of fields) {
+      const line = document.createElement("p");
+      line.append(textElement("strong", "", `${label}: `), textElement("span", "", value || "Not provided"));
+      body.append(line);
+    }
+    body.append(textElement("h4", "", "Registered business owners"));
+    if (!hotel.ownerContacts?.length) body.append(textElement("p", "muted", "No active owner contact recorded."));
+    for (const owner of hotel.ownerContacts || []) {
+      body.append(textElement("p", "", `${owner.name || "Owner"} · ${owner.email || "Email not supplied"}`));
+    }
+    body.append(textElement("h4", "", "Room categories"));
+    if (!hotel.roomCategories?.length) body.append(textElement("p", "muted", "No room categories registered."));
+    for (const room of hotel.roomCategories || []) {
+      body.append(textElement("p", "", `${room.name} · ${room.physicalUnitCount} physical units · ${room.status}`));
+    }
+    body.append(textElement("h4", "", "Property amenities"));
+    body.append(textElement("p", "", hotel.amenities?.length ? hotel.amenities.map(a => a.name).join(" · ") : "None recorded"));
+    details.append(summary, body);
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      list.querySelectorAll("details.command-hotel").forEach(other => {
+        if (other !== details) other.open = false;
+      });
+    });
+    list.append(details);
+  }
+  byId("loadMoreHotels").classList.toggle("hidden", !hotelDirectoryCursor);
+}
+byId("hotelDirectorySearch").addEventListener("input", renderHotelDirectory);
+byId("loadMoreHotels").addEventListener("click", () => run(() => loadHotelDirectory(true)));
 
 async function loadControlCenter(append) {
   const dateInput = byId("controlCenterDate");
