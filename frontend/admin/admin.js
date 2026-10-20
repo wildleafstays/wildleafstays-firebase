@@ -687,6 +687,15 @@ function setupCommandCenterWorkspaces() {
   if (intro) intro.classList.add("command-intro-compact");
   const title = screen.querySelector(".section-intro h2");
   if (title) title.textContent = "Wildleaf Command Center";
+  if (intro && !byId("commandRefreshButton")) {
+    const refresh = document.createElement("button");
+    refresh.id = "commandRefreshButton";
+    refresh.type = "button";
+    refresh.className = "button-secondary command-refresh";
+    refresh.textContent = "Refresh";
+    refresh.addEventListener("click", () => byId("refreshButton").click());
+    intro.append(refresh);
+  }
   const metrics = byId("controlCenterMetrics");
   const gst = byId("platformGstRulesCard");
   const filters = byId("controlCenterFilters");
