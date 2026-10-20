@@ -1128,6 +1128,7 @@ byId("refreshButton").addEventListener("click", () =>
     else if (state.screen === "reservations") await loadReservations(false);
     else if (state.screen === "calendar") await loadCalendarWorkspace();
     else if (state.screen === "control") await loadControlCenter(false);
+    else if (state.screen === "hotels") await loadHotelDirectory(false);
     else if (state.screen === "homepage") await loadHomepageContent();
     else if (state.screen === "editor" && state.property) {
       await openProperty(state.property.organizationId, state.property.id);
