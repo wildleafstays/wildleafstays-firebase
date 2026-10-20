@@ -4,7 +4,7 @@ import type { ActorContext } from "../../access/domain/actor-context.js";
 import { AuthorizationService } from "../../access/domain/authorization-service.js";
 import { Permissions } from "../../access/domain/permissions.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
-import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import { assertOwnerPropertyEditable } from "../../properties/application/owner-responsibility-service.js";
@@ -224,6 +224,70 @@ export class PropertyOnboardingService {
       throw new NotFoundError("Property document not found");
     }
     return document.storage_key;
+  }
+
+  async listPlatformHotelDirectory(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    cursor?: string,
+    requestedLimit = 30
+  ): Promise<JsonObject> {
+    if (!actor.platformRoles.includes("SUPER_ADMIN")) {
+      throw new ForbiddenError("Super Admin access is required for the hotel directory");
+    }
+    const limit = Math.max(1, Math.min(50, requestedLimit));
+    const rows = await db.selectFrom("properties as p")
+      .innerJoin("organizations as o", "o.id", "p.organization_id")
+      .select([
+        "p.id", "p.organization_id", "p.name", "p.status", "p.city", "p.state_region",
+        "p.contact_phone", "p.contact_email", "p.description", "p.short_description",
+        "p.sale_mode", "p.address_line_1", "p.country_code",
+        "o.legal_name as owner_organization", "o.trading_name as trading_name",
+      ])
+      .$if(Boolean(cursor), (query) => query.where("p.id", ">", cursor || ""))
+      .orderBy("p.id", "asc").limit(limit + 1).execute();
+    const page = rows.slice(0, limit);
+    const items = await Promise.all(page.map(async (row) => {
+      const [owners, roomCategories, units, amenities] = await Promise.all([
+        db.selectFrom("organization_memberships as membership")
+          .innerJoin("users as u", "u.id", "membership.user_id")
+          .select(["u.email", "u.display_name", "membership.role_code"])
+          .where("membership.organization_id", "=", row.organization_id)
+          .where("membership.role_code", "=", "OWNER")
+          .where("membership.status", "=", "ACTIVE")
+          .execute(),
+        db.selectFrom("room_categories")
+          .select(["id", "name", "max_occupancy", "status"])
+          .where("property_id", "=", row.id).execute(),
+        db.selectFrom("physical_units")
+          .select(["id", "room_category_id", "display_name", "unit_code", "status"])
+          .where("property_id", "=", row.id).execute(),
+        db.selectFrom("property_amenities as a")
+          .leftJoin("amenity_catalog as c", "c.code", "a.amenity_code")
+          .select(["a.amenity_code", "c.name"])
+          .where("a.property_id", "=", row.id).execute(),
+      ]);
+      return {
+        propertyId: row.id, organizationId: row.organization_id,
+        name: row.name, status: row.status,
+        city: row.city, stateRegion: row.state_region, countryCode: row.country_code,
+        hotelContactEmail: row.contact_email, hotelContactPhone: row.contact_phone,
+        legalBusinessName: row.owner_organization, tradingName: row.trading_name,
+        ownerContacts: owners.map(o => ({ name: o.display_name, email: o.email, role: o.role_code })),
+        saleMode: row.sale_mode, description: row.description || row.short_description,
+        addressLine1: row.address_line_1,
+        roomCategories: roomCategories.map(c => ({
+          id: c.id, name: c.name, maxOccupancy: c.max_occupancy, status: c.status,
+          physicalUnitCount: units.filter(u => u.room_category_id === c.id).length,
+        })),
+        totalPhysicalUnits: units.length,
+        amenities: amenities.map(a => ({ code: a.amenity_code, name: a.name || a.amenity_code })),
+      };
+    }));
+    return {
+      items,
+      nextCursor: rows.length > limit ? page[page.length - 1]!.id : null,
+    };
   }
 
   async listPlatformReviewQueue(
