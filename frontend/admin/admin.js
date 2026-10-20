@@ -683,6 +683,8 @@ function setupCommandCenterWorkspaces() {
   const screen = byId("controlScreen");
   if (!screen || screen.dataset.commandReady === "true") return;
   screen.dataset.commandReady = "true";
+  const intro = screen.querySelector(".section-intro");
+  if (intro) intro.classList.add("command-intro-compact");
   const title = screen.querySelector(".section-intro h2");
   if (title) title.textContent = "Wildleaf Command Center";
   const metrics = byId("controlCenterMetrics");
@@ -1038,7 +1040,7 @@ const screenCopy = {
   properties: ["Partner portal", "Your properties"],
   reservations: ["Partner operations", "Reservations"],
   calendar: ["Partner operations", "Rates and inventory"],
-  control: ["Wildleaf management", "Operations control center"],
+  control: ["Wildleaf management", "Wildleaf Command Center"],
   homepage: ["Wildleaf management", "Homepage content"],
   editor: ["Partner portal", "Property registration"],
   reviews: ["Wildleaf management", "Property reviews"],
@@ -1057,6 +1059,7 @@ async function showScreen(name) {
   const [eyebrow, title] = screenCopy[name];
   byId("screenEyebrow").textContent = eyebrow;
   byId("screenTitle").textContent = title;
+  portal.classList.toggle("command-center-mode", name === "control" && (state.session?.platformRoles || []).includes("SUPER_ADMIN"));
   document.querySelectorAll("[data-command-target]").forEach((button) => {
     button.hidden = !availableScreens(state.session).includes(button.dataset.commandTarget);
   });
