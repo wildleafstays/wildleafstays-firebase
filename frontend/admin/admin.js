@@ -777,6 +777,11 @@ function setupSingleCommandNavigation() {
   button.addEventListener("click", () => void run(() => showScreen("control")));
   const container = document.querySelector("#portal .workspace");
   container?.prepend(button);
+  const accountControls = document.querySelector("#portal .sidebar-foot");
+  if (accountControls && container) {
+    accountControls.classList.add("command-account-controls");
+    container.append(accountControls);
+  }
 }
 setupSingleCommandNavigation();
 
