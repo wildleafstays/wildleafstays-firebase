@@ -638,6 +638,47 @@ function setupPropertyEditorWorkspace() {
 
 setupPropertyEditorWorkspace();
 
+// Presentation-only disclosure panels: retain every existing form, ID and listener.
+function setupHomepageDisclosurePanels() {
+  const root = document.querySelector("#homepageScreen .homepage-manager-grid");
+  if (!root || root.dataset.disclosuresReady === "true") return;
+  root.dataset.disclosuresReady = "true";
+
+  const cards = [...root.children].filter((item) =>
+    item.matches("section.homepage-manager-card"),
+  );
+  for (const [index, card] of cards.entries()) {
+    const title = card.querySelector("h3")?.textContent?.trim() ||
+      `Content section ${index + 1}`;
+    const description = card.querySelector(".card-heading .muted")?.textContent?.trim() || "";
+    const details = document.createElement("details");
+    details.className = "partner-disclosure";
+    const summary = document.createElement("summary");
+    const heading = document.createElement("span");
+    heading.className = "partner-disclosure-heading";
+    heading.textContent = title;
+    const subheading = document.createElement("span");
+    subheading.className = "partner-disclosure-description";
+    subheading.textContent = description;
+    const label = document.createElement("span");
+    label.className = "partner-disclosure-label";
+    label.append(heading, subheading);
+    summary.append(label);
+    details.append(summary);
+    card.replaceWith(details);
+    details.append(card);
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      root.querySelectorAll("details.partner-disclosure").forEach((other) => {
+        if (other !== details) other.open = false;
+      });
+    });
+  }
+}
+
+setupHomepageDisclosurePanels();
+
+
 function setEditorSectionStatus(sectionKey, label, complete = false) {
   const status = byId(`editorSectionStatus-${sectionKey}`);
   if (!status) return;
