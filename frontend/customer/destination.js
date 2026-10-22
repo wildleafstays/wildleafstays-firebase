@@ -72,15 +72,9 @@ function wireEvents() {
 async function initialize() {
   const destination = destinationLabel();
   document.title = `${destination} stays | Wildleaf Stays`;
-  document.querySelector("#destinationTitle").textContent = `Stays in ${destination}`;
-  document.querySelector("#destinationSubtitle").textContent =
-    `Private rooms and entire retreats in ${destination}, checked for your dates and guests.`;
-  document.querySelector("#destinationGuideTitle").textContent =
-    `Stay differently in ${destination}`;
   form.destination.value = destination;
   syncModeTabs();
   updateMobileSummary();
-  void loadDestinationMedia(destination);
   await loadProperties();
 }
 
@@ -132,31 +126,11 @@ function renderChildAgeFields() {
   }
 }
 
-async function loadDestinationMedia(destination) {
-  try {
-    const data = await apiRequest("/v1/public/homepage", { cache: "default" });
-    const match = (data.destinations || []).find(
-      (item) => String(item.city || "").toLowerCase() === destination.toLowerCase(),
-    );
-    if (match?.imageId) {
-      document.querySelector("#destinationHero").style.setProperty(
-        "--destination-image",
-        `url("/v1/public/homepage/media/${encodeURIComponent(match.imageId)}")`,
-      );
-    }
-    if (match?.description) {
-      document.querySelector("#destinationGuideCopy").textContent = match.description;
-    }
-  } catch {
-    // Destination discovery remains usable without optional editorial content.
-  }
-}
-
 async function loadProperties() {
   const searchVersion = ++state.searchVersion;
   renderLoading();
   resultsSummary.textContent = "Checking live availability and date-specific rates…";
-  resultsHeading.textContent = `Available stays in ${destinationLabel()}`;
+  resultsHeading.textContent = `Stays in ${destinationLabel()}`;
 
   try {
     const childAges = selectedChildAges();
@@ -239,7 +213,10 @@ function renderProperties() {
 
 function propertyCard(property, index) {
   const card = element("article", "destination-card");
-  const media = element("div", "destination-card-media");
+  const url = propertyUrl(property);
+  const media = element("a", "destination-card-media");
+  media.href = url;
+  media.setAttribute("aria-label", `View ${property.name}`);
   if (property.coverMediaId) {
     const image = element("img");
     image.src = `/v1/public/properties/${encodeURIComponent(property.publicSlug)}/media/${encodeURIComponent(property.coverMediaId)}`;
@@ -247,6 +224,8 @@ function propertyCard(property, index) {
     image.loading = index < 3 ? "eager" : "lazy";
     image.decoding = "async";
     media.append(image);
+  } else {
+    media.append(element("span", "destination-card-placeholder", property.name.charAt(0)));
   }
   media.append(
     element(
@@ -265,21 +244,50 @@ function propertyCard(property, index) {
     element("h3", "", property.name),
   );
 
+  if (property.shortDescription) {
+    body.append(element("p", "destination-card-description", property.shortDescription));
+  }
+
   const facts = element("div", "destination-card-facts");
   const flexible = property.saleMode === "BOTH";
   const entire = property.smartstaySuggestedMode === "villa" || property.saleMode === "FULL_PROPERTY_ONLY";
-  facts.append(
-    element("span", "", entire ? "Entire property" : "Private rooms"),
-    flexible ? element("span", "", "Rooms or entire stay") : document.createTextNode(""),
-    element("span", "", property.smartstayCheckUnavailable ? "Verify availability" : "Dates checked"),
-  );
+  if (flexible) {
+    facts.append(
+      element("span", "", "Room booking"),
+      element("span", "", "Entire property"),
+    );
+  } else {
+    facts.append(element("span", "", entire ? "Entire property" : "Room booking"));
+  }
+  if (property.propertyTypeName || property.propertyCategoryName) {
+    facts.append(element("span", "", property.propertyTypeName || property.propertyCategoryName));
+  }
   body.append(facts);
 
-  const offer = element("div", "destination-card-offer");
+  const flexibility = flexible
+    ? "Choose individual rooms or reserve the complete property."
+    : entire
+      ? "Reserve the complete property for a private stay."
+      : "Choose the rooms that suit your group.";
+  body.append(element("p", "destination-card-flexibility", flexibility));
+
+  const offer = element("aside", "destination-card-offer");
+  const status = element(
+    "span",
+    property.smartstayCheckUnavailable
+      ? "destination-card-status is-pending"
+      : "destination-card-status",
+    property.smartstayCheckUnavailable ? "Availability to confirm" : "Available for your dates",
+  );
+  offer.append(status, element("span", "destination-card-price-label", "Stay total"));
   if (Number.isSafeInteger(property.smartstayEstimateMinor)) {
     offer.append(
       element("strong", "", money(property.smartstayEstimateMinor, property.smartstayCurrency)),
-      element("small", "", "Estimated accommodation total · taxes and fees confirmed next"),
+      element(
+        "small",
+        "",
+        `${tripNights()} ${tripNights() === 1 ? "night" : "nights"} · taxes shown before payment`,
+      ),
     );
   } else {
     offer.append(
@@ -287,12 +295,12 @@ function propertyCard(property, index) {
       element("small", "", "Final availability confirmed on the property page"),
     );
   }
-  const link = element("a", "button button-primary", "View property");
-  link.href = propertyUrl(property);
+  const link = element("a", "button button-primary", "View stay");
+  link.href = url;
   link.setAttribute("aria-label", `View ${property.name}`);
+  link.append(element("span", "destination-card-arrow", "→"));
   offer.append(link);
-  body.append(offer);
-  card.append(media, body);
+  card.append(media, body, offer);
   return card;
 }
 
@@ -391,6 +399,12 @@ function money(minor, currencyCode) {
     currency: currencyCode || "INR",
     maximumFractionDigits: 0,
   }).format(Number(minor || 0) / 100);
+}
+
+function tripNights() {
+  const arrival = new Date(`${form.arrivalDate.value}T12:00:00`);
+  const departure = new Date(`${form.departureDate.value}T12:00:00`);
+  return Math.max(1, Math.round((departure - arrival) / 86400000));
 }
 
 function shortDate(value) {

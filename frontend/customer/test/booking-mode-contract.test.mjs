@@ -248,9 +248,12 @@ test("destination results support live filters and an app-like mobile search she
   assert.match(destinationHtml, /data-mode="all"/);
   assert.match(destinationHtml, /data-mode="rooms"/);
   assert.match(destinationHtml, /data-mode="entire"/);
+  assert.doesNotMatch(destinationHtml, /id="destinationHero"/);
+  assert.doesNotMatch(destinationHtml, /id="destinationGuide"/);
   assert.match(destinationSource, /function renderProperties\(\)/);
   assert.match(destinationSource, /property\.saleMode !== "FULL_PROPERTY_ONLY"/);
   assert.match(destinationSource, /property\.saleMode === "FULL_PROPERTY_ONLY" \|\| property\.saleMode === "BOTH"/);
+  assert.match(destinationStyles, /\.destination-card\s*\{[\s\S]*grid-template-columns:/);
   assert.match(destinationStyles, /@media \(max-width: 720px\)/);
   assert.match(destinationStyles, /\.destination-search-open \.destination-search-form/);
 });
