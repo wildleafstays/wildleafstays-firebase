@@ -80,13 +80,13 @@ jobs:
             throw new Error("firebase.json hosting.rewrites must be an array");
           }
 
-          if (rewrites.length !== 3) {
+          if (rewrites.length !== 6) {
             throw new Error(
-              `Expected exactly 3 hosting rewrites; found ${rewrites.length}`,
+              `Expected exactly 6 hosting rewrites; found ${rewrites.length}`,
             );
           }
 
-          const [api, v1, spa] = rewrites;
+          const [api, v1, checkout, property, destination, spa] = rewrites;
 
           if (
             api?.source !== "/api/**" ||
@@ -111,12 +111,42 @@ jobs:
           }
 
           if (
+            checkout?.source !== "/checkout/*" ||
+            checkout?.destination !== "/customer/property.html" ||
+            Object.keys(checkout).sort().join(",") !== "destination,source"
+          ) {
+            throw new Error(
+              "Rewrite #3 must be exactly /checkout/* -> /customer/property.html",
+            );
+          }
+
+          if (
+            property?.source !== "/stays/*/*" ||
+            property?.destination !== "/customer/property.html" ||
+            Object.keys(property).sort().join(",") !== "destination,source"
+          ) {
+            throw new Error(
+              "Rewrite #4 must be exactly /stays/*/* -> /customer/property.html",
+            );
+          }
+
+          if (
+            destination?.source !== "/stays/*" ||
+            destination?.destination !== "/customer/destination.html" ||
+            Object.keys(destination).sort().join(",") !== "destination,source"
+          ) {
+            throw new Error(
+              "Rewrite #5 must be exactly /stays/* -> /customer/destination.html",
+            );
+          }
+
+          if (
             spa?.source !== "**" ||
             spa?.destination !== "/customer/index.html" ||
             Object.keys(spa).sort().join(",") !== "destination,source"
           ) {
             throw new Error(
-              "Rewrite #3 must be exactly ** -> /customer/index.html",
+              "Rewrite #6 must be exactly ** -> /customer/index.html",
             );
           }
 

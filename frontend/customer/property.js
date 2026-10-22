@@ -7,7 +7,14 @@ import {
 } from "./api-client.js";
 
 const query = new URLSearchParams(location.search);
-const publicSlug = String(query.get("slug") || "")
+const pathSegments = location.pathname.split("/").filter(Boolean);
+const checkoutView = pathSegments[0] === "checkout";
+const pathSlug = checkoutView
+  ? pathSegments[1]
+  : pathSegments[0] === "stays" && pathSegments.length >= 3
+    ? pathSegments[2]
+    : "";
+const publicSlug = String(query.get("slug") || pathSlug || "")
   .trim()
   .toLowerCase();
 const propertyContent = document.querySelector("#propertyContent");
@@ -29,7 +36,8 @@ const selectionAllocation = document.querySelector("#selectionAllocation");
 const selectionTotal = document.querySelector("#selectionTotal");
 const selectionContinue = document.querySelector("#selectionContinue");
 const guestSummary = document.querySelector("#guestSummary");
-const requestedMode = query.get("mode") === "villa" ? "villa" : "hotel";
+const entirePropertyOffer = document.querySelector("#entirePropertyOffer");
+const roomChoiceDivider = document.querySelector("#roomChoiceDivider");
 
 const state = {
   property: null,
@@ -43,7 +51,12 @@ const state = {
   pollTimer: null,
   pollAttempts: 0,
   polling: false,
-  bookingMode: requestedMode,
+  selectionType: null,
+  entireAvailability: null,
+  entireSelection: null,
+  allowsRooms: true,
+  allowsEntire: false,
+  requestedRooms: clamp(Number(query.get("rooms") || 1), 1, 20),
   availabilityTimer: null,
   availabilityRequestVersion: 0,
   galleryMedia: [],
@@ -68,13 +81,6 @@ if (!publicSlug) {
 }
 
 function wireEvents() {
-  form.unitCount.addEventListener("change", () => {
-    if (state.bookingMode === "villa") {
-      setUnitCount(1);
-      return;
-    }
-    setUnitCount(clamp(Number(form.unitCount.value), 1, 20));
-  });
   form.arrivalDate.addEventListener("change", () => {
     const minimumDeparture = addDays(form.arrivalDate.value, 1);
     form.departureDate.min = minimumDeparture;
@@ -93,7 +99,11 @@ function wireEvents() {
     void searchAvailability();
   });
   selectionContinue?.addEventListener("click", () => {
-    void continueRoomSelection(selectionContinue);
+    if (state.selectionType === "entire") {
+      void continueEntireSelection(selectionContinue);
+    } else {
+      void continueRoomSelection(selectionContinue);
+    }
   });
 
   const photoDialog = document.querySelector("#propertyPhotoDialog");
@@ -130,10 +140,6 @@ function configureInitialSearch() {
     : addDays(arrival, 1);
   const departure =
     departureCandidate > arrival ? departureCandidate : addDays(arrival, 1);
-  const unitCount =
-    state.bookingMode === "villa"
-      ? 1
-      : clamp(Number(query.get("rooms") || 1), 1, 20);
   const adults = clamp(Number(query.get("adults") || 2), 1, 10);
   const children = clamp(Number(query.get("children") || 0), 0, 6);
   const parsedChildAges = (query.get("childAges") || "")
@@ -149,7 +155,7 @@ function configureInitialSearch() {
   form.arrivalDate.value = arrival;
   form.departureDate.min = addDays(arrival, 1);
   form.departureDate.value = departure;
-  form.unitCount.value = String(unitCount);
+  form.unitCount.value = String(state.requestedRooms);
   state.units = [
     {
       adults,
@@ -170,11 +176,17 @@ async function loadProperty() {
     state.property = data.property;
     configureBookingMode(data.property);
     renderProperty(data.property);
+    configureBackLink(data.property);
     propertyContent.classList.remove("hidden");
     // Search is independent of an existing payment. Never delay restoring a
     // recoverable booking while rates or recommendations are slow to respond.
-    void searchAvailability({ resetBooking: false });
-    void searchRoomRecommendations();
+    if (!checkoutView) {
+      void searchAvailability({ resetBooking: false });
+      void searchRoomRecommendations();
+    } else {
+      document.body.classList.add("checkout-view");
+      document.querySelector("#checkoutIntro")?.classList.remove("hidden");
+    }
 
     if (
       state.session.activeCheckout?.reservationId &&
@@ -192,7 +204,8 @@ async function loadProperty() {
         );
       }
     } else {
-      restorePreCheckoutSession();
+      const restored = restorePreCheckoutSession();
+      if (checkoutView && !restored) renderCheckoutUnavailable();
     }
   } catch (error) {
     showPageError(
@@ -220,15 +233,24 @@ function renderProperty(property) {
     property.shortDescription ||
     "Discover a stay designed for unhurried days and memorable evenings.";
 
-  const villa = state.bookingMode === "villa";
-  document.querySelector("#bookingModeBadge").textContent = villa
-    ? "Exclusive entire property"
-    : "Choose rooms for your stay";
+  document.querySelector("#bookingModeBadge").textContent =
+    property.saleMode === "FULL_PROPERTY_ONLY"
+      ? "Private entire property"
+      : property.saleMode === "ROOMS_ONLY"
+        ? "Private rooms"
+        : "Rooms or entire property";
   document.querySelector("#propertyOverviewHeading").textContent =
     "About this stay";
   const facts = document.querySelector("#propertyFacts");
   facts.replaceChildren(
-    fact("Stay", villa ? "Entire property" : "Book by room"),
+    fact(
+      "Stay",
+      property.saleMode === "FULL_PROPERTY_ONLY"
+        ? "Entire property"
+        : property.saleMode === "ROOMS_ONLY"
+          ? "Book by room"
+          : "Rooms or complete property",
+    ),
     fact("Category", property.propertyCategoryName || "Wildleaf stay"),
     fact("Type", property.propertyTypeName || "Stay"),
     fact("Check-in", formatTime(property.checkInTime) || "Contact property"),
@@ -367,51 +389,48 @@ function propertyMediaUrl(mediaId) {
 }
 
 function configureBookingMode(property) {
-  const allowsHotel =
+  state.allowsRooms =
     !property.saleMode ||
     property.saleMode === "ROOMS_ONLY" ||
     property.saleMode === "BOTH";
-  const allowsVilla =
+  state.allowsEntire =
     property.saleMode === "FULL_PROPERTY_ONLY" || property.saleMode === "BOTH";
-
-  if (state.bookingMode === "villa" && !allowsVilla)
-    state.bookingMode = "hotel";
-  if (state.bookingMode === "hotel" && !allowsHotel && allowsVilla)
-    state.bookingMode = "villa";
-
-  const villa = state.bookingMode === "villa";
-  document.querySelector("#unitCountField").classList.toggle("hidden", villa);
-  smartMatchSection?.classList.toggle("hidden", villa);
-  // The return link is configured separately using the original search context.
-  if (villa && state.units.length !== 1) setUnitCount(1);
-  form.unitCount.value = villa ? "1" : String(state.units.length || 1);
+  smartMatchSection?.classList.toggle("hidden", !state.allowsRooms);
+  form.unitCount.value = String(state.requestedRooms);
 }
 
 function renderStayConfiguration(categories) {
   const container = document.querySelector("#stayConfiguration");
   container.replaceChildren();
 
-  if (state.bookingMode === "villa") {
+  const names = categories.map((category) => category.name).filter(Boolean);
+  if (state.allowsEntire && names.length) {
     const summary = element("div", "villa-source-summary");
     summary.append(
-      element("strong", "", "One entire stay, one shared inventory"),
+      element("strong", "", "One property, two ways to stay"),
       element(
         "p",
         "",
-        "The entire stay includes all active rooms. Its price, included guests, maximum occupancy, and date availability are calculated from the room categories below.",
+        "Choose the rooms that suit your group, or reserve every active room and shared space for complete privacy when the property is available.",
       ),
+      element("p", "villa-includes", `Room types: ${names.join(" · ")}`),
     );
-    const names = categories.map((category) => category.name).filter(Boolean);
-    if (names.length)
-      summary.append(
-        element("p", "villa-includes", `Includes: ${names.join(" · ")}`),
-      );
     container.append(summary);
+  }
+}
+
+function configureBackLink(property) {
+  const link = document.querySelector("#backToResults");
+  if (!link) return;
+  const search = preservedSearchParams();
+  if (checkoutView) {
+    link.textContent = "← Back to property";
+    link.href = propertyPageUrl(property, search);
     return;
   }
-
-  // Hotel room categories and occupancy are shown once, in their bookable
-  // rate cards. Repeating them in the property summary makes the page noisy.
+  link.textContent = "← Back to stays";
+  const destination = query.get("destination") || property.city || "all-destinations";
+  link.href = `/stays/${encodeURIComponent(slugify(destination))}?${search}`;
 }
 
 function renderPolicies(policies) {
@@ -440,12 +459,6 @@ function renderPolicies(policies) {
       return card;
     }),
   );
-}
-
-function setUnitCount(count) {
-  if (state.bookingMode === "villa") count = 1;
-  form.unitCount.value = String(count);
-  scheduleAvailabilitySearch();
 }
 
 function renderOccupancyUnits() {
@@ -523,7 +536,7 @@ function partyTotals() {
 }
 
 async function searchRoomRecommendations() {
-  if (state.bookingMode !== "hotel" || !state.property) {
+  if (!state.allowsRooms || !state.property || checkoutView) {
     smartMatchSection?.classList.add("hidden");
     return;
   }
@@ -926,16 +939,22 @@ async function createRoomMixHold({ scrollToGuest = true } = {}) {
     state.session.holdId = data.hold.id;
     state.session.hold = data.hold;
     saveBookingSession(publicSlug, state.session);
+    if (!checkoutView) {
+      navigateToCheckout();
+      return true;
+    }
     renderGuestForm();
     if (scrollToGuest) {
       guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+    return true;
   } catch (error) {
     if (requestVersion !== state.recommendationRequestVersion || state.roomMixQuote?.id !== fingerprint) return;
     renderSectionError(
       quoteSection,
       messageFor(error, "The recommended rooms could not be reserved together."),
     );
+    return false;
   }
 }
 
@@ -964,31 +983,37 @@ async function searchAvailability({ resetBooking = true } = {}) {
   );
 
   try {
-    const discoveryUnits =
-      state.bookingMode === "villa"
-        ? state.units.map((unit) => ({
-            adults: unit.adults,
-            children: availabilityChildrenForUnit(unit),
-          }))
-        : [{ adults: 1, children: 0 }];
-
-    const data = await apiRequest(
-      `/v1/public/properties/${encodeURIComponent(publicSlug)}/availability`,
-      {
-        method: "POST",
-        body: {
-          arrivalDate: form.arrivalDate.value,
-          departureDate: form.departureDate.value,
-          units: discoveryUnits,
+    const party = state.units[0] || { adults: 1, childAges: [] };
+    const request = (units) =>
+      apiRequest(
+        `/v1/public/properties/${encodeURIComponent(publicSlug)}/availability`,
+        {
+          method: "POST",
+          body: {
+            arrivalDate: form.arrivalDate.value,
+            departureDate: form.departureDate.value,
+            units,
+          },
         },
-      },
-    );
+      );
+    const [roomData, entireData] = await Promise.all([
+      state.allowsRooms ? request([{ adults: 1, children: 0 }]) : null,
+      state.allowsEntire
+        ? request([
+            {
+              adults: party.adults,
+              children: availabilityChildrenForUnit(party),
+            },
+          ])
+        : null,
+    ]);
     if (requestVersion !== state.availabilityRequestVersion) return;
-    state.availability = data;
-    renderAvailability(data);
+    state.availability = roomData || entireData;
+    state.entireAvailability = entireData;
+    renderAvailability(state.availability);
 
-    if (state.bookingMode === "hotel") {
-      void refreshCategoryAvailabilityCounts(data, requestVersion);
+    if (state.allowsRooms && roomData) {
+      void refreshCategoryAvailabilityCounts(roomData, requestVersion);
     }
   } catch (error) {
     if (requestVersion !== state.availabilityRequestVersion) return;
@@ -1001,43 +1026,141 @@ async function searchAvailability({ resetBooking = true } = {}) {
 }
 
 function renderAvailability(data) {
-  const expectedProductType =
-    state.bookingMode === "villa" ? "FULL_PROPERTY" : "ROOM_CATEGORY";
-  const matchingOptions = (data.options || []).filter(
-    (option) => option.productType === expectedProductType,
+  if (!data) return;
+  const roomOptions = (data.options || []).filter(
+    (option) => option.productType === "ROOM_CATEGORY",
   );
-  const available = matchingOptions.filter((option) => option.available);
-
-  if (state.bookingMode === "villa") {
-    showInlineMessage(
-      available.length
-        ? `The entire property is available for ${data.search.nights} ${data.search.nights === 1 ? "night" : "nights"}.`
-        : "The entire property is not available for these dates and guests.",
-      available.length ? "success" : "warning",
-    );
-    availabilityResults.classList.remove("room-category-rail");
-    availabilityResults.replaceChildren(
-      ...available.map((option) => availabilityCard(option, data.search.nights)),
-    );
-    renderSelectionRibbon();
-    return;
-  }
-
-  const groups = groupRoomOptions(available);
+  const availableRoomOptions = roomOptions.filter((option) => option.available);
+  const groups = groupRoomOptions(roomOptions);
+  const nights = data.search.nights;
+  renderEntirePropertyOffer(nights);
   showInlineMessage(
-    groups.length
-      ? `${groups.length} room ${groups.length === 1 ? "category" : "categories"} available for ${data.search.nights} ${data.search.nights === 1 ? "night" : "nights"}.`
-      : "No room currently satisfies your dates and guests.",
-    groups.length ? "success" : "warning",
+    availableRoomOptions.length || state.entireSelection || availableEntireOption()
+      ? `Live choices are ready for ${nights} ${nights === 1 ? "night" : "nights"}. Select the rooms you need or reserve the complete property.`
+      : "No booking option currently satisfies these dates and guests.",
+    availableRoomOptions.length || availableEntireOption() ? "success" : "warning",
   );
 
   availabilityResults.classList.add("room-category-rail");
-  availabilityResults.replaceChildren(
-    ...groups.map(({ category, options }) =>
-      roomCategoryCard(category, options, data.search.nights),
-    ),
+  if (state.allowsRooms) {
+    const renderedCategoryIds = new Set(
+      groups.map((group) => group.category.roomCategoryId),
+    );
+    const missingCategories = (state.property.roomCategories || [])
+      .filter((category) => !renderedCategoryIds.has(category.roomCategoryId))
+      .map((category) => ({ category, options: [] }));
+    availabilityResults.replaceChildren(
+      ...[...groups, ...missingCategories].map(({ category, options }) =>
+        roomCategoryCard(category, options, nights),
+      ),
+    );
+  } else {
+    availabilityResults.replaceChildren();
+  }
+  roomChoiceDivider?.classList.toggle(
+    "hidden",
+    !state.allowsRooms || !state.allowsEntire,
   );
   renderSelectionRibbon();
+}
+
+function availableEntireOption() {
+  return (state.entireAvailability?.options || []).find(
+    (option) => option.productType === "FULL_PROPERTY" && option.available,
+  );
+}
+
+function renderEntirePropertyOffer(nights) {
+  if (!entirePropertyOffer) return;
+  entirePropertyOffer.replaceChildren();
+  entirePropertyOffer.classList.toggle("hidden", !state.allowsEntire);
+  if (!state.allowsEntire) return;
+
+  const option = availableEntireOption();
+  if (!option) {
+    const unavailable = element("div", "entire-property-unavailable");
+    unavailable.append(
+      element("strong", "", "Entire property unavailable for these dates"),
+      element(
+        "p",
+        "",
+        "Individual rooms may still be available. Change your dates to check exclusive use.",
+      ),
+    );
+    entirePropertyOffer.append(unavailable);
+    return;
+  }
+
+  const card = element(
+    "article",
+    `entire-property-card${state.selectionType === "entire" ? " selected" : ""}`,
+  );
+  if (state.property.coverMediaId) {
+    card.style.setProperty(
+      "--property-cover",
+      `url("${propertyMediaUrl(state.property.coverMediaId)}")`,
+    );
+  }
+  const content = element("div", "entire-property-card-copy");
+  const requested = partyTotals();
+  const categoryNames = (state.property.roomCategories || [])
+    .map((category) => category.name)
+    .filter(Boolean);
+  content.append(
+    element("p", "option-kicker", "Exclusive use"),
+    element("h3", "", `Make ${state.property.name} entirely yours`),
+    element(
+      "p",
+      "entire-property-promise",
+      "Every active bedroom and shared space is reserved together. No unrelated overnight guests.",
+    ),
+  );
+  const facts = element("div", "entire-property-facts");
+  facts.append(
+    element("span", "", `${requested.adults} ${requested.adults === 1 ? "adult" : "adults"}`),
+    element("span", "", `${requested.children} ${requested.children === 1 ? "child" : "children"}`),
+    element("span", "", `${nights} ${nights === 1 ? "night" : "nights"}`),
+  );
+  if (categoryNames.length) {
+    facts.append(element("span", "", `${categoryNames.length} room ${categoryNames.length === 1 ? "type" : "types"}`));
+  }
+  content.append(facts);
+
+  const action = element("div", "entire-property-action");
+  action.append(
+    element("small", "", "Estimated accommodation total"),
+    element("strong", "", money(option.estimatedTotalMinor, option.currencyCode)),
+    element("span", "", `${money(option.nightlyFromMinor, option.currencyCode)} nightly · GST and fees confirmed next`),
+  );
+  const button = element(
+    "button",
+    `button ${state.selectionType === "entire" ? "button-secondary" : "button-primary"}`,
+    state.selectionType === "entire" ? "Selected" : "Select entire property",
+  );
+  button.type = "button";
+  button.setAttribute("aria-pressed", String(state.selectionType === "entire"));
+  button.addEventListener("click", () => selectEntireProperty(option));
+  action.append(button);
+  card.append(content, action);
+  entirePropertyOffer.append(card);
+}
+
+function selectEntireProperty(option) {
+  clearQuoteAndLater();
+  if (state.roomSelections.size) {
+    state.roomSelections.clear();
+  }
+  state.selectionType = "entire";
+  state.entireSelection = {
+    option,
+    estimatedTotalMinor: option.estimatedTotalMinor,
+    currencyCode: option.currencyCode,
+  };
+  renderAvailability(state.availability);
+  showInlineMessage(
+    "The complete property is selected. Choose a room again if you prefer an individual-room stay.",
+    "success",
+  );
 }
 
 async function refreshCategoryAvailabilityCounts(baseData, requestVersion) {
@@ -1174,7 +1297,12 @@ function groupRoomOptions(options) {
 }
 
 function roomCategoryCard(category, options, nights) {
-  const card = element("article", "room-category-card ota-rate-card");
+  const selectableOptions = options.filter((option) => option.available);
+  const soldOut = !selectableOptions.length;
+  const card = element(
+    "article",
+    `room-category-card ota-rate-card${soldOut ? " sold-out" : ""}`,
+  );
   const selection = state.roomSelections.get(category.roomCategoryId);
 
   const visual = element("button", "room-category-visual");
@@ -1205,16 +1333,23 @@ function roomCategoryCard(category, options, nights) {
     ),
   );
 
-  const starting = options[0];
+  const starting = selectableOptions[0];
   const fromPrice = element("div", "room-category-from");
-  fromPrice.append(
-    element("small", "", `from · ${nights} ${nights === 1 ? "night" : "nights"}`),
-    element(
-      "strong",
-      "",
-      money(starting?.estimatedTotalMinor, starting?.currencyCode || "INR"),
-    ),
-  );
+  if (starting) {
+    fromPrice.append(
+      element("small", "", `from · ${nights} ${nights === 1 ? "night" : "nights"}`),
+      element(
+        "strong",
+        "",
+        money(starting.estimatedTotalMinor, starting.currencyCode || "INR"),
+      ),
+    );
+  } else {
+    fromPrice.append(
+      element("strong", "", "Sold out"),
+      element("small", "", "for your selected dates"),
+    );
+  }
   header.append(headerCopy, fromPrice);
 
   const facts = element("div", "room-category-facts");
@@ -1232,9 +1367,38 @@ function roomCategoryCard(category, options, nights) {
     content.append(element("p", "room-category-description", category.description));
   }
 
+  const picker = element("div", "room-quantity-picker");
+  picker.append(element("span", "", "Rooms"));
+  const controls = element("div", "room-quantity-controls");
+  const decrease = element("button", "room-quantity-button", "−");
+  decrease.type = "button";
+  decrease.disabled = !selection?.units.length;
+  decrease.setAttribute("aria-label", `Remove one ${category.name} room`);
+  decrease.addEventListener("click", () => changeRoomQuantity(category, starting, -1));
+  const quantity = element("strong", "", String(selection?.units.length || 0));
+  quantity.setAttribute("aria-live", "polite");
+  const increase = element("button", "room-quantity-button", "+");
+  increase.type = "button";
+  const availableCount = categoryAvailabilityCount(category.roomCategoryId);
+  increase.disabled =
+    soldOut ||
+    (availableCount !== null && (selection?.units.length || 0) >= availableCount) ||
+    totalSelectedRooms() >= 20;
+  increase.setAttribute("aria-label", `Add one ${category.name} room`);
+  increase.addEventListener("click", () => changeRoomQuantity(category, starting, 1));
+  controls.append(decrease, quantity, increase);
+  picker.append(controls);
+  content.append(picker);
+
   const plans = element("div", "rate-plan-list");
-  plans.append(element("p", "rate-plan-list-title", "Choose a meal plan"));
-  options.forEach((option) => {
+  plans.append(
+    element(
+      "p",
+      "rate-plan-list-title",
+      soldOut ? "This category is unavailable" : "Choose a meal plan",
+    ),
+  );
+  selectableOptions.forEach((option) => {
     const selected = selection?.option?.rateProductId === option.rateProductId;
     const row = element(
       "button",
@@ -1273,6 +1437,15 @@ function roomCategoryCard(category, options, nights) {
     );
     plans.append(row);
   });
+  if (soldOut) {
+    plans.append(
+      element(
+        "p",
+        "room-select-hint",
+        "Try different dates to check this room type.",
+      ),
+    );
+  }
   content.append(plans);
 
   if (selection) {
@@ -1282,7 +1455,9 @@ function roomCategoryCard(category, options, nights) {
       element(
         "p",
         "room-select-hint",
-        "Select a meal plan to add this room to your stay.",
+        soldOut
+          ? "Unavailable for your selected dates."
+          : "Use the room picker to add this category to your stay.",
       ),
     );
   }
@@ -1321,17 +1496,10 @@ function openCategoryPhoto(category) {
 function selectRoomRate(category, option) {
   clearQuoteAndLater();
   const existing = state.roomSelections.get(category.roomCategoryId);
-  if (!existing && totalSelectedRooms() >= requestedRoomCount()) {
-    showInlineMessage(
-      "You have already selected the requested number of rooms. Remove a room or increase the room count first.",
-      "warning",
-    );
-    return;
-  }
-
   const units = existing?.units?.length
     ? existing.units
     : [defaultRoomAllocation(category)];
+  switchToRoomSelection();
   state.roomSelections.set(category.roomCategoryId, {
     category,
     option,
@@ -1342,6 +1510,55 @@ function selectRoomRate(category, option) {
   });
   renderAvailability(state.availability);
   scheduleSelectionPricing();
+}
+
+function changeRoomQuantity(category, defaultOption, change) {
+  if (!defaultOption) return;
+  clearQuoteAndLater();
+  switchToRoomSelection();
+  const existing = state.roomSelections.get(category.roomCategoryId);
+  if (change > 0) {
+    const availableCount = categoryAvailabilityCount(category.roomCategoryId);
+    if (
+      totalSelectedRooms() >= 20 ||
+      (availableCount !== null && (existing?.units.length || 0) >= availableCount)
+    ) {
+      return;
+    }
+    const units = existing?.units || [];
+    units.push(defaultRoomAllocation(category));
+    state.roomSelections.set(category.roomCategoryId, {
+      category,
+      option: existing?.option || defaultOption,
+      units,
+      estimatedTotalMinor: scaledOptionEstimate(
+        existing?.option || defaultOption,
+        units.length,
+      ),
+      currencyCode: (existing?.option || defaultOption).currencyCode,
+      pricingUnavailable: false,
+    });
+  } else if (existing?.units.length) {
+    existing.units.pop();
+    if (!existing.units.length) {
+      state.roomSelections.delete(category.roomCategoryId);
+    } else {
+      existing.estimatedTotalMinor = scaledOptionEstimate(
+        existing.option,
+        existing.units.length,
+      );
+    }
+  }
+  if (!state.roomSelections.size) state.selectionType = null;
+  renderAvailability(state.availability);
+  scheduleSelectionPricing();
+}
+
+function switchToRoomSelection() {
+  if (state.selectionType === "entire") {
+    state.entireSelection = null;
+  }
+  state.selectionType = "rooms";
 }
 
 function infantMaxAgeForUi() {
@@ -1412,8 +1629,12 @@ function defaultRoomAllocation(category) {
   const requested = partyTotals();
   const allocated = selectedPartyTotals();
   const remainingAdults = Math.max(0, requested.adults - allocated.adults);
+  const remainingPlannedRooms = Math.max(
+    1,
+    state.requestedRooms - totalSelectedRooms(),
+  );
   const adults = clamp(
-    remainingAdults || 1,
+    Math.ceil(remainingAdults / remainingPlannedRooms) || 1,
     1,
     Math.min(
       category.maxAdults || category.maxOccupancy || 20,
@@ -1431,7 +1652,11 @@ function defaultRoomAllocation(category) {
   });
 
   const unit = { adults, childAges: [] };
+  const plannedChildren = Math.ceil(
+    requestedAges.length / remainingPlannedRooms,
+  );
   for (const age of requestedAges) {
+    if (unit.childAges.length >= plannedChildren) break;
     if (unit.childAges.length >= (category.maxChildren ?? 20)) break;
     const candidate = {
       adults: unit.adults,
@@ -1563,24 +1788,9 @@ function renderRoomAllocationControls(category, selection) {
   });
 
   const availableCount = categoryAvailabilityCount(category.roomCategoryId);
-  const canAddAnother =
-    totalSelectedRooms() < requestedRoomCount() &&
-    (availableCount === null || selection.units.length < availableCount);
-
-  if (canAddAnother) {
-    const add = element("button", "room-add-button", "+ Add another room");
-    add.type = "button";
-    add.addEventListener("click", () => {
-      clearQuoteAndLater();
-      selection.units.push(defaultRoomAllocation(category));
-      renderAvailability(state.availability);
-      scheduleSelectionPricing();
-    });
-    section.append(add);
-  } else if (
+  if (
     availableCount !== null &&
-    selection.units.length >= availableCount &&
-    totalSelectedRooms() < requestedRoomCount()
+    selection.units.length >= availableCount
   ) {
     section.append(
       element(
@@ -1594,9 +1804,7 @@ function renderRoomAllocationControls(category, selection) {
 }
 
 function requestedRoomCount() {
-  return state.bookingMode === "villa"
-    ? 1
-    : clamp(Number(form.unitCount.value), 1, 20);
+  return state.requestedRooms;
 }
 
 function totalSelectedRooms() {
@@ -1619,7 +1827,7 @@ function selectedPartyTotals() {
   );
 }
 
-function partyMismatchMessage(requested, selected) {
+function partyMismatchMessage(requested, selected, agesMatch = true) {
   const parts = [];
   const adultDelta = selected.adults - requested.adults;
   const childDelta = selected.children - requested.children;
@@ -1646,16 +1854,19 @@ function partyMismatchMessage(requested, selected) {
     );
   }
 
+  if (!agesMatch && childDelta === 0) {
+    parts.push("the selected child ages do not match your search");
+  }
+
   return parts.length
-    ? `Guest allocation differs from your search: ${parts.join(" · ")}. You can continue if this is intentional.`
-    : "Guest allocation matches your search.";
+    ? `Complete the guest allocation: ${parts.join(" · ")}.`
+    : "All guests are assigned to a room.";
 }
 
 function selectionValidation() {
   const requested = partyTotals();
   const selected = selectedPartyTotals();
   const roomCount = totalSelectedRooms();
-  const requestedRooms = requestedRoomCount();
   const selections = [...state.roomSelections.values()];
   const pricingUnavailable = selections.some(
     (selection) => selection.pricingUnavailable,
@@ -1666,14 +1877,6 @@ function selectionValidation() {
       valid: false,
       warning: false,
       message: "Choose a room and meal plan to continue.",
-    };
-  }
-
-  if (roomCount !== requestedRooms) {
-    return {
-      valid: false,
-      warning: false,
-      message: `Select ${requestedRooms} ${requestedRooms === 1 ? "room" : "rooms"}. ${roomCount} selected.`,
     };
   }
 
@@ -1717,14 +1920,24 @@ function selectionValidation() {
     };
   }
 
+  const requestedAges = [...(state.units[0]?.childAges || [])].sort((a, b) => a - b);
+  const selectedAges = selections
+    .flatMap((selection) => selection.units.flatMap((unit) => unit.childAges))
+    .sort((a, b) => a - b);
+  const agesMatch =
+    requestedAges.length === selectedAges.length &&
+    requestedAges.every((age, index) => age === selectedAges[index]);
   const mismatch =
     selected.adults !== requested.adults ||
-    selected.children !== requested.children;
+    selected.children !== requested.children ||
+    !agesMatch;
 
   return {
-    valid: true,
-    warning: mismatch,
-    message: partyMismatchMessage(requested, selected),
+    valid: !mismatch,
+    warning: false,
+    message: mismatch
+      ? partyMismatchMessage(requested, selected, agesMatch)
+      : "All guests are assigned to a room.",
   };
 }
 
@@ -1747,7 +1960,7 @@ function scheduleSelectionPricing() {
 }
 
 async function refreshSelectionPricing() {
-  if (!state.roomSelections.size || state.bookingMode !== "hotel") return;
+  if (!state.roomSelections.size || state.selectionType !== "rooms") return;
   const version = ++state.selectionPricingVersion;
   const selections = [...state.roomSelections.values()];
 
@@ -1794,8 +2007,7 @@ async function refreshSelectionPricing() {
 function renderSelectionRibbon() {
   if (!selectionRibbon) return;
   if (
-    state.bookingMode !== "hotel" ||
-    !state.roomSelections.size ||
+    (!state.roomSelections.size && !state.entireSelection) ||
     state.quote ||
     state.roomMixQuote
   ) {
@@ -1803,9 +2015,25 @@ function renderSelectionRibbon() {
     return;
   }
 
+  if (state.selectionType === "entire" && state.entireSelection) {
+    const party = partyTotals();
+    selectionSummary.textContent = `Entire ${state.property.name} selected`;
+    selectionAllocation.textContent =
+      `${party.adults} ${party.adults === 1 ? "adult" : "adults"} · ` +
+      `${party.children} ${party.children === 1 ? "child" : "children"} · complete privacy`;
+    selectionRibbon.classList.remove("has-warning", "has-error");
+    selectionTotal.textContent = money(
+      state.entireSelection.estimatedTotalMinor,
+      state.entireSelection.currencyCode,
+    );
+    selectionContinue.disabled = false;
+    selectionContinue.textContent = "Continue to checkout";
+    selectionRibbon.classList.remove("hidden");
+    return;
+  }
+
   const selections = [...state.roomSelections.values()];
   const rooms = totalSelectedRooms();
-  const allocation = selectedPartyTotals();
   const validation = selectionValidation();
   const currencyCode = selections[0]?.currencyCode || "INR";
   const totalMinor = selections.reduce(
@@ -1829,7 +2057,23 @@ function renderSelectionRibbon() {
   );
   selectionTotal.textContent = money(totalMinor, currencyCode);
   selectionContinue.disabled = !validation.valid;
+  selectionContinue.textContent = "Continue to checkout";
   selectionRibbon.classList.remove("hidden");
+}
+
+async function continueEntireSelection(button) {
+  const selection = state.entireSelection;
+  if (!selection?.option || !availableEntireOption()) {
+    showInlineMessage(
+      "The entire property is no longer available. Check the room choices or try other dates.",
+      "warning",
+    );
+    state.entireSelection = null;
+    state.selectionType = null;
+    renderSelectionRibbon();
+    return;
+  }
+  await startBooking(selection.option, button);
 }
 
 async function continueRoomSelection(button) {
@@ -1941,7 +2185,7 @@ async function continueRoomSelection(button) {
       "error",
     );
   } finally {
-    setBusy(button, false, "Continue");
+    setBusy(button, false, "Continue to checkout");
     renderSelectionRibbon();
   }
 }
@@ -2009,6 +2253,7 @@ function availabilityCard(option, nights) {
 }
 
 async function startBooking(option, button) {
+  const idleLabel = button.textContent;
   clearHoldAndLater();
   state.roomMixQuote = null;
   delete state.session.roomMixQuote;
@@ -2050,7 +2295,7 @@ async function startBooking(option, button) {
       "error",
     );
   } finally {
-    setBusy(button, false, "Book now");
+    setBusy(button, false, idleLabel || "Continue to checkout");
   }
 }
 
@@ -2158,19 +2403,30 @@ async function createHold(button, { scrollToGuest = true } = {}) {
     state.session.holdId = data.hold.id;
     state.session.hold = data.hold;
     saveBookingSession(publicSlug, state.session);
+    if (!checkoutView) {
+      navigateToCheckout();
+      return true;
+    }
     renderGuestForm();
     if (scrollToGuest) {
       guestSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+    return true;
   } catch (error) {
     if (requestVersion !== state.recommendationRequestVersion || state.quote?.id !== fingerprint) return;
     renderSectionError(
       quoteSection,
       messageFor(error, "Inventory could not be reserved."),
     );
+    return false;
   } finally {
     if (button) setBusy(button, false, "Reserve this price");
   }
+}
+
+function navigateToCheckout() {
+  const search = preservedSearchParams();
+  location.assign(`/checkout/${encodeURIComponent(publicSlug)}?${search}`);
 }
 
 function renderGuestForm() {
@@ -2638,10 +2894,10 @@ function restorePreCheckoutSession() {
       state.hold = hold;
       renderGuestForm();
     }
-    return;
+    return true;
   }
 
-  if (!quote?.id || (!standardQuoteIsActive && !holdIsActive)) return;
+  if (!quote?.id || (!standardQuoteIsActive && !holdIsActive)) return false;
 
   state.roomMixQuote = null;
   state.quote = quote;
@@ -2650,6 +2906,25 @@ function restorePreCheckoutSession() {
     state.hold = hold;
     renderGuestForm();
   }
+  return true;
+}
+
+function renderCheckoutUnavailable() {
+  const panel = element("div", "checkout-unavailable");
+  panel.append(
+    element("p", "eyebrow", "Checkout link expired"),
+    element("h2", "", "Choose your stay again"),
+    element(
+      "p",
+      "muted",
+      "For your protection, a secure checkout only opens after a live price and temporary room hold have been created.",
+    ),
+  );
+  const link = element("a", "button button-primary", "Return to this property");
+  link.href = propertyPageUrl();
+  panel.append(link);
+  guestSection.replaceChildren(panel);
+  guestSection.classList.remove("hidden");
 }
 
 function startCountdown(target, expiresAt, button, label) {
@@ -2691,6 +2966,9 @@ function clearResultsAfterSearchChange() {
   smartRecommendations?.replaceChildren();
   smartMatchSection?.classList.add("hidden");
   state.availability = null;
+  state.entireAvailability = null;
+  state.entireSelection = null;
+  state.selectionType = null;
   state.roomSelections.clear();
   state.categoryAvailabilityCounts.clear();
   state.availabilityProbeCache.clear();
@@ -2847,6 +3125,46 @@ function titleCase(value) {
 function formatTime(value) {
   const match = String(value || "").match(/^(\d{2}:\d{2})/);
   return match?.[1] || "";
+}
+
+function preservedSearchParams() {
+  const search = new URLSearchParams();
+  for (const key of [
+    "destination",
+    "arrivalDate",
+    "departureDate",
+    "rooms",
+    "adults",
+    "children",
+    "childAges",
+    "categoryId",
+    "typeId",
+  ]) {
+    if (query.has(key)) search.set(key, query.get(key));
+  }
+  search.set("arrivalDate", form.arrivalDate.value);
+  search.set("departureDate", form.departureDate.value);
+  const party = state.units[0] || { adults: 2, childAges: [] };
+  search.set("rooms", String(state.requestedRooms));
+  search.set("adults", String(party.adults));
+  search.set("children", String(party.childAges.length));
+  search.set("childAges", party.childAges.join(","));
+  return search;
+}
+
+function propertyPageUrl(property, search = preservedSearchParams()) {
+  const destination = query.get("destination") || property.city || "stays";
+  return `/stays/${encodeURIComponent(slugify(destination))}/${encodeURIComponent(publicSlug)}?${search}`;
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "stays";
 }
 
 function saleModeLabel(value) {

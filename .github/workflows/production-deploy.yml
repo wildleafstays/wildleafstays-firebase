@@ -105,11 +105,11 @@ jobs:
           const config = JSON.parse(fs.readFileSync("firebase.json", "utf8"));
           const rewrites = config?.hosting?.rewrites;
 
-          if (!Array.isArray(rewrites) || rewrites.length !== 3) {
-            throw new Error("firebase.json must keep exactly three hosting rewrites");
+          if (!Array.isArray(rewrites) || rewrites.length !== 6) {
+            throw new Error("firebase.json must keep exactly six hosting rewrites");
           }
 
-          const [api, v1, spa] = rewrites;
+          const [api, v1, checkout, property, destination, spa] = rewrites;
 
           if (api?.source !== "/api/**" || api?.function !== "api") {
             throw new Error("Legacy /api/** Firebase Function routing changed unexpectedly");
@@ -121,6 +121,27 @@ jobs:
             v1?.run?.region !== "asia-south1"
           ) {
             throw new Error("Canonical /v1/** Cloud Run routing changed unexpectedly");
+          }
+
+          if (
+            checkout?.source !== "/checkout/*" ||
+            checkout?.destination !== "/customer/property.html"
+          ) {
+            throw new Error("Checkout routes must resolve to the customer property page");
+          }
+
+          if (
+            property?.source !== "/stays/*/*" ||
+            property?.destination !== "/customer/property.html"
+          ) {
+            throw new Error("Clean property routes must resolve to the customer property page");
+          }
+
+          if (
+            destination?.source !== "/stays/*" ||
+            destination?.destination !== "/customer/destination.html"
+          ) {
+            throw new Error("Destination routes must resolve to the destination page");
           }
 
           if (spa?.source !== "**" || spa?.destination !== "/customer/index.html") {
@@ -530,8 +551,13 @@ jobs:
             "admin/index.html"
             "admin/admin.js"
             "customer/index.html"
+            "customer/destination.html"
+            "customer/destination.js"
+            "customer/destination.css"
             "customer/property.html"
+            "customer/property.js"
             "customer/app.js"
+            "customer/booking-discovery.css"
           )
           verified=0
           for attempt in 1 2 3 4 5 6 7 8; do

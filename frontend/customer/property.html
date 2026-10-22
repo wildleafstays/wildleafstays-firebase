@@ -43,23 +43,13 @@
         <section class="property-identity" aria-labelledby="propertyName">
           <div class="property-identity-copy">
             <div class="property-identity-meta">
-              <span id="bookingModeBadge" class="booking-mode-badge">Hotel rooms</span>
+              <span id="bookingModeBadge" class="booking-mode-badge">Flexible stay</span>
               <p id="propertyLocation" class="property-location-line">Loading property…</p>
             </div>
             <h1 id="propertyName">Your Wildleaf stay</h1>
             <p id="propertySummary" class="property-summary">
               Checking the latest property information.
             </p>
-            <div id="smartstayStayOptions" class="hidden" aria-label="Ways to stay" style="margin-top:1rem;padding:1rem;background:#edf4ef;border:1px solid #d8e6dd;border-radius:16px;color:#18352c;">
-              <strong style="display:block;margin-bottom:.35rem">Your stay, your way</strong>
-              <p id="smartstayPartySummary" style="margin:0 0 .5rem;font-size:.9rem"></p>
-              <p id="smartstayPrivacyNotice" style="margin:0 0 .75rem;font-size:.85rem"></p>
-              <div style="display:flex;flex-wrap:wrap;gap:.65rem">
-                <a id="smartstayRoomOption" class="button button-secondary hidden" href="#">Choose individual rooms</a>
-                <a id="entirePropertySwitch" class="button button-primary hidden" href="#">Explore exclusive use →</a>
-              </div>
-              <small style="display:block;margin-top:.7rem">Each offer is checked for your dates and guests. Final taxes and charges are confirmed before payment.</small>
-            </div>
           </div>
           <div id="propertyFacts" class="property-quick-facts"></div>
           <div id="amenities" class="amenity-list property-key-amenities"></div>
@@ -69,10 +59,10 @@
           <section id="availabilitySection" class="booking-section room-shopping-section">
             <div class="room-shopping-heading">
               <div>
-                <p class="eyebrow">Live rooms & rates</p>
-                <h2>Choose your room</h2>
+                <p class="eyebrow">Live availability</p>
+                <h2>Choose how you would like to stay</h2>
                 <p class="muted">
-                  Compare room categories first. Each card keeps all available meal plans together.
+                  Reserve the entire property when available, or build the room arrangement that fits your group.
                 </p>
               </div>
             </div>
@@ -87,17 +77,8 @@
                   <span>Check-out</span>
                   <input name="departureDate" type="date" required />
                 </label>
-                <label id="unitCountField">
-                  <span id="unitCountLabel">Rooms</span>
-                  <input
-                    name="unitCount"
-                    type="number"
-                    min="1"
-                    max="20"
-                    required
-                  />
-                </label>
               </div>
+              <input name="unitCount" type="hidden" value="1" />
               <details class="traveller-disclosure compact-guest-picker">
                 <summary>
                   <span>Guests</span>
@@ -123,6 +104,10 @@
               class="inline-message hidden"
               role="status"
             ></div>
+            <div id="entirePropertyOffer" class="entire-property-offer hidden"></div>
+            <div id="roomChoiceDivider" class="room-choice-divider hidden">
+              <span>Or choose individual rooms</span>
+            </div>
             <div id="availabilityResults" class="availability-results room-category-rail"></div>
           </section>
 
@@ -148,6 +133,11 @@
             </div>
           </details>
 
+          <section id="checkoutIntro" class="checkout-intro hidden">
+            <p class="eyebrow">Secure checkout</p>
+            <h1>Complete your stay</h1>
+            <p>Review the exact price, add the lead guest and continue to secure payment.</p>
+          </section>
           <section id="quoteSection" class="panel-section hidden" aria-live="polite"></section>
           <section id="guestSection" class="panel-section hidden"></section>
           <section id="statusSection" class="panel-section status-section hidden" aria-live="polite"></section>
@@ -176,7 +166,7 @@
       <div id="selectionRibbon" class="selection-ribbon hidden" aria-live="polite">
         <div class="selection-ribbon-inner">
           <div class="selection-ribbon-copy">
-            <span id="selectionSummary">No rooms selected</span>
+            <span id="selectionSummary">No stay selected</span>
             <small id="selectionAllocation"></small>
           </div>
           <div class="selection-ribbon-price">
@@ -215,6 +205,5 @@
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script src="/customer/config.js"></script>
     <script type="module" src="/customer/property.js"></script>
-    <script type="module" src="/customer/property-booking-mode-nav.js"></script>
   </body>
 </html>

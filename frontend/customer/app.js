@@ -93,12 +93,16 @@ void initialize();
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   closeMobileSearch();
-  showDiscoveryResults();
-  void loadProperties();
-  document.querySelector("#stays")?.scrollIntoView({
-    block: "start",
-    behavior: "smooth",
-  });
+  const childAges = selectedChildAges();
+  const children = Math.max(0, Number(form.children.value) || 0);
+  if (
+    childAges.length !== children ||
+    childAges.some((age) => !Number.isInteger(age))
+  ) {
+    renderError(new Error("Please select the age of each child before searching."));
+    return;
+  }
+  location.assign(destinationUrl(form.destination.value.trim()));
 });
 
 mobileSearchTrigger?.addEventListener("click", openMobileSearch);
@@ -347,11 +351,7 @@ function renderDestinations(destinations) {
       button.addEventListener("click", () => {
         form.destination.value = destination.city;
         updateMobileSearchSummary();
-        void loadProperties(destination.city);
-        document.querySelector("#stays")?.scrollIntoView({
-          block: "start",
-          behavior: "smooth",
-        });
+        location.assign(destinationUrl(destination.city));
       });
       return button;
     }),
@@ -970,11 +970,40 @@ function propertyUrl(property) {
     destination: form.destination.value.trim(),
     ...(propertyCategorySelect.value ? { categoryId: propertyCategorySelect.value } : {}),
     ...(propertyTypeSelect.value ? { typeId: propertyTypeSelect.value } : {}),
-    mode: form.elements.namedItem("privateStay")?.checked ||
-      property.saleMode === "FULL_PROPERTY_ONLY" ||
-      property.smartstaySuggestedMode === "villa" ? "villa" : "hotel",
   });
-  return `/customer/property.html?${params}`;
+  params.delete("slug");
+  const destination = slugifyDestination(
+    form.destination.value.trim() || property.city || "stays",
+  );
+  return `/stays/${encodeURIComponent(destination)}/${encodeURIComponent(property.publicSlug)}?${params}`;
+}
+
+function destinationUrl(destination) {
+  const label = destination || "all-destinations";
+  const params = new URLSearchParams({
+    destination,
+    arrivalDate: form.arrivalDate.value,
+    departureDate: form.departureDate.value,
+    rooms: form.rooms.value,
+    adults: form.adults.value,
+    children: form.children.value,
+    childAges: selectedChildAges().join(","),
+    stayMode: stayModeSelect?.value || "all",
+  });
+  if (form.elements.namedItem("privateStay")?.checked) {
+    params.set("privateStay", "1");
+  }
+  return `/stays/${encodeURIComponent(slugifyDestination(label))}?${params}`;
+}
+
+function slugifyDestination(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "all-destinations";
 }
 
 function openMobileSearch() {

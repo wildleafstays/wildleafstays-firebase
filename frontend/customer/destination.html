@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Explore Wildleaf stays with live availability, flexible room booking and private entire-property stays."
+    />
+    <title>Destination stays | Wildleaf Stays</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/customer/styles.css" />
+    <link rel="stylesheet" href="/customer/destination.css" />
+  </head>
+  <body class="destination-page">
+    <div class="public-test-notice" role="status">
+      SMARTSTAY PUBLIC TEST: Online payments and reservations are for testing only.
+      Contact Wildleaf directly to arrange a real stay.
+    </div>
+
+    <header class="site-header destination-header">
+      <a class="brand" href="/customer/" aria-label="Wildleaf Stays home">
+        <span class="brand-mark" aria-hidden="true">W</span>
+        <span><strong>Wildleaf</strong><small>STAYS</small></span>
+      </a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="/customer/">Home</a>
+        <a href="#availableStays">Available stays</a>
+        <a href="#destinationGuide">About the destination</a>
+      </nav>
+    </header>
+
+    <main>
+      <section id="destinationHero" class="destination-hero">
+        <div class="destination-hero-shade" aria-hidden="true"></div>
+        <div class="destination-hero-copy">
+          <p class="eyebrow">Discover Wildleaf</p>
+          <h1 id="destinationTitle">Stays for your next escape</h1>
+          <p id="destinationSubtitle">
+            Thoughtful rooms and private retreats, matched to your dates and guests.
+          </p>
+        </div>
+      </section>
+
+      <section class="destination-search-shell" aria-label="Change your search">
+        <button
+          id="mobileSearchTrigger"
+          class="destination-mobile-search"
+          type="button"
+          aria-expanded="false"
+          aria-controls="destinationSearchForm"
+        >
+          <span>
+            <strong id="mobileSearchLabel">Your stay</strong>
+            <small id="mobileSearchMeta">Add dates and guests</small>
+          </span>
+          <span aria-hidden="true">Edit</span>
+        </button>
+
+        <form id="destinationSearchForm" class="destination-search-form">
+          <div class="destination-search-head">
+            <strong>Change your search</strong>
+            <button id="mobileSearchClose" type="button" aria-label="Close search">×</button>
+          </div>
+
+          <label>
+            <span>Destination</span>
+            <input name="destination" autocomplete="off" required />
+          </label>
+          <label>
+            <span>Check-in</span>
+            <input name="arrivalDate" type="date" required />
+          </label>
+          <label>
+            <span>Check-out</span>
+            <input name="departureDate" type="date" required />
+          </label>
+          <label>
+            <span>Rooms</span>
+            <input name="rooms" type="number" min="1" max="20" value="1" required />
+          </label>
+          <label>
+            <span>Adults</span>
+            <input name="adults" type="number" min="1" max="10" value="2" required />
+          </label>
+          <label>
+            <span>Children</span>
+            <input name="children" type="number" min="0" max="6" value="0" required />
+          </label>
+          <div id="childAgeFields" class="destination-child-ages" aria-live="polite"></div>
+          <button class="button button-primary" type="submit">Update search</button>
+        </form>
+      </section>
+
+      <section id="availableStays" class="destination-results-section">
+        <div class="destination-results-heading">
+          <div>
+            <p class="eyebrow">Live availability</p>
+            <h2 id="resultsHeading">Available stays</h2>
+            <p id="resultsSummary" class="muted" role="status">
+              Checking properties for your dates and guests…
+            </p>
+          </div>
+          <label class="destination-sort">
+            <span>Sort</span>
+            <select id="sortResults">
+              <option value="recommended">Recommended</option>
+              <option value="price-low">Price: low to high</option>
+              <option value="price-high">Price: high to low</option>
+              <option value="name">Property name</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="destination-mode-tabs" role="group" aria-label="Choose how to stay">
+          <button class="is-active" type="button" data-mode="all" aria-pressed="true">
+            All stays
+          </button>
+          <button type="button" data-mode="rooms" aria-pressed="false">
+            Private rooms
+          </button>
+          <button type="button" data-mode="entire" aria-pressed="false">
+            Entire properties
+          </button>
+        </div>
+
+        <div id="destinationResults" class="destination-results-grid" aria-live="polite"></div>
+      </section>
+
+      <section id="destinationGuide" class="destination-guide">
+        <p class="eyebrow">Plan less. Experience more.</p>
+        <h2 id="destinationGuideTitle">A more thoughtful way to stay</h2>
+        <p id="destinationGuideCopy">
+          Choose a private room for a quiet escape or reserve an entire property for
+          complete privacy. Every option uses the same live inventory, so the stay you
+          choose is the stay Wildleaf protects for you.
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer compact-footer">
+      <p>Wildleaf Stays · Thoughtful stays, naturally.</p>
+    </footer>
+
+    <script src="/customer/config.js"></script>
+    <script type="module" src="/customer/destination.js"></script>
+  </body>
+</html>

@@ -55,6 +55,18 @@
         }
       },
       {
+        "source": "/checkout/*",
+        "destination": "/customer/property.html"
+      },
+      {
+        "source": "/stays/*/*",
+        "destination": "/customer/property.html"
+      },
+      {
+        "source": "/stays/*",
+        "destination": "/customer/destination.html"
+      },
+      {
         "source": "**",
         "destination": "/customer/index.html"
       }

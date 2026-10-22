@@ -22,6 +22,18 @@ const discoveryStyles = await readFile(
   new URL("../booking-discovery.css", import.meta.url),
   "utf8",
 );
+const destinationHtml = await readFile(
+  new URL("../destination.html", import.meta.url),
+  "utf8",
+);
+const destinationSource = await readFile(
+  new URL("../destination.js", import.meta.url),
+  "utf8",
+);
+const destinationStyles = await readFile(
+  new URL("../destination.css", import.meta.url),
+  "utf8",
+);
 
 const entirePropertyHtml = await readFile(
   new URL("../entire-properties.html", import.meta.url),
@@ -40,12 +52,7 @@ const propertySource = await readFile(
   new URL("../property.js", import.meta.url),
   "utf8",
 );
-const bookingModeNavSource = await readFile(
-  new URL("../property-booking-mode-nav.js", import.meta.url),
-  "utf8",
-);
-
-test("SmartStay homepage uses unified discovery with optional privacy", () => {
+test("homepage search opens a dedicated destination experience", () => {
   assert.doesNotMatch(homeHtml, /id="modeAll"|id="modeHotel"|id="modeVilla"/);
   assert.doesNotMatch(homeHtml, /id="entirePropertyEntry"/);
   assert.match(homeHtml, /id="privateStay"[^>]*type="checkbox"/);
@@ -59,8 +66,12 @@ test("SmartStay homepage uses unified discovery with optional privacy", () => {
   assert.match(homeSource, /property\.saleMode === "BOTH"/);
   assert.match(homeSource, /"Explore entire property"/);
   assert.match(homeSource, /"Explore available rooms"/);
-  assert.match(homeSource, /mode: form\.elements\.namedItem\("privateStay"\)/);
-  assert.match(propertySource, /"Choose rooms for your stay"/);
+  assert.match(homeSource, /location\.assign\(destinationUrl\(form\.destination\.value\.trim\(\)\)\)/);
+  assert.match(homeSource, /function destinationUrl\(destination\)/);
+  assert.match(homeSource, /`\/stays\/\$\{encodeURIComponent\(slugifyDestination\(label\)\)\}/);
+  assert.match(destinationHtml, /id="destinationSearchForm"/);
+  assert.match(destinationHtml, /id="destinationResults"/);
+  assert.match(destinationSource, /\/v1\/public\/smartstay\/search/);
 });
 
 test("SmartStay distinguishes date-specific quotes from static room starting rates", () => {
@@ -70,21 +81,21 @@ test("SmartStay distinguishes date-specific quotes from static room starting rat
   assert.match(homeSource, /Excludes GST, fees and discounts/);
 });
 
-test("BOTH properties preserve the existing offer switch", () => {
-  assert.match(propertyHtml, /id="entirePropertySwitch"/);
-  assert.match(bookingModeNavSource, /saleMode === "BOTH"/);
-  assert.match(bookingModeNavSource, /villaParams\.set\("mode", "villa"\)/);
-  assert.doesNotMatch(bookingModeNavSource, /villaParams\.set\("rooms", "1"\)/);
-  assert.match(bookingModeNavSource, /switchLink\.classList\.toggle\("hidden", exclusive\)/);
+test("BOTH properties present rooms and entire-property inventory together", () => {
+  assert.match(propertyHtml, /id="entirePropertyOffer"/);
+  assert.match(propertyHtml, /id="roomChoiceDivider"/);
+  assert.doesNotMatch(propertyHtml, /property-booking-mode-nav\.js/);
+  assert.match(propertySource, /property\.saleMode === "BOTH"/);
+  assert.match(propertySource, /state\.allowsRooms \? request/);
+  assert.match(propertySource, /state\.allowsEntire/);
+  assert.match(propertySource, /function renderEntirePropertyOffer\(nights\)/);
 });
 
-test("SmartStay explains privacy and returns from entire property to rooms", () => {
-  assert.match(propertyHtml, /id="smartstayStayOptions"/);
-  assert.match(propertyHtml, /id="smartstayPartySummary"/);
-  assert.match(propertyHtml, /id="smartstayPrivacyNotice"/);
-  assert.match(propertyHtml, /id="smartstayRoomOption"/);
-  assert.match(bookingModeNavSource, /roomParams\.set\("mode", "hotel"\)/);
-  assert.match(bookingModeNavSource, /no unrelated overnight guests/);
+test("entire-property privacy and room choice stay on one property page", () => {
+  assert.match(propertySource, /No unrelated overnight guests/);
+  assert.match(propertySource, /function selectEntireProperty\(option\)/);
+  assert.match(propertySource, /function switchToRoomSelection\(\)/);
+  assert.match(propertySource, /state\.entireSelection = null/);
 });
 
 test("SmartStay discovery checks dates and exact group room count", () => {
@@ -97,10 +108,10 @@ test("SmartStay discovery checks dates and exact group room count", () => {
 });
 
 test("SmartStay checks exclusive availability before offering a villa upgrade", () => {
-  assert.match(bookingModeNavSource, /productType === "FULL_PROPERTY"/);
-  assert.match(bookingModeNavSource, /offers\.length/);
-  assert.match(bookingModeNavSource, /before taxes & fees/);
-  assert.match(bookingModeNavSource, /Exclusive use is unavailable/);
+  assert.match(propertySource, /option\.productType === "FULL_PROPERTY" && option\.available/);
+  assert.match(propertySource, /availableEntireOption\(\)/);
+  assert.match(propertySource, /Entire property unavailable for these dates/);
+  assert.match(propertySource, /GST and fees confirmed next/);
 });
 
 test("SmartStay child ages are gathered and kept with the booking request", () => {
@@ -147,8 +158,8 @@ test("shared search links restore numeric dates, guest counts and child ages", (
 test("SmartStay returns customers to search with their guest preferences", () => {
   assert.match(homeSource, /function restoreSearchFromUrl/);
   assert.match(homeSource, /initialSearch\.set\("privateStay", "1"\)/);
-  assert.match(bookingModeNavSource, /returnParams\.set\(key, params\.get\(key\)\)/);
-  assert.match(bookingModeNavSource, /backLink\.href =/);
+  assert.match(propertySource, /function preservedSearchParams\(\)/);
+  assert.match(propertySource, /link\.href = `\/stays\//);
   assert.doesNotMatch(propertySource, /querySelector\("#backToResults"\)\.href = "\/customer\/"/);
 });
 
@@ -163,7 +174,7 @@ test("SmartStay restores complete destination and category context after viewing
   assert.match(homeSource, /destination: form\.destination\.value\.trim\(\)/);
   assert.match(homeSource, /initialSearch\.get\("categoryId"\)/);
   assert.match(homeSource, /renderPropertyTypeFilter\(savedCategory, savedType \|\| ""\)/);
-  assert.match(bookingModeNavSource, /"destination", "categoryId", "typeId"/);
+  assert.match(propertySource, /"destination",[\s\S]*"categoryId",[\s\S]*"typeId"/);
 });
 
 test("SmartStay premium cards retain accessible keyboard focus and reduced motion", () => {
@@ -212,6 +223,36 @@ test("site root opens the room-discovery homepage by default", () => {
   );
   assert.equal(rootRedirect?.destination, "/customer/");
   assert.doesNotMatch(rootRedirect?.destination || "", /mode=/);
+});
+
+test("clean destination property and checkout URLs resolve through Firebase Hosting", () => {
+  const rewrites = firebaseConfig.hosting.rewrites;
+  assert.equal(
+    rewrites.find((rewrite) => rewrite.source === "/stays/*")?.destination,
+    "/customer/destination.html",
+  );
+  assert.equal(
+    rewrites.find((rewrite) => rewrite.source === "/stays/*/*")?.destination,
+    "/customer/property.html",
+  );
+  assert.equal(
+    rewrites.find((rewrite) => rewrite.source === "/checkout/*")?.destination,
+    "/customer/property.html",
+  );
+  assert.match(destinationSource, /function propertyUrl\(property\)/);
+  assert.match(destinationSource, /`\/stays\/\$\{encodeURIComponent\(slugify\(destinationLabel\(\)\)\)\}/);
+  assert.match(propertySource, /location\.assign\(`\/checkout\/\$\{encodeURIComponent\(publicSlug\)\}/);
+});
+
+test("destination results support live filters and an app-like mobile search sheet", () => {
+  assert.match(destinationHtml, /data-mode="all"/);
+  assert.match(destinationHtml, /data-mode="rooms"/);
+  assert.match(destinationHtml, /data-mode="entire"/);
+  assert.match(destinationSource, /function renderProperties\(\)/);
+  assert.match(destinationSource, /property\.saleMode !== "FULL_PROPERTY_ONLY"/);
+  assert.match(destinationSource, /property\.saleMode === "FULL_PROPERTY_ONLY" \|\| property\.saleMode === "BOTH"/);
+  assert.match(destinationStyles, /@media \(max-width: 720px\)/);
+  assert.match(destinationStyles, /\.destination-search-open \.destination-search-form/);
 });
 
 test("homepage discovery removes redundant heading layers and keeps live categories primary", () => {
@@ -315,17 +356,19 @@ test("Entire Property page uses optional Super Admin marketing instead of perman
   assert.match(entirePropertySource, /hero\?\.classList\.add\("hidden"\)/);
 });
 
-test("property booking shows only the product selected by the guest", () => {
+test("property booking always uses one unified selector", () => {
   assert.match(propertyHtml, /id="bookingModeBadge"/);
-  assert.match(propertyHtml, /id="unitCountField"/);
-  assert.match(propertySource, /expectedProductType/);
-  assert.match(propertySource, /"FULL_PROPERTY"\s*:\s*"ROOM_CATEGORY"/);
-  assert.match(propertySource, /state\.bookingMode === "villa"\) count = 1/);
+  assert.doesNotMatch(propertyHtml, /id="unitCountField"/);
+  assert.match(propertySource, /selectionType: null/);
+  assert.match(propertySource, /state\.selectionType === "entire"/);
+  assert.match(propertySource, /state\.selectionType = "rooms"/);
+  assert.doesNotMatch(propertySource, /expectedProductType|state\.bookingMode/);
 });
 
-test("entire-property presentation explicitly uses the shared room source", () => {
-  assert.match(propertySource, /One entire stay, one shared inventory/);
-  assert.match(propertySource, /calculated from the room categories below/);
+test("entire-property presentation explains the shared property clearly", () => {
+  assert.match(propertySource, /One property, two ways to stay/);
+  assert.match(propertySource, /reserve every active room and shared space/);
+  assert.match(propertySource, /Every active bedroom and shared space is reserved together/);
   assert.doesNotMatch(propertySource, /villaBaseRate|separateVillaRate/);
 });
 
@@ -352,8 +395,9 @@ test("property search defaults to today, one night, one room and two adults", ()
 });
 
 test("hotel room categories are not repeated in the property summary", () => {
-  assert.match(propertySource, /Repeating them in the property summary makes the page noisy/);
   assert.doesNotMatch(propertySource, /const card = element\("article", "room-category-summary"\)/);
+  assert.match(propertySource, /function renderStayConfiguration\(categories\)/);
+  assert.match(propertySource, /if \(state\.allowsEntire && names\.length\)/);
 });
 
 test("available rates use OTA-style room facts and calendar-backed totals", () => {
@@ -595,18 +639,15 @@ test("liked horizontal room-card presentation remains the shopping baseline", ()
   assert.match(propertyHtml, /id="selectionRibbon"/);
 });
 
-test("room count stays independent from the master travelling party", () => {
+test("room quantity is selected per category while party totals remain shared", () => {
   assert.match(propertyHtml, /id="guestSummary"/);
   assert.match(propertySource, /state\.units = \[\s*\{\s*adults,/s);
-  assert.match(propertySource, /function setUnitCount\(count\)/);
-  assert.doesNotMatch(
-    propertySource,
-    /function setUnitCount\(count\)[\s\S]{0,500}Array\.from/,
-  );
-  assert.match(
-    propertySource,
-    /state\.bookingMode === "villa"[\s\S]*: \[\{ adults: 1, children: 0 \}\]/,
-  );
+  assert.match(propertySource, /function changeRoomQuantity\(category, defaultOption, change\)/);
+  assert.match(propertySource, /room-quantity-picker/);
+  assert.match(propertySource, /defaultRoomAllocation\(category\)/);
+  assert.match(propertySource, /selectedPartyTotals\(\)/);
+  assert.match(propertySource, /state\.requestedRooms - totalSelectedRooms\(\)/);
+  assert.match(propertySource, /Math\.ceil\(remainingAdults \/ remainingPlannedRooms\)/);
 });
 
 test("multi-room shopping discovers categories independently and exposes live stock", () => {
@@ -616,7 +657,7 @@ test("multi-room shopping discovers categories independently and exposes live st
   assert.match(propertySource, /room-stock-badge/);
   assert.match(propertySource, /Only 1 room available/);
   assert.match(propertySource, /rooms available/);
-  assert.match(propertySource, /totalSelectedRooms\(\) < requestedRoomCount\(\)/);
+  assert.match(propertySource, /totalSelectedRooms\(\) >= 20/);
 });
 
 test("room allocation dynamically caps adults and occupancy-counting children", () => {
@@ -633,10 +674,10 @@ test("room allocation dynamically caps adults and occupancy-counting children", 
   assert.match(propertySource, /unit\.adults < 1/);
 });
 
-test("party mismatch is soft while room count occupancy stock and live pricing remain hard", () => {
+test("every searched guest and child age must be allocated before checkout", () => {
   assert.match(propertySource, /function partyMismatchMessage\(/);
-  assert.match(propertySource, /You can continue if this is intentional/);
-  assert.match(propertySource, /warning: mismatch/);
+  assert.match(propertySource, /valid: !mismatch/);
+  assert.match(propertySource, /the selected child ages do not match your search/);
   assert.match(propertySource, /selectionContinue\.disabled = !validation\.valid/);
   assert.match(propertySource, /exceeds its maximum occupancy/);
   assert.match(propertySource, /currently available/);
