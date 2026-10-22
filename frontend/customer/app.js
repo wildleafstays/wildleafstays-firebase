@@ -15,6 +15,7 @@ const mobileSearchClose = document.querySelector("#mobileSearchClose");
 const mobileSearchLabel = document.querySelector("#mobileSearchLabel");
 const mobileSearchMeta = document.querySelector("#mobileSearchMeta");
 const hero = document.querySelector(".home-hero");
+const heroContent = document.querySelector(".hero-content");
 const heroImage = document.querySelector("#heroImage");
 const heroOffer = document.querySelector("#heroOffer");
 const heroEyebrow = document.querySelector("#heroEyebrow");
@@ -268,8 +269,9 @@ async function loadHomepageContent() {
   } else {
     stopHeroTimer();
     hero?.classList.remove("managed-hero");
+    hero?.classList.add("hero-search-only");
+    heroContent?.classList.add("hidden");
     heroSliderControls?.classList.add("hidden");
-    updateHero(state.properties);
   }
 }
 
@@ -624,7 +626,6 @@ function renderProperties(properties) {
     exclusiveOnly ? allowsEntireProperty(property) :
       stayModeSelect?.value === "room" ? property.saleMode !== "FULL_PROPERTY_ONLY" : true,
   );
-  updateHero(visibleProperties);
   results.replaceChildren();
 
   if (!visibleProperties.length) {
@@ -808,22 +809,6 @@ function propertyCard(property, index) {
   return article;
 }
 
-function updateHero(properties) {
-  if (state.heroSlides.length) return;
-  const featured = properties.find((property) => property.coverMediaId);
-  if (!hero || !featured) {
-    hero?.classList.remove("has-property-image");
-    hero?.style.removeProperty("--home-hero-image");
-    return;
-  }
-
-  hero.style.setProperty(
-    "--home-hero-image",
-    `url("${propertyMediaUrl(featured.publicSlug, featured.coverMediaId)}")`,
-  );
-  hero.classList.add("has-property-image");
-}
-
 function homepageMediaUrl(mediaId) {
   return `/v1/public/homepage/media/${encodeURIComponent(mediaId)}`;
 }
@@ -837,8 +822,10 @@ function renderManagedHero(index) {
   const slide = state.heroSlides[normalizedIndex];
 
   hero.classList.add("managed-hero");
+  hero.classList.remove("hero-search-only");
   hero.classList.remove("has-property-image");
   hero.style.removeProperty("--home-hero-image");
+  heroContent?.classList.remove("hidden");
 
   heroImage.src = homepageMediaUrl(slide.imageId);
   heroImage.alt = slide.altText || "";

@@ -251,6 +251,7 @@ test("destination results support live filters and an app-like mobile search she
   assert.match(destinationHtml, /id="searchDateSummary"/);
   assert.match(destinationHtml, /id="searchPartySummary"/);
   assert.match(destinationHtml, /destination-intro[\s\S]*mobileSearchTrigger[\s\S]*destination-results-toolbar/);
+  assert.match(destinationHtml, /class="destination-topbar"/);
   assert.doesNotMatch(destinationHtml, /id="destinationHero"/);
   assert.doesNotMatch(destinationHtml, /id="destinationGuide"/);
   assert.match(destinationSource, /function renderProperties\(\)/);
@@ -258,6 +259,7 @@ test("destination results support live filters and an app-like mobile search she
   assert.match(destinationSource, /property\.saleMode !== "FULL_PROPERTY_ONLY"/);
   assert.match(destinationSource, /property\.saleMode === "FULL_PROPERTY_ONLY" \|\| property\.saleMode === "BOTH"/);
   assert.match(destinationStyles, /\.destination-mobile-search\s*\{[\s\S]*grid-template-columns:/);
+  assert.match(destinationStyles, /\.destination-topbar\s*\{[\s\S]*grid-template-columns:/);
   assert.match(destinationStyles, /\.destination-card\s*\{[\s\S]*grid-template-columns:/);
   assert.match(destinationStyles, /@media \(max-width: 720px\)/);
   assert.match(destinationStyles, /\.destination-search-open \.destination-search-form/);
@@ -712,6 +714,9 @@ test("homepage uses one fluid desktop search rail and a compact mobile search tr
   assert.match(homeHtml, /id="mobileSearchTrigger"/);
   assert.match(homeHtml, /class="search-guest-group"/);
   assert.match(homeHtml, /id="destinationRail"/);
+  assert.match(homeHtml, /home-hero hero-search-only/);
+  assert.doesNotMatch(homeHtml, /Find a stay that feels right\./);
+  assert.match(discoveryStyles, /@media \(min-width: 821px\)[\s\S]*min-height:\s*62px;[\s\S]*min-height:\s*42px;/);
   assert.match(homeSource, /function openMobileSearch\(\)/);
   assert.match(homeSource, /function closeMobileSearch\(\)/);
   assert.match(homeSource, /function updateMobileSearchSummary\(\)/);
@@ -752,6 +757,7 @@ test("homepage supports managed hero campaigns and destination photography witho
   assert.match(homeSource, /function resetHeroTimer\(\)/);
   assert.match(homeSource, /homepageMediaUrl\(destination\.imageId\)/);
   assert.match(homeSource, /destination-card-image/);
-  assert.match(homeSource, /if \(state\.heroSlides\.length\) return;/);
+  assert.doesNotMatch(homeSource, /function updateHero\(/);
+  assert.match(homeSource, /hero\.classList\.remove\("hero-search-only"\)/);
   assert.match(homeSource, /loadDestinations\(\)/);
 });
