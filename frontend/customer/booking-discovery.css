@@ -285,14 +285,17 @@
   .home-page .search-card,
   .home-page .search-card.villa-search {
     bottom: 22px;
+    height: 64px;
     max-width: 1120px;
     min-height: 62px;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.2fr) 112px;
     padding: 5px 7px;
     border-radius: 17px;
   }
 
   .home-page .search-card .search-field,
   .home-page .search-card .search-guest-group .search-field {
+    height: 52px;
     min-height: 50px;
     padding-block: 0.32rem;
     padding-inline: 0.78rem;
@@ -307,8 +310,10 @@
   }
 
   .home-page .search-card .search-button {
+    width: 100%;
     min-width: 108px;
     min-height: 42px;
+    justify-self: stretch;
     margin-left: 7px;
     padding-inline: 15px;
     border-radius: 11px;

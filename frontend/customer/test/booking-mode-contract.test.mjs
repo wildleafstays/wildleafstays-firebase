@@ -116,7 +116,8 @@ test("SmartStay checks exclusive availability before offering a villa upgrade", 
 
 test("SmartStay child ages are gathered and kept with the booking request", () => {
   assert.match(homeHtml, /id="smartstayChildAgeFields"/);
-  assert.match(homeHtml, /Adults in group/);
+  assert.match(homeHtml, /id="adultsLabel">Adults</);
+  assert.match(homeHtml, /id="childrenLabel">Children</);
   assert.match(homeSource, /function configureChildAgeFields/);
   assert.match(homeSource, /function selectedChildAges/);
   assert.match(homeSource, /childAges: selectedChildAges\(\)\.join/);
@@ -716,7 +717,7 @@ test("homepage uses one fluid desktop search rail and a compact mobile search tr
   assert.match(homeHtml, /id="destinationRail"/);
   assert.match(homeHtml, /home-hero hero-search-only/);
   assert.doesNotMatch(homeHtml, /Find a stay that feels right\./);
-  assert.match(discoveryStyles, /@media \(min-width: 821px\)[\s\S]*min-height:\s*62px;[\s\S]*min-height:\s*42px;/);
+  assert.match(discoveryStyles, /@media \(min-width: 821px\)[\s\S]*height:\s*64px;[\s\S]*grid-template-columns:[\s\S]*112px;[\s\S]*min-height:\s*42px;/);
   assert.match(homeSource, /function openMobileSearch\(\)/);
   assert.match(homeSource, /function closeMobileSearch\(\)/);
   assert.match(homeSource, /function updateMobileSearchSummary\(\)/);
