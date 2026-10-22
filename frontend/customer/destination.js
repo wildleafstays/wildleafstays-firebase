@@ -17,6 +17,7 @@ const state = {
         ? "rooms"
         : "all",
   properties: [],
+  details: new Map(),
   searchVersion: 0,
 };
 
@@ -72,6 +73,7 @@ function wireEvents() {
 async function initialize() {
   const destination = destinationLabel();
   document.title = `${destination} stays | Wildleaf Stays`;
+  resultsHeading.textContent = destination;
   form.destination.value = destination;
   syncModeTabs();
   updateMobileSummary();
@@ -129,8 +131,8 @@ function renderChildAgeFields() {
 async function loadProperties() {
   const searchVersion = ++state.searchVersion;
   renderLoading();
-  resultsSummary.textContent = "Checking live availability and date-specific rates…";
-  resultsHeading.textContent = `Stays in ${destinationLabel()}`;
+  resultsSummary.textContent = "Checking available stays…";
+  resultsHeading.textContent = destinationLabel();
 
   try {
     const childAges = selectedChildAges();
@@ -169,11 +171,33 @@ async function loadProperties() {
       return true;
     });
     renderProperties();
+    await hydratePropertyDetails(state.properties, searchVersion);
   } catch (error) {
     if (searchVersion !== state.searchVersion) return;
     results.replaceChildren(emptyState("We could not load these stays", error.message));
     resultsSummary.textContent = error.message || "Live availability could not be loaded.";
   }
+}
+
+async function hydratePropertyDetails(properties, searchVersion) {
+  const queue = properties
+    .filter((property) => !state.details.has(property.publicSlug))
+    .slice(0, 24);
+  for (let index = 0; index < queue.length; index += 4) {
+    await Promise.all(queue.slice(index, index + 4).map(async (property) => {
+      try {
+        const response = await apiRequest(
+          `/v1/public/properties/${encodeURIComponent(property.publicSlug)}`,
+          { cache: "default" },
+        );
+        state.details.set(property.publicSlug, response.property || null);
+      } catch {
+        state.details.set(property.publicSlug, null);
+      }
+    }));
+    if (searchVersion !== state.searchVersion) return;
+  }
+  if (queue.length && searchVersion === state.searchVersion) renderProperties();
 }
 
 function renderProperties() {
@@ -207,8 +231,8 @@ function renderProperties() {
   results.replaceChildren(...properties.map(propertyCard));
   const verified = properties.filter((property) => !property.smartstayCheckUnavailable).length;
   resultsSummary.textContent =
-    `${verified} ${verified === 1 ? "property" : "properties"} matched to your dates and guests` +
-    (properties.length > verified ? ` · ${properties.length - verified} require final verification` : "");
+    `${verified} ${verified === 1 ? "stay" : "stays"} available` +
+    (properties.length > verified ? ` · ${properties.length - verified} to confirm` : "");
 }
 
 function propertyCard(property, index) {
@@ -236,6 +260,7 @@ function propertyCard(property, index) {
   );
 
   const body = element("div", "destination-card-body");
+  const detail = state.details.get(property.publicSlug);
   const locationLabel = [property.locality, property.city, property.stateRegion]
     .filter(Boolean)
     .join(", ");
@@ -248,28 +273,36 @@ function propertyCard(property, index) {
     body.append(element("p", "destination-card-description", property.shortDescription));
   }
 
-  const facts = element("div", "destination-card-facts");
+  const summary = element("div", "destination-card-summary");
+  const guestCount = Number(form.adults.value || 0) + Number(form.children.value || 0);
+  const requestedRooms = Number(form.rooms.value || 1);
+  const roomTypeCount = detail?.roomCategories?.length || 0;
   const flexible = property.saleMode === "BOTH";
   const entire = property.smartstaySuggestedMode === "villa" || property.saleMode === "FULL_PROPERTY_ONLY";
-  if (flexible) {
-    facts.append(
-      element("span", "", "Room booking"),
-      element("span", "", "Entire property"),
-    );
+  summary.append(
+    element("span", "", `${guestCount} ${guestCount === 1 ? "guest" : "guests"} matched`),
+    element(
+      "span",
+      "",
+      roomTypeCount
+        ? `${roomTypeCount} room ${roomTypeCount === 1 ? "type" : "types"}`
+        : `${requestedRooms} ${requestedRooms === 1 ? "room" : "rooms"} requested`,
+    ),
+    element("span", "", flexible ? "Rooms + entire stay" : entire ? "Entire property" : "Private rooms"),
+  );
+  body.append(summary);
+
+  const facts = element("div", "destination-card-facts");
+  const amenities = (detail?.amenities || []).slice(0, 3);
+  if (amenities.length) {
+    amenities.forEach((amenity) => facts.append(element("span", "", amenity.name)));
   } else {
-    facts.append(element("span", "", entire ? "Entire property" : "Room booking"));
-  }
-  if (property.propertyTypeName || property.propertyCategoryName) {
-    facts.append(element("span", "", property.propertyTypeName || property.propertyCategoryName));
+    facts.append(
+      element("span", "", flexible ? "Flexible booking" : entire ? "Private property" : "Room booking"),
+      element("span", "", property.propertyTypeName || property.propertyCategoryName || "Wildleaf stay"),
+    );
   }
   body.append(facts);
-
-  const flexibility = flexible
-    ? "Choose individual rooms or reserve the complete property."
-    : entire
-      ? "Reserve the complete property for a private stay."
-      : "Choose the rooms that suit your group.";
-  body.append(element("p", "destination-card-flexibility", flexibility));
 
   const offer = element("aside", "destination-card-offer");
   const status = element(
@@ -369,12 +402,15 @@ function emptyState(title, copy) {
 
 function updateMobileSummary() {
   const label = document.querySelector("#mobileSearchLabel");
-  const meta = document.querySelector("#mobileSearchMeta");
+  const dateSummary = document.querySelector("#searchDateSummary");
+  const partySummary = document.querySelector("#searchPartySummary");
   label.textContent = form.destination.value.trim() || destinationLabel();
   const guests = Number(form.adults.value || 0) + Number(form.children.value || 0);
-  meta.textContent =
-    `${shortDate(form.arrivalDate.value)} – ${shortDate(form.departureDate.value)} · ` +
-    `${guests} ${guests === 1 ? "guest" : "guests"} · ${form.rooms.value} ${Number(form.rooms.value) === 1 ? "room" : "rooms"}`;
+  dateSummary.textContent =
+    `${shortDate(form.arrivalDate.value)} – ${shortDate(form.departureDate.value)}`;
+  partySummary.textContent =
+    `${guests} ${guests === 1 ? "guest" : "guests"}, ` +
+    `${form.rooms.value} ${Number(form.rooms.value) === 1 ? "room" : "rooms"}`;
 }
 
 function openMobileSearch() {

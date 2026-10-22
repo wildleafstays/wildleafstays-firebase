@@ -248,11 +248,16 @@ test("destination results support live filters and an app-like mobile search she
   assert.match(destinationHtml, /data-mode="all"/);
   assert.match(destinationHtml, /data-mode="rooms"/);
   assert.match(destinationHtml, /data-mode="entire"/);
+  assert.match(destinationHtml, /id="searchDateSummary"/);
+  assert.match(destinationHtml, /id="searchPartySummary"/);
+  assert.match(destinationHtml, /destination-intro[\s\S]*mobileSearchTrigger[\s\S]*destination-results-toolbar/);
   assert.doesNotMatch(destinationHtml, /id="destinationHero"/);
   assert.doesNotMatch(destinationHtml, /id="destinationGuide"/);
   assert.match(destinationSource, /function renderProperties\(\)/);
+  assert.match(destinationSource, /\/v1\/public\/properties\/\$\{encodeURIComponent\(property\.publicSlug\)\}/);
   assert.match(destinationSource, /property\.saleMode !== "FULL_PROPERTY_ONLY"/);
   assert.match(destinationSource, /property\.saleMode === "FULL_PROPERTY_ONLY" \|\| property\.saleMode === "BOTH"/);
+  assert.match(destinationStyles, /\.destination-mobile-search\s*\{[\s\S]*grid-template-columns:/);
   assert.match(destinationStyles, /\.destination-card\s*\{[\s\S]*grid-template-columns:/);
   assert.match(destinationStyles, /@media \(max-width: 720px\)/);
   assert.match(destinationStyles, /\.destination-search-open \.destination-search-form/);
