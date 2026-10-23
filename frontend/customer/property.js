@@ -330,9 +330,23 @@ function renderPropertyGallery(property) {
   const gallery = document.querySelector("#propertyGallery");
   if (!gallery) return;
 
+  const roomCategoryMedia = (property.roomCategories || []).flatMap((category) => {
+    const published = (category.media || []).filter(
+      (item) => item.mediaType === "IMAGE" && item.id,
+    );
+    if (published.length || !category.coverMediaId) return published;
+    return [
+      {
+        id: category.coverMediaId,
+        mediaType: "IMAGE",
+        altText: `${category.name} at ${property.name}`,
+        caption: category.name,
+      },
+    ];
+  });
   const media = [
     ...new Map(
-      (property.media || [])
+      [...(property.media || []), ...roomCategoryMedia]
         .filter((item) => item.mediaType === "IMAGE" && item.id)
         .map((item) => [item.id, item]),
     ).values(),

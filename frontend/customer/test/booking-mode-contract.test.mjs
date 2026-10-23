@@ -458,6 +458,8 @@ test("property shopping starts with photography and keeps identity below the gal
   assert.ok(propertyNameIndex > galleryIndex);
   assert.doesNotMatch(propertyHtml, /class="property-hero"/);
   assert.doesNotMatch(propertyHtml, /class="booking-assurance"/);
+  assert.match(propertySource, /const roomCategoryMedia =/);
+  assert.match(propertySource, /\.\.\.\(property\.media \|\| \[\]\), \.\.\.roomCategoryMedia/);
   assert.match(propertySource, /media\.slice\(0, 5\)/);
   assert.match(propertySource, /gallery-count-/);
 });
