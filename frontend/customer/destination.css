@@ -963,6 +963,133 @@
   }
 }
 
+/* Search is edited in place at every viewport; it never opens a modal. */
+.destination-mobile-search,
+.destination-search-head {
+  display: none;
+}
+
+.destination-search-form {
+  position: static;
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  grid-template-columns: minmax(130px, 0.9fr) minmax(260px, 1.45fr) minmax(230px, 1.1fr) 46px;
+  gap: 0;
+  overflow: visible;
+  padding: 5px;
+  border: 1px solid #d7dfda;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 5px 16px rgba(23, 63, 48, 0.045);
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+}
+
+.destination-field,
+.destination-search-group label {
+  min-height: 46px;
+  padding: 5px 11px;
+  border: 0;
+  border-right: 1px solid #e7ebe8;
+  border-radius: 0;
+}
+
+.destination-search-group {
+  gap: 0;
+}
+
+.destination-search-submit {
+  width: 40px;
+  height: 40px;
+}
+
+.destination-search-open::after {
+  display: none;
+}
+
+@media (max-width: 1040px) {
+  .destination-search-form {
+    grid-template-columns: minmax(110px, 0.8fr) minmax(235px, 1.35fr) minmax(205px, 1.05fr) 44px;
+  }
+}
+
+@media (max-width: 720px) {
+  .destination-topbar {
+    display: block;
+    width: 100%;
+    margin: 0;
+  }
+
+  .destination-search-shell {
+    position: sticky;
+    box-sizing: border-box;
+    top: 0;
+    z-index: 30;
+    padding: 6px 10px;
+  }
+
+  .destination-search-form {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    max-height: none;
+    grid-template-columns: minmax(0, 1fr) 40px;
+    overflow: visible;
+    padding: 4px;
+    border: 1px solid #d9e1dc;
+    border-radius: 14px;
+    box-shadow: 0 5px 15px rgba(23, 63, 48, 0.06);
+    transform: none;
+    visibility: visible;
+  }
+
+  .destination-field,
+  .destination-search-group label {
+    min-height: 40px;
+    padding: 4px 8px;
+    border: 0;
+    border-right: 1px solid #e7ebe8;
+    border-bottom: 1px solid #e7ebe8;
+    border-radius: 0;
+  }
+
+  .destination-field-location {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    padding-right: 48px;
+  }
+
+  .destination-date-group,
+  .destination-party-group {
+    grid-column: 1 / -1;
+  }
+
+  .destination-date-group {
+    grid-row: 2;
+  }
+
+  .destination-party-group {
+    grid-row: 3;
+  }
+
+  .destination-search-submit {
+    position: static;
+    width: auto;
+    height: 36px;
+    grid-column: 1 / -1;
+    grid-row: 4;
+    margin: 4px;
+    border-radius: 10px;
+  }
+
+  .destination-child-ages {
+    grid-column: 1 / -1;
+    padding: 6px 8px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .destination-card,
   .destination-card-media img,

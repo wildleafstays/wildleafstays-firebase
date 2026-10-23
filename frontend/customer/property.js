@@ -35,7 +35,6 @@ const selectionSummary = document.querySelector("#selectionSummary");
 const selectionAllocation = document.querySelector("#selectionAllocation");
 const selectionTotal = document.querySelector("#selectionTotal");
 const selectionContinue = document.querySelector("#selectionContinue");
-const guestSummary = document.querySelector("#guestSummary");
 const entirePropertyOffer = document.querySelector("#entirePropertyOffer");
 const roomChoiceDivider = document.querySelector("#roomChoiceDivider");
 
@@ -89,6 +88,29 @@ function wireEvents() {
     scheduleAvailabilitySearch();
   });
   form.departureDate.addEventListener("change", scheduleAvailabilitySearch);
+  form.unitCount.addEventListener("change", () => {
+    state.requestedRooms = clamp(Number(form.unitCount.value || 1), 1, 20);
+    form.unitCount.value = String(state.requestedRooms);
+    scheduleAvailabilitySearch();
+  });
+  form.adults.addEventListener("change", () => {
+    const unit = state.units[0] || { adults: 2, childAges: [] };
+    unit.adults = clamp(Number(form.adults.value || 1), 1, 20);
+    state.units = [unit];
+    renderOccupancyUnits();
+    scheduleAvailabilitySearch();
+  });
+  form.children.addEventListener("change", () => {
+    const unit = state.units[0] || { adults: 2, childAges: [] };
+    const count = clamp(Number(form.children.value || 0), 0, 20);
+    unit.childAges = Array.from(
+      { length: count },
+      (_, childIndex) => unit.childAges[childIndex] ?? 8,
+    );
+    state.units = [unit];
+    renderOccupancyUnits();
+    scheduleAvailabilitySearch();
+  });
   form.promotionCode.addEventListener("input", () => {
     // A promo edit invalidates pending exact quotes without discarding room availability.
     state.recommendationRequestVersion += 1;
@@ -464,44 +486,12 @@ function renderPolicies(policies) {
 function renderOccupancyUnits() {
   const unit = state.units[0] || { adults: 2, childAges: [] };
   state.units = [unit];
+  form.adults.value = String(unit.adults);
+  form.children.value = String(unit.childAges.length);
 
-  if (guestSummary) {
-    guestSummary.textContent =
-      `${unit.adults} ${unit.adults === 1 ? "adult" : "adults"} · ` +
-      `${unit.childAges.length} ${unit.childAges.length === 1 ? "child" : "children"}`;
-  }
-
-  const picker = element("div", "total-party-picker");
-
-  const adultsLabel = element("label", "total-party-field");
-  adultsLabel.append(element("span", "", "Adults"));
-  const adults = integerSelect(unit.adults, 1, 20);
-  adults.setAttribute("aria-label", "Adults in travelling party");
-  adults.addEventListener("change", () => {
-    unit.adults = Number(adults.value);
-    renderOccupancyUnits();
-    scheduleAvailabilitySearch();
-  });
-  adultsLabel.append(adults);
-
-  const childrenLabel = element("label", "total-party-field");
-  childrenLabel.append(element("span", "", "Children"));
-  const children = integerSelect(unit.childAges.length, 0, 20);
-  children.setAttribute("aria-label", "Children in travelling party");
-  children.addEventListener("change", () => {
-    const count = Number(children.value);
-    unit.childAges = Array.from(
-      { length: count },
-      (_, childIndex) => unit.childAges[childIndex] ?? 8,
-    );
-    renderOccupancyUnits();
-    scheduleAvailabilitySearch();
-  });
-  childrenLabel.append(children);
-  picker.append(adultsLabel, childrenLabel);
+  const ages = element("div", "total-party-ages");
 
   if (unit.childAges.length) {
-    const ages = element("div", "total-party-ages");
     ages.append(element("p", "", "Children’s ages"));
     unit.childAges.forEach((age, childIndex) => {
       const label = element("label");
@@ -521,10 +511,9 @@ function renderOccupancyUnits() {
       label.append(select);
       ages.append(label);
     });
-    picker.append(ages);
   }
 
-  occupancyUnits.replaceChildren(picker);
+  occupancyUnits.replaceChildren(...(unit.childAges.length ? [ages] : []));
 }
 
 function partyTotals() {

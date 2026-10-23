@@ -10,8 +10,6 @@ const propertyCategorySelect = document.querySelector("#propertyCategory");
 const propertyTypeSelect = document.querySelector("#propertyType");
 const stayModeSelect = document.querySelector("#stayMode");
 const destinationRail = document.querySelector("#destinationRail");
-const mobileSearchTrigger = document.querySelector("#mobileSearchTrigger");
-const mobileSearchClose = document.querySelector("#mobileSearchClose");
 const mobileSearchLabel = document.querySelector("#mobileSearchLabel");
 const mobileSearchMeta = document.querySelector("#mobileSearchMeta");
 const hero = document.querySelector(".home-hero");
@@ -93,7 +91,6 @@ void initialize();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  closeMobileSearch();
   const childAges = selectedChildAges();
   const children = Math.max(0, Number(form.children.value) || 0);
   if (
@@ -106,14 +103,8 @@ form.addEventListener("submit", (event) => {
   location.assign(destinationUrl(form.destination.value.trim()));
 });
 
-mobileSearchTrigger?.addEventListener("click", openMobileSearch);
-mobileSearchClose?.addEventListener("click", closeMobileSearch);
 form.addEventListener("input", updateMobileSearchSummary);
 form.addEventListener("change", updateMobileSearchSummary);
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeMobileSearch();
-});
 
 function isValidSearchDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
@@ -991,17 +982,6 @@ function slugifyDestination(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "all-destinations";
-}
-
-function openMobileSearch() {
-  document.body.classList.add("home-search-open");
-  mobileSearchTrigger?.setAttribute("aria-expanded", "true");
-  window.setTimeout(() => form.destination?.focus(), 50);
-}
-
-function closeMobileSearch() {
-  document.body.classList.remove("home-search-open");
-  mobileSearchTrigger?.setAttribute("aria-expanded", "false");
 }
 
 function updateMobileSearchSummary() {

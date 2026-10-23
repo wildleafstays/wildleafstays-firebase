@@ -32,10 +32,7 @@ function wireEvents() {
     if (form.departureDate.value <= form.arrivalDate.value) {
       form.departureDate.value = form.departureDate.min;
     }
-    updateMobileSummary();
   });
-  form.addEventListener("input", updateMobileSummary);
-  form.addEventListener("change", updateMobileSummary);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const childAges = selectedChildAges();
@@ -50,7 +47,6 @@ function wireEvents() {
       return;
     }
     history.pushState(null, "", destinationPageUrl(nextDestination));
-    closeMobileSearch();
     void loadProperties();
   });
 
@@ -63,11 +59,6 @@ function wireEvents() {
   });
 
   sortResults.addEventListener("change", renderProperties);
-  document.querySelector("#mobileSearchTrigger")?.addEventListener("click", openMobileSearch);
-  document.querySelector("#mobileSearchClose")?.addEventListener("click", closeMobileSearch);
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeMobileSearch();
-  });
 }
 
 async function initialize() {
@@ -76,7 +67,6 @@ async function initialize() {
   resultsHeading.textContent = destination;
   form.destination.value = destination;
   syncModeTabs();
-  updateMobileSummary();
   await loadProperties();
 }
 
@@ -400,29 +390,6 @@ function emptyState(title, copy) {
   return empty;
 }
 
-function updateMobileSummary() {
-  const label = document.querySelector("#mobileSearchLabel");
-  const dateSummary = document.querySelector("#searchDateSummary");
-  const partySummary = document.querySelector("#searchPartySummary");
-  label.textContent = form.destination.value.trim() || destinationLabel();
-  const guests = Number(form.adults.value || 0) + Number(form.children.value || 0);
-  dateSummary.textContent =
-    `${shortDate(form.arrivalDate.value)} – ${shortDate(form.departureDate.value)}`;
-  partySummary.textContent =
-    `${guests} ${guests === 1 ? "guest" : "guests"}, ` +
-    `${form.rooms.value} ${Number(form.rooms.value) === 1 ? "room" : "rooms"}`;
-}
-
-function openMobileSearch() {
-  document.body.classList.add("destination-search-open");
-  document.querySelector("#mobileSearchTrigger")?.setAttribute("aria-expanded", "true");
-}
-
-function closeMobileSearch() {
-  document.body.classList.remove("destination-search-open");
-  document.querySelector("#mobileSearchTrigger")?.setAttribute("aria-expanded", "false");
-}
-
 function priceOf(property) {
   return Number.isSafeInteger(property.smartstayEstimateMinor)
     ? property.smartstayEstimateMinor
@@ -441,12 +408,6 @@ function tripNights() {
   const arrival = new Date(`${form.arrivalDate.value}T12:00:00`);
   const departure = new Date(`${form.departureDate.value}T12:00:00`);
   return Math.max(1, Math.round((departure - arrival) / 86400000));
-}
-
-function shortDate(value) {
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return "Add dates";
-  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(date);
 }
 
 function slugify(value) {

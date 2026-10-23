@@ -245,13 +245,13 @@ test("clean destination property and checkout URLs resolve through Firebase Host
   assert.match(propertySource, /location\.assign\(`\/checkout\/\$\{encodeURIComponent\(publicSlug\)\}/);
 });
 
-test("destination results support live filters and an app-like mobile search sheet", () => {
+test("destination results support live filters and an always-editable search rail", () => {
   assert.match(destinationHtml, /data-mode="all"/);
   assert.match(destinationHtml, /data-mode="rooms"/);
   assert.match(destinationHtml, /data-mode="entire"/);
-  assert.match(destinationHtml, /id="searchDateSummary"/);
-  assert.match(destinationHtml, /id="searchPartySummary"/);
-  assert.match(destinationHtml, /destination-intro[\s\S]*mobileSearchTrigger[\s\S]*destination-results-toolbar/);
+  assert.match(destinationHtml, /id="destinationSearchForm" class="destination-search-form"/);
+  assert.doesNotMatch(destinationHtml, /id="mobileSearchTrigger"/);
+  assert.doesNotMatch(destinationHtml, />Change your search</);
   assert.match(destinationHtml, /class="destination-topbar"/);
   assert.doesNotMatch(destinationHtml, /id="destinationHero"/);
   assert.doesNotMatch(destinationHtml, /id="destinationGuide"/);
@@ -259,11 +259,12 @@ test("destination results support live filters and an app-like mobile search she
   assert.match(destinationSource, /\/v1\/public\/properties\/\$\{encodeURIComponent\(property\.publicSlug\)\}/);
   assert.match(destinationSource, /property\.saleMode !== "FULL_PROPERTY_ONLY"/);
   assert.match(destinationSource, /property\.saleMode === "FULL_PROPERTY_ONLY" \|\| property\.saleMode === "BOTH"/);
-  assert.match(destinationStyles, /\.destination-mobile-search\s*\{[\s\S]*grid-template-columns:/);
+  assert.match(destinationStyles, /Search is edited in place at every viewport/);
   assert.match(destinationStyles, /\.destination-topbar\s*\{[\s\S]*grid-template-columns:/);
   assert.match(destinationStyles, /\.destination-card\s*\{[\s\S]*grid-template-columns:/);
   assert.match(destinationStyles, /@media \(max-width: 720px\)/);
-  assert.match(destinationStyles, /\.destination-search-open \.destination-search-form/);
+  assert.match(destinationStyles, /\.destination-search-form\s*\{[\s\S]*position:\s*static;[\s\S]*visibility:\s*visible;/);
+  assert.doesNotMatch(destinationSource, /function openMobileSearch\(\)/);
 });
 
 test("homepage discovery removes redundant heading layers and keeps live categories primary", () => {
@@ -277,23 +278,16 @@ test("homepage discovery removes redundant heading layers and keeps live categor
   assert.match(homeSource, /if \(!categoryProperties\.length\) continue/);
 });
 
-test("mobile search panel stays above its backdrop and is touchable only when open", () => {
-  assert.doesNotMatch(homeStyles, /\.home-search-open::before/);
+test("mobile homepage search stays inline and never opens a full-screen panel", () => {
+  assert.doesNotMatch(homeHtml, /id="mobileSearchTrigger"/);
+  assert.doesNotMatch(homeSource, /function openMobileSearch\(\)/);
   assert.match(
-    homeStyles,
-    /\.home-search-open \.home-hero::after\s*\{[\s\S]*z-index:\s*110;[\s\S]*pointer-events:\s*auto;/,
+    discoveryStyles,
+    /@media \(max-width: 820px\)[\s\S]*\.home-page \.search-card,[\s\S]*position:\s*absolute;[\s\S]*visibility:\s*visible;[\s\S]*pointer-events:\s*auto;/,
   );
   assert.match(
-    homeStyles,
-    /\.home-page \.search-card,[\s\S]*z-index:\s*120;[\s\S]*visibility:\s*hidden;[\s\S]*pointer-events:\s*none;/,
-  );
-  assert.match(
-    homeStyles,
-    /\.home-search-open \.search-card\s*\{[\s\S]*visibility:\s*visible;[\s\S]*pointer-events:\s*auto;/,
-  );
-  assert.match(
-    homeStyles,
-    /\.mobile-search-trigger\s*\{[\s\S]*touch-action:\s*manipulation;/,
+    discoveryStyles,
+    /\.home-page \.home-hero::after,[\s\S]*\.home-search-open \.home-hero::after\s*\{[\s\S]*display:\s*none;/,
   );
 });
 
@@ -651,8 +645,13 @@ test("liked horizontal room-card presentation remains the shopping baseline", ()
 });
 
 test("room quantity is selected per category while party totals remain shared", () => {
-  assert.match(propertyHtml, /id="guestSummary"/);
+  assert.match(propertyHtml, /class="availability-form compact-search-form property-search-rail"/);
+  assert.match(propertyHtml, /name="unitCount" type="number"/);
+  assert.match(propertyHtml, /name="adults" type="number"/);
+  assert.match(propertyHtml, /name="children" type="number"/);
+  assert.doesNotMatch(propertyHtml, /Choose how you would like to stay/);
   assert.match(propertySource, /state\.units = \[\s*\{\s*adults,/s);
+  assert.match(propertySource, /state\.requestedRooms = clamp\(Number\(form\.unitCount\.value/);
   assert.match(propertySource, /function changeRoomQuantity\(category, defaultOption, change\)/);
   assert.match(propertySource, /room-quantity-picker/);
   assert.match(propertySource, /defaultRoomAllocation\(category\)/);
@@ -711,15 +710,15 @@ test("Wildleaf Match sends the guest requested room count instead of inventing e
 });
 
 
-test("homepage uses one fluid desktop search rail and a compact mobile search trigger", () => {
-  assert.match(homeHtml, /id="mobileSearchTrigger"/);
+test("homepage uses one directly editable search rail across viewports", () => {
+  assert.doesNotMatch(homeHtml, /id="mobileSearchTrigger"/);
   assert.match(homeHtml, /class="search-guest-group"/);
   assert.match(homeHtml, /id="destinationRail"/);
   assert.match(homeHtml, /home-hero hero-search-only/);
   assert.doesNotMatch(homeHtml, /Find a stay that feels right\./);
   assert.match(discoveryStyles, /@media \(min-width: 821px\)[\s\S]*height:\s*64px;[\s\S]*grid-template-columns:[\s\S]*112px;[\s\S]*min-height:\s*42px;/);
-  assert.match(homeSource, /function openMobileSearch\(\)/);
-  assert.match(homeSource, /function closeMobileSearch\(\)/);
+  assert.doesNotMatch(homeSource, /function openMobileSearch\(\)/);
+  assert.doesNotMatch(homeSource, /function closeMobileSearch\(\)/);
   assert.match(homeSource, /function updateMobileSearchSummary\(\)/);
   assert.match(homeSource, /function renderDestinations\(destinations\)/);
 });
