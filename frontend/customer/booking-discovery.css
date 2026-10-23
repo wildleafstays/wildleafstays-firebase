@@ -339,6 +339,7 @@
   .home-page .search-card,
   .home-page .search-card.villa-search {
     position: absolute;
+    box-sizing: border-box;
     top: auto;
     right: 10px;
     bottom: 10px;
