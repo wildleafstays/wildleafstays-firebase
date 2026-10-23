@@ -32,7 +32,9 @@ const smartMatchMessage = document.querySelector("#smartMatchMessage");
 const smartRecommendations = document.querySelector("#smartRecommendations");
 const selectionRibbon = document.querySelector("#selectionRibbon");
 const selectionSummary = document.querySelector("#selectionSummary");
+const selectionDates = document.querySelector("#selectionDates");
 const selectionAllocation = document.querySelector("#selectionAllocation");
+const selectionNotice = document.querySelector("#selectionNotice");
 const selectionTotal = document.querySelector("#selectionTotal");
 const selectionContinue = document.querySelector("#selectionContinue");
 const entirePropertyOffer = document.querySelector("#entirePropertyOffer");
@@ -283,18 +285,34 @@ function renderProperty(property) {
   renderStayConfiguration(property.roomCategories || []);
 
   const amenities = document.querySelector("#amenities");
-  amenities.replaceChildren(
-    ...(property.amenities || []).map((item) => {
-      const chip = element("span", "amenity-chip");
-      chip.append(
-        element("strong", "", item.name),
-        item.details
-          ? element("small", "", item.details)
-          : document.createTextNode(""),
+  const amenityItems = property.amenities || [];
+  const renderAmenities = (expanded = false) => {
+    const visibleItems = expanded ? amenityItems : amenityItems.slice(0, 8);
+    amenities.replaceChildren(
+      ...visibleItems.map((item) => {
+        const chip = element("span", "amenity-chip");
+        chip.append(
+          element("strong", "", item.name),
+          item.details
+            ? element("small", "", item.details)
+            : document.createTextNode(""),
+        );
+        return chip;
+      }),
+    );
+    if (amenityItems.length > 8) {
+      const toggle = element(
+        "button",
+        "amenity-toggle",
+        expanded ? "Show fewer" : `View all ${amenityItems.length}`,
       );
-      return chip;
-    }),
-  );
+      toggle.type = "button";
+      toggle.setAttribute("aria-expanded", String(expanded));
+      toggle.addEventListener("click", () => renderAmenities(!expanded));
+      amenities.append(toggle);
+    }
+  };
+  renderAmenities();
   if (!property.amenities?.length)
     amenities.append(
       element(
@@ -312,9 +330,13 @@ function renderPropertyGallery(property) {
   const gallery = document.querySelector("#propertyGallery");
   if (!gallery) return;
 
-  const media = (property.media || []).filter(
-    (item) => item.mediaType === "IMAGE" && item.id,
-  );
+  const media = [
+    ...new Map(
+      (property.media || [])
+        .filter((item) => item.mediaType === "IMAGE" && item.id)
+        .map((item) => [item.id, item]),
+    ).values(),
+  ];
   state.galleryMedia = media;
   state.photoMedia = media;
   state.galleryIndex = 0;
@@ -1816,15 +1838,29 @@ function selectedPartyTotals() {
   );
 }
 
-function partyMismatchMessage(requested, selected, agesMatch = true) {
+function partyMismatchMessage(
+  requested,
+  selected,
+  requestedRooms,
+  selectedRooms,
+  agesMatch = true,
+) {
   const parts = [];
+  const roomDelta = selectedRooms - requestedRooms;
   const adultDelta = selected.adults - requested.adults;
   const childDelta = selected.children - requested.children;
+
+  if (roomDelta < 0) {
+    const count = Math.abs(roomDelta);
+    parts.push(`${count} fewer ${count === 1 ? "room" : "rooms"}`);
+  } else if (roomDelta > 0) {
+    parts.push(`${roomDelta} extra ${roomDelta === 1 ? "room" : "rooms"}`);
+  }
 
   if (adultDelta < 0) {
     const count = Math.abs(adultDelta);
     parts.push(
-      `${count} ${count === 1 ? "adult is" : "adults are"} not allocated`,
+      `${count} fewer ${count === 1 ? "adult" : "adults"}`,
     );
   } else if (adultDelta > 0) {
     parts.push(
@@ -1835,7 +1871,7 @@ function partyMismatchMessage(requested, selected, agesMatch = true) {
   if (childDelta < 0) {
     const count = Math.abs(childDelta);
     parts.push(
-      `${count} ${count === 1 ? "child is" : "children are"} not allocated`,
+      `${count} fewer ${count === 1 ? "child" : "children"}`,
     );
   } else if (childDelta > 0) {
     parts.push(
@@ -1848,8 +1884,8 @@ function partyMismatchMessage(requested, selected, agesMatch = true) {
   }
 
   return parts.length
-    ? `Complete the guest allocation: ${parts.join(" · ")}.`
-    : "All guests are assigned to a room.";
+    ? `Different from your search: ${parts.join(" · ")}. Review before continuing.`
+    : "Your selection matches the rooms and guests in your search.";
 }
 
 function selectionValidation() {
@@ -1917,17 +1953,40 @@ function selectionValidation() {
     requestedAges.length === selectedAges.length &&
     requestedAges.every((age, index) => age === selectedAges[index]);
   const mismatch =
+    roomCount !== state.requestedRooms ||
     selected.adults !== requested.adults ||
     selected.children !== requested.children ||
     !agesMatch;
 
   return {
-    valid: !mismatch,
-    warning: false,
+    valid: true,
+    warning: mismatch,
     message: mismatch
-      ? partyMismatchMessage(requested, selected, agesMatch)
-      : "All guests are assigned to a room.",
+      ? partyMismatchMessage(
+          requested,
+          selected,
+          state.requestedRooms,
+          roomCount,
+          agesMatch,
+        )
+      : "Your selection matches the rooms and guests in your search.",
   };
+}
+
+function selectionDateSummary() {
+  const arrival = form.arrivalDate.value;
+  const departure = form.departureDate.value;
+  const nights = Math.round(
+    (new Date(`${departure}T12:00:00`).getTime() -
+      new Date(`${arrival}T12:00:00`).getTime()) /
+      86400000,
+  );
+  if (!arrival || !departure || nights < 1) return "";
+  return `${formatDate(arrival)} – ${formatDate(departure)} · ${nights} ${nights === 1 ? "night" : "nights"}`;
+}
+
+function guestSummary(party) {
+  return `${party.adults} ${party.adults === 1 ? "adult" : "adults"}, ${party.children} ${party.children === 1 ? "child" : "children"}`;
 }
 
 function scaledOptionEstimate(option, unitCount) {
@@ -2007,9 +2066,9 @@ function renderSelectionRibbon() {
   if (state.selectionType === "entire" && state.entireSelection) {
     const party = partyTotals();
     selectionSummary.textContent = `Entire ${state.property.name} selected`;
-    selectionAllocation.textContent =
-      `${party.adults} ${party.adults === 1 ? "adult" : "adults"} · ` +
-      `${party.children} ${party.children === 1 ? "child" : "children"} · complete privacy`;
+    selectionDates.textContent = selectionDateSummary();
+    selectionAllocation.textContent = `${guestSummary(party)} · exclusive use of the property`;
+    selectionNotice.textContent = "All available bedrooms and shared spaces are reserved for your group.";
     selectionRibbon.classList.remove("has-warning", "has-error");
     selectionTotal.textContent = money(
       state.entireSelection.estimatedTotalMinor,
@@ -2038,7 +2097,12 @@ function renderSelectionRibbon() {
           `${selection.units.length} × ${selection.category.name} (${mealPlanLabel(selection.option.mealPlanCode)})`,
       )
       .join(" · ");
-  selectionAllocation.textContent = validation.message;
+  const requested = partyTotals();
+  const selected = selectedPartyTotals();
+  selectionDates.textContent = selectionDateSummary();
+  selectionAllocation.textContent =
+    `Selected: ${guestSummary(selected)} · Search: ${state.requestedRooms} ${state.requestedRooms === 1 ? "room" : "rooms"}, ${guestSummary(requested)}`;
+  selectionNotice.textContent = validation.message;
   selectionRibbon.classList.toggle("has-warning", validation.warning);
   selectionRibbon.classList.toggle(
     "has-error",

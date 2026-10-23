@@ -757,6 +757,32 @@
 }
 
 @media (max-width: 760px) {
+  .property-shopping-shell .property-gallery-grid,
+  .property-shopping-shell .property-gallery-grid.gallery-count-2,
+  .property-shopping-shell .property-gallery-grid.gallery-count-3,
+  .property-shopping-shell .property-gallery-grid.gallery-count-4 {
+    display: flex;
+    height: min(72vw, 330px);
+    gap: 7px;
+    overflow-x: auto;
+    border-radius: 15px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .property-shopping-shell .property-gallery-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .property-shopping-shell .property-gallery-grid .property-gallery-tile,
+  .property-shopping-shell .property-gallery-grid .property-gallery-tile:first-child,
+  .property-shopping-shell .property-gallery-grid .property-gallery-tile:nth-child(n + 2) {
+    display: block;
+    flex: 0 0 88%;
+    height: 100%;
+    scroll-snap-align: start;
+  }
+
   .property-shopping-shell .property-gallery-grid.gallery-count-1 {
     height: min(72vw, 340px);
     grid-template-columns: minmax(0, 1fr);
@@ -835,6 +861,14 @@
 
   .selection-ribbon-copy small {
     display: block;
+  }
+
+  .selection-ribbon-details {
+    display: block;
+  }
+
+  .selection-ribbon-details small,
+  .selection-ribbon-notice {
     overflow: hidden;
     max-width: 100%;
     text-overflow: ellipsis;

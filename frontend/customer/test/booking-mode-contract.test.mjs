@@ -684,9 +684,11 @@ test("room allocation dynamically caps adults and occupancy-counting children", 
   assert.match(propertySource, /unit\.adults < 1/);
 });
 
-test("every searched guest and child age must be allocated before checkout", () => {
+test("search occupancy is guidance while inventory and room capacity remain enforced", () => {
   assert.match(propertySource, /function partyMismatchMessage\(/);
-  assert.match(propertySource, /valid: !mismatch/);
+  assert.match(propertySource, /valid: true,[\s\S]*?warning: mismatch/);
+  assert.match(propertySource, /Different from your search:/);
+  assert.match(propertySource, /roomCount !== state\.requestedRooms/);
   assert.match(propertySource, /the selected child ages do not match your search/);
   assert.match(propertySource, /selectionContinue\.disabled = !validation\.valid/);
   assert.match(propertySource, /exceeds its maximum occupancy/);
