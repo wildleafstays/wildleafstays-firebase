@@ -66,9 +66,15 @@ test("homepage search opens a dedicated destination experience", () => {
   assert.match(homeSource, /property\.saleMode === "BOTH"/);
   assert.match(homeSource, /"Explore entire property"/);
   assert.match(homeSource, /"Explore available rooms"/);
-  assert.match(homeSource, /location\.assign\(destinationUrl\(form\.destination\.value\.trim\(\)\)\)/);
+  assert.match(
+    homeSource,
+    /location\.assign\(destinationUrl\(form\.destination\.value\.trim\(\)\)\)/,
+  );
   assert.match(homeSource, /function destinationUrl\(destination\)/);
-  assert.match(homeSource, /`\/stays\/\$\{encodeURIComponent\(slugifyDestination\(label\)\)\}/);
+  assert.match(
+    homeSource,
+    /`\/stays\/\$\{encodeURIComponent\(slugifyDestination\(label\)\)\}/,
+  );
   assert.match(destinationHtml, /id="destinationSearchForm"/);
   assert.match(destinationHtml, /id="destinationResults"/);
   assert.match(destinationSource, /\/v1\/public\/smartstay\/search/);
@@ -98,6 +104,20 @@ test("entire-property privacy and room choice stay on one property page", () => 
   assert.match(propertySource, /state\.entireSelection = null/);
 });
 
+test("room and entire-property choices disclose canonical occupancy and extra-person pricing", () => {
+  assert.match(propertySource, /Base price includes/);
+  assert.match(propertySource, /Maximum \$\{category\.maxOccupancy\} guests/);
+  assert.match(propertySource, /extraAdultNightlyFromMinor/);
+  assert.match(propertySource, /extraChildNightlyFromMinor/);
+  assert.match(propertySource, /function renderRoomAllocationControls/);
+  assert.match(propertySource, /total updates automatically/);
+  assert.match(propertySource, /Maximum \$\{option\.maxOccupancy\} guests/);
+  assert.match(propertySource, /function bookingVoucherSnapshot/);
+  assert.match(propertySource, /function renderGuestVoucher/);
+  assert.match(propertySource, /Maximum permitted/);
+  assert.match(propertySource, /Print voucher/);
+});
+
 test("SmartStay discovery checks dates and exact group room count", () => {
   assert.match(homeSource, /async function matchGuestRequirements/);
   assert.match(homeSource, /room-recommendations/);
@@ -108,7 +128,10 @@ test("SmartStay discovery checks dates and exact group room count", () => {
 });
 
 test("SmartStay checks exclusive availability before offering a villa upgrade", () => {
-  assert.match(propertySource, /option\.productType === "FULL_PROPERTY" && option\.available/);
+  assert.match(
+    propertySource,
+    /option\.productType === "FULL_PROPERTY" && option\.available/,
+  );
   assert.match(propertySource, /availableEntireOption\(\)/);
   assert.match(propertySource, /Entire property unavailable for these dates/);
   assert.match(propertySource, /GST and fees confirmed next/);
@@ -126,10 +149,19 @@ test("SmartStay child ages are gathered and kept with the booking request", () =
 });
 
 test("SmartStay offers exclusive accommodation when requested rooms cannot be matched", () => {
-  assert.match(homeSource, /if \(!matches && !exclusive && allowsEntireProperty\(property\)\)/);
+  assert.match(
+    homeSource,
+    /if \(!matches && !exclusive && allowsEntireProperty\(property\)\)/,
+  );
   assert.match(homeSource, /suggestedMode = "villa"/);
-  assert.match(homeSource, /requestedRooms > 6 && allowsEntireProperty\(property\)/);
-  assert.match(homeSource, /option\.productType === "FULL_PROPERTY" && option\.available/);
+  assert.match(
+    homeSource,
+    /requestedRooms > 6 && allowsEntireProperty\(property\)/,
+  );
+  assert.match(
+    homeSource,
+    /option\.productType === "FULL_PROPERTY" && option\.available/,
+  );
 });
 
 test("SmartStay verifies party totals and labels exclusive-use fallback honestly", () => {
@@ -161,7 +193,10 @@ test("SmartStay returns customers to search with their guest preferences", () =>
   assert.match(homeSource, /initialSearch\.set\("privateStay", "1"\)/);
   assert.match(propertySource, /function preservedSearchParams\(\)/);
   assert.match(propertySource, /link\.href = `\/stays\//);
-  assert.doesNotMatch(propertySource, /querySelector\("#backToResults"\)\.href = "\/customer\/"/);
+  assert.doesNotMatch(
+    propertySource,
+    /querySelector\("#backToResults"\)\.href = "\/customer\/"/,
+  );
 });
 
 test("SmartStay ranks verified room matches ahead of speculative options", () => {
@@ -174,8 +209,14 @@ test("SmartStay ranks verified room matches ahead of speculative options", () =>
 test("SmartStay restores complete destination and category context after viewing a stay", () => {
   assert.match(homeSource, /destination: form\.destination\.value\.trim\(\)/);
   assert.match(homeSource, /initialSearch\.get\("categoryId"\)/);
-  assert.match(homeSource, /renderPropertyTypeFilter\(savedCategory, savedType \|\| ""\)/);
-  assert.match(propertySource, /"destination",[\s\S]*"categoryId",[\s\S]*"typeId"/);
+  assert.match(
+    homeSource,
+    /renderPropertyTypeFilter\(savedCategory, savedType \|\| ""\)/,
+  );
+  assert.match(
+    propertySource,
+    /"destination",[\s\S]*"categoryId",[\s\S]*"typeId"/,
+  );
 });
 
 test("SmartStay premium cards retain accessible keyboard focus and reduced motion", () => {
@@ -186,7 +227,10 @@ test("SmartStay premium cards retain accessible keyboard focus and reduced motio
 
 test("SmartStay never loses published properties when taxonomy is incomplete", () => {
   assert.match(homeSource, /const categorizedIds = new Set/);
-  assert.match(homeSource, /!categorizedIds\.has\(property\.propertyCategoryId\)/);
+  assert.match(
+    homeSource,
+    /!categorizedIds\.has\(property\.propertyCategoryId\)/,
+  );
   assert.match(homeSource, /More Wildleaf stays/);
   assert.match(homeSource, /renderedCount \+= uncategorized\.length/);
 });
@@ -241,29 +285,59 @@ test("clean destination property and checkout URLs resolve through Firebase Host
     "/customer/property.html",
   );
   assert.match(destinationSource, /function propertyUrl\(property\)/);
-  assert.match(destinationSource, /`\/stays\/\$\{encodeURIComponent\(slugify\(destinationLabel\(\)\)\)\}/);
-  assert.match(propertySource, /location\.assign\(`\/checkout\/\$\{encodeURIComponent\(publicSlug\)\}/);
+  assert.match(
+    destinationSource,
+    /`\/stays\/\$\{encodeURIComponent\(slugify\(destinationLabel\(\)\)\)\}/,
+  );
+  assert.match(
+    propertySource,
+    /location\.assign\(`\/checkout\/\$\{encodeURIComponent\(publicSlug\)\}/,
+  );
 });
 
 test("destination results support live filters and an always-editable search rail", () => {
   assert.match(destinationHtml, /data-mode="all"/);
   assert.match(destinationHtml, /data-mode="rooms"/);
   assert.match(destinationHtml, /data-mode="entire"/);
-  assert.match(destinationHtml, /id="destinationSearchForm" class="destination-search-form"/);
+  assert.match(
+    destinationHtml,
+    /id="destinationSearchForm" class="destination-search-form"/,
+  );
   assert.doesNotMatch(destinationHtml, /id="mobileSearchTrigger"/);
   assert.doesNotMatch(destinationHtml, />Change your search</);
   assert.match(destinationHtml, /class="destination-topbar"/);
   assert.doesNotMatch(destinationHtml, /id="destinationHero"/);
   assert.doesNotMatch(destinationHtml, /id="destinationGuide"/);
   assert.match(destinationSource, /function renderProperties\(\)/);
-  assert.match(destinationSource, /\/v1\/public\/properties\/\$\{encodeURIComponent\(property\.publicSlug\)\}/);
-  assert.match(destinationSource, /property\.saleMode !== "FULL_PROPERTY_ONLY"/);
-  assert.match(destinationSource, /property\.saleMode === "FULL_PROPERTY_ONLY" \|\| property\.saleMode === "BOTH"/);
-  assert.match(destinationStyles, /Search is edited in place at every viewport/);
-  assert.match(destinationStyles, /\.destination-topbar\s*\{[\s\S]*grid-template-columns:/);
-  assert.match(destinationStyles, /\.destination-card\s*\{[\s\S]*grid-template-columns:/);
+  assert.match(
+    destinationSource,
+    /\/v1\/public\/properties\/\$\{encodeURIComponent\(property\.publicSlug\)\}/,
+  );
+  assert.match(
+    destinationSource,
+    /property\.saleMode !== "FULL_PROPERTY_ONLY"/,
+  );
+  assert.match(
+    destinationSource,
+    /property\.saleMode === "FULL_PROPERTY_ONLY" \|\| property\.saleMode === "BOTH"/,
+  );
+  assert.match(
+    destinationStyles,
+    /Search is edited in place at every viewport/,
+  );
+  assert.match(
+    destinationStyles,
+    /\.destination-topbar\s*\{[\s\S]*grid-template-columns:/,
+  );
+  assert.match(
+    destinationStyles,
+    /\.destination-card\s*\{[\s\S]*grid-template-columns:/,
+  );
   assert.match(destinationStyles, /@media \(max-width: 720px\)/);
-  assert.match(destinationStyles, /\.destination-search-form\s*\{[\s\S]*position:\s*static;[\s\S]*visibility:\s*visible;/);
+  assert.match(
+    destinationStyles,
+    /\.destination-search-form\s*\{[\s\S]*position:\s*static;[\s\S]*visibility:\s*visible;/,
+  );
   assert.doesNotMatch(destinationSource, /function openMobileSearch\(\)/);
 });
 
@@ -272,7 +346,10 @@ test("homepage discovery removes redundant heading layers and keeps live categor
   assert.doesNotMatch(homeHtml, /Pick a destination/);
   assert.doesNotMatch(homeHtml, /Stay collections/);
   assert.doesNotMatch(homeHtml, /Explore Wildleaf/);
-  assert.match(homeSource, /element\("h2", "", category\.homepageHeading \|\| category\.name\)/);
+  assert.match(
+    homeSource,
+    /element\("h2", "", category\.homepageHeading \|\| category\.name\)/,
+  );
   assert.match(homeSource, /\.filter\(\(category\) => category\.enabled\)/);
   assert.doesNotMatch(homeSource, /homepageVisible/);
   assert.match(homeSource, /if \(!categoryProperties\.length\) continue/);
@@ -336,11 +413,23 @@ test("Legacy entire-property catalogue remains available at its direct URL", () 
   assert.match(entirePropertyHtml, /id="catalogType"/);
   assert.match(entirePropertySource, /\/v1\/public\/property-taxonomy/);
   assert.match(entirePropertySource, /\/v1\/public\/properties/);
-  assert.match(entirePropertySource, /property\.saleMode === "FULL_PROPERTY_ONLY"/);
+  assert.match(
+    entirePropertySource,
+    /property\.saleMode === "FULL_PROPERTY_ONLY"/,
+  );
   assert.match(entirePropertySource, /property\.saleMode === "BOTH"/);
-  assert.match(entirePropertySource, /const locations = \[\.\.\.grouped\.keys\(\)\]\.sort\(collator\.compare\)/);
-  assert.match(entirePropertySource, /sort\(\(left, right\) => collator\.compare\(left\.name, right\.name\)\)/);
-  assert.match(entirePropertySource, /className = "catalog-location-section"|catalog-location-section/);
+  assert.match(
+    entirePropertySource,
+    /const locations = \[\.\.\.grouped\.keys\(\)\]\.sort\(collator\.compare\)/,
+  );
+  assert.match(
+    entirePropertySource,
+    /sort\(\(left, right\) => collator\.compare\(left\.name, right\.name\)\)/,
+  );
+  assert.match(
+    entirePropertySource,
+    /className = "catalog-location-section"|catalog-location-section/,
+  );
   assert.match(entirePropertySource, /mode: "villa"/);
 });
 
@@ -350,7 +439,10 @@ test("Entire Property page uses optional Super Admin marketing instead of perman
   assert.match(entirePropertyHtml, /id="entirePropertyHeroOffer"/);
   assert.match(entirePropertyHtml, /id="entirePropertyHeroCta"/);
   assert.doesNotMatch(entirePropertyHtml, /A place entirely your own/);
-  assert.doesNotMatch(entirePropertyHtml, /Browse private-use Wildleaf stays by destination/);
+  assert.doesNotMatch(
+    entirePropertyHtml,
+    /Browse private-use Wildleaf stays by destination/,
+  );
   assert.doesNotMatch(entirePropertyHtml, />Browse by destination</);
   assert.doesNotMatch(entirePropertyHtml, />Entire-property stays</);
   assert.match(entirePropertySource, /\/v1\/public\/homepage/);
@@ -373,7 +465,10 @@ test("property booking always uses one unified selector", () => {
 test("entire-property presentation explains the shared property clearly", () => {
   assert.match(propertySource, /One property, two ways to stay/);
   assert.match(propertySource, /reserve every active room and shared space/);
-  assert.match(propertySource, /Every active bedroom and shared space is reserved together/);
+  assert.match(
+    propertySource,
+    /Every active bedroom and shared space is reserved together/,
+  );
   assert.doesNotMatch(propertySource, /villaBaseRate|separateVillaRate/);
 });
 
@@ -382,13 +477,25 @@ test("property page loads inventory automatically and offers direct booking", ()
   assert.doesNotMatch(propertyHtml, />\s*Check availability\s*</);
   assert.doesNotMatch(propertyHtml, /Available rooms and rates/);
   assert.match(propertyHtml, /class="[^"]*availability-form/);
-  assert.match(propertySource, /searchAvailability\(\{ resetBooking: false \}\)/);
+  assert.match(
+    propertySource,
+    /searchAvailability\(\{ resetBooking: false \}\)/,
+  );
   assert.match(propertySource, /function scheduleAvailabilitySearch\(\)/);
   assert.match(propertySource, /"Book now"/);
-  assert.match(propertySource, /GST and any additional fees shown before payment/);
-  assert.doesNotMatch(propertySource, /GST and mandatory fees shown before payment/);
+  assert.match(
+    propertySource,
+    /GST and any additional fees shown before payment/,
+  );
+  assert.doesNotMatch(
+    propertySource,
+    /GST and mandatory fees shown before payment/,
+  );
   assert.match(propertySource, /async function startBooking\(option, button\)/);
-  assert.match(propertySource, /await createHold\(null, \{ scrollToGuest: true \}\)/);
+  assert.match(
+    propertySource,
+    /await createHold\(null, \{ scrollToGuest: true \}\)/,
+  );
   assert.doesNotMatch(propertySource, /"Get exact price"/);
 });
 
@@ -400,8 +507,14 @@ test("property search defaults to today, one night, one room and two adults", ()
 });
 
 test("hotel room categories are not repeated in the property summary", () => {
-  assert.doesNotMatch(propertySource, /const card = element\("article", "room-category-summary"\)/);
-  assert.match(propertySource, /function renderStayConfiguration\(categories\)/);
+  assert.doesNotMatch(
+    propertySource,
+    /const card = element\("article", "room-category-summary"\)/,
+  );
+  assert.match(
+    propertySource,
+    /function renderStayConfiguration\(categories\)/,
+  );
   assert.match(propertySource, /if \(state\.allowsEntire && names\.length\)/);
 });
 
@@ -410,9 +523,11 @@ test("available rates use OTA-style room facts and calendar-backed totals", () =
   assert.match(propertySource, /category\.maxOccupancy/);
   assert.match(propertySource, /mealPlanLabel/);
   assert.match(propertySource, /option\.estimatedTotalMinor/);
-  assert.match(propertySource, /GST and any additional fees shown before payment/);
+  assert.match(
+    propertySource,
+    /GST and any additional fees shown before payment/,
+  );
 });
-
 
 test("property page presents published property media as an immersive photo tour", () => {
   assert.match(propertyHtml, /id="propertyGallery"/);
@@ -422,7 +537,6 @@ test("property page presents published property media as an immersive photo tour
   assert.match(propertySource, /View all \$\{media\.length\} photos/);
   assert.match(propertySource, /function propertyMediaUrl\(mediaId\)/);
 });
-
 
 test("hotel property page can book smart recommendations through canonical checkout", () => {
   assert.match(propertyHtml, /id="smartMatchSection"/);
@@ -436,7 +550,10 @@ test("hotel property page can book smart recommendations through canonical check
   assert.match(propertySource, /room-mixes\/quotes/);
   assert.match(propertySource, /function renderRoomMixQuote\(/);
   assert.match(propertySource, /function createRoomMixHold\(/);
-  assert.match(propertySource, /room-mixes\/\$\{state\.roomMixQuote\.id\}\/hold/);
+  assert.match(
+    propertySource,
+    /room-mixes\/\$\{state\.roomMixQuote\.id\}\/hold/,
+  );
   assert.match(propertySource, /room-mixes\/\$\{roomMixQuoteId\}\/checkout/);
   assert.match(propertySource, /state\.roomMixQuote/);
   assert.match(propertySource, /Estimated room and extra-guest total/);
@@ -450,7 +567,6 @@ test("hotel property page can book smart recommendations through canonical check
   assert.doesNotMatch(propertySource, /razorpay_signature/);
 });
 
-
 test("property shopping starts with photography and keeps identity below the gallery", () => {
   const galleryIndex = propertyHtml.indexOf('id="propertyGallery"');
   const propertyNameIndex = propertyHtml.indexOf('id="propertyName"');
@@ -459,7 +575,10 @@ test("property shopping starts with photography and keeps identity below the gal
   assert.doesNotMatch(propertyHtml, /class="property-hero"/);
   assert.doesNotMatch(propertyHtml, /class="booking-assurance"/);
   assert.match(propertySource, /const roomCategoryMedia =/);
-  assert.match(propertySource, /\.\.\.\(property\.media \|\| \[\]\), \.\.\.roomCategoryMedia/);
+  assert.match(
+    propertySource,
+    /\.\.\.\(property\.media \|\| \[\]\), \.\.\.roomCategoryMedia/,
+  );
   assert.match(propertySource, /media\.slice\(0, 5\)/);
   assert.match(propertySource, /gallery-count-/);
 });
@@ -467,11 +586,17 @@ test("property shopping starts with photography and keeps identity below the gal
 test("hotel rates are grouped into one horizontal shopping card per room category", () => {
   assert.match(propertyHtml, /room-category-rail/);
   assert.match(propertySource, /function groupRoomOptions\(options\)/);
-  assert.match(propertySource, /function roomCategoryCard\(category, options, nights\)/);
+  assert.match(
+    propertySource,
+    /function roomCategoryCard\(category, options, nights\)/,
+  );
   assert.match(propertySource, /rate-plan-list/);
   assert.match(propertySource, /rate-plan-choice/);
   assert.match(propertySource, /mealPlanLabel\(option\.mealPlanCode\)/);
-  assert.match(propertySource, /function renderRoomAllocationControls\(category, selection\)/);
+  assert.match(
+    propertySource,
+    /function renderRoomAllocationControls\(category, selection\)/,
+  );
   assert.match(propertySource, /Who is staying in this room\?/);
 });
 
@@ -483,8 +608,14 @@ test("manual room shopping uses one sticky selection ribbon and canonical checko
   assert.match(propertySource, /"manual-room-quote"/);
   assert.match(propertySource, /"manual-room-mix-quote"/);
   assert.match(propertySource, /room-mixes\/quotes/);
-  assert.match(propertySource, /await createRoomMixHold\(\{ scrollToGuest: true \}\)/);
-  assert.match(propertySource, /await createHold\(null, \{ scrollToGuest: true \}\)/);
+  assert.match(
+    propertySource,
+    /await createRoomMixHold\(\{ scrollToGuest: true \}\)/,
+  );
+  assert.match(
+    propertySource,
+    /await createHold\(null, \{ scrollToGuest: true \}\)/,
+  );
 });
 
 test("Wildleaf Match stays out of simple searches and is collapsible for complex groups", () => {
@@ -498,61 +629,112 @@ test("Wildleaf Match stays out of simple searches and is collapsible for complex
 });
 
 test("payment verification network failures keep a safe manual recovery message", () => {
-  const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
-  assert.match(polling, /const checkedStatus = await refreshCheckoutStatus\(true\)/);
+  const polling = propertySource
+    .split("function startStatusPolling() {")[1]
+    .split("\nfunction stopStatusPolling")[0];
+  assert.match(
+    polling,
+    /const checkedStatus = await refreshCheckoutStatus\(true\)/,
+  );
   assert.match(polling, /if \(!checkedStatus && state\.pollAttempts >= 24\)/);
   assert.match(polling, /Wildleaf could not reach payment verification/);
 });
 
 test("terminal payment outcomes cannot be replaced by timeout messaging", () => {
-  const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
-  assert.match(polling, /if \(!state\.polling\) return;[\s\S]*?if \(state\.pollAttempts >= 24\)/);
+  const polling = propertySource
+    .split("function startStatusPolling() {")[1]
+    .split("\nfunction stopStatusPolling")[0];
+  assert.match(
+    polling,
+    /if \(!state\.polling\) return;[\s\S]*?if \(state\.pollAttempts >= 24\)/,
+  );
 });
 
 test("exhausted payment polling shows an actionable manual recovery path", () => {
-  const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
+  const polling = propertySource
+    .split("function startStatusPolling() {")[1]
+    .split("\nfunction stopStatusPolling")[0];
   assert.match(polling, /state\.pollAttempts >= 24/);
   assert.match(polling, /Automatic payment checks have paused/);
   assert.match(polling, /use Check booking status to retry/);
-  assert.match(polling, /Do not make another payment until the result is verified/);
+  assert.match(
+    polling,
+    /Do not make another payment until the result is verified/,
+  );
 });
 
 test("payment polling stops when reservation or payment identity changes", () => {
-  const polling = propertySource.split("function startStatusPolling() {")[1].split("\nfunction stopStatusPolling")[0];
-  assert.match(polling, /const pollingReservationId = state\.session\.activeCheckout\?\.reservationId/);
-  assert.match(polling, /const pollingPaymentIntentId = state\.session\.activeCheckout\?\.paymentIntentId/);
-  assert.match(polling, /state\.session\.activeCheckout\?\.reservationId !== pollingReservationId/);
+  const polling = propertySource
+    .split("function startStatusPolling() {")[1]
+    .split("\nfunction stopStatusPolling")[0];
+  assert.match(
+    polling,
+    /const pollingReservationId = state\.session\.activeCheckout\?\.reservationId/,
+  );
+  assert.match(
+    polling,
+    /const pollingPaymentIntentId = state\.session\.activeCheckout\?\.paymentIntentId/,
+  );
+  assert.match(
+    polling,
+    /state\.session\.activeCheckout\?\.reservationId !== pollingReservationId/,
+  );
   assert.match(polling, /stopStatusPolling\(\);[\s\S]*?return;/);
 });
 
 test("pending checkout recovery does not wait for live room discovery", () => {
-  const loader = propertySource.split("async function loadProperty() {")[1].split("\nfunction renderProperty")[0];
+  const loader = propertySource
+    .split("async function loadProperty() {")[1]
+    .split("\nfunction renderProperty")[0];
   assert.match(loader, /void searchAvailability\(\{ resetBooking: false \}\)/);
   assert.match(loader, /void searchRoomRecommendations\(\)/);
   assert.doesNotMatch(loader, /await Promise\.allSettled/);
-  assert.ok(loader.indexOf("void searchRoomRecommendations()") < loader.indexOf("await refreshCheckoutStatus(true)"));
+  assert.ok(
+    loader.indexOf("void searchRoomRecommendations()") <
+      loader.indexOf("await refreshCheckoutStatus(true)"),
+  );
 });
 
 test("page reload keeps a manual recovery path when checkout status is unreachable", () => {
-  const load = propertySource.split("async function loadProperty() {")[1].split("\nfunction renderProperty")[0];
+  const load = propertySource
+    .split("async function loadProperty() {")[1]
+    .split("\nfunction renderProperty")[0];
   assert.match(load, /else if \(!status\)/);
-  assert.match(load, /Wildleaf could not verify this reservation after the page reloaded/);
+  assert.match(
+    load,
+    /Wildleaf could not verify this reservation after the page reloaded/,
+  );
   assert.match(load, /renderPendingStatus\([\s\S]*?false,/);
 });
 
 test("stale payment-status responses cannot overwrite another checkout", () => {
-  const statusFlow = propertySource.split("async function refreshCheckoutStatus(quiet) {")[1].split("\nfunction renderCheckoutOutcome")[0];
+  const statusFlow = propertySource
+    .split("async function refreshCheckoutStatus(quiet) {")[1]
+    .split("\nfunction renderCheckoutOutcome")[0];
   assert.equal(
-    (statusFlow.match(/state\.session\.activeCheckout\?\.reservationId !== active\.reservationId/g) || []).length,
+    (
+      statusFlow.match(
+        /state\.session\.activeCheckout\?\.reservationId !== active\.reservationId/g,
+      ) || []
+    ).length,
     2,
   );
-  assert.match(statusFlow, /state\.session\.activeCheckout\?\.paymentIntentId !== active\.paymentIntentId/);
+  assert.match(
+    statusFlow,
+    /state\.session\.activeCheckout\?\.paymentIntentId !== active\.paymentIntentId/,
+  );
 });
 
 test("pending Razorpay orders block a second checkout until canonical status is resolved", () => {
-  const checkoutFlow = propertySource.split("async function beginCheckout(guestForm, button) {")[1].split("\nfunction openRazorpay")[0];
-  const guard = checkoutFlow.indexOf("if (state.session.activeCheckout && !state.session.activeCheckout.outcome)");
-  const submit = checkoutFlow.indexOf("const data = await apiRequest(checkoutPath");
+  const checkoutFlow = propertySource
+    .split("async function beginCheckout(guestForm, button) {")[1]
+    .split("\nfunction openRazorpay")[0];
+  const guard = checkoutFlow.indexOf(
+    "if (state.session.activeCheckout && !state.session.activeCheckout.outcome)",
+  );
+  const submit = checkoutFlow.indexOf(
+    "const data = await apiRequest(checkoutPath",
+  );
   assert.ok(guard >= 0 && guard < submit);
   assert.match(propertySource, /outcome: data\.outcome/);
   assert.match(checkoutFlow, /An earlier payment is still pending/);
@@ -560,20 +742,40 @@ test("pending Razorpay orders block a second checkout until canonical status is 
 });
 
 test("superseded checkout preserves pending booking but does not launch Razorpay", () => {
-  const checkoutFlow = propertySource.split("async function beginCheckout(guestForm, button) {")[1].split("\nfunction openRazorpay")[0];
-  assert.match(checkoutFlow, /bookingSearchVersion !== state\.recommendationRequestVersion/);
-  assert.match(checkoutFlow, /selectionVersion !== state\.selectionPricingVersion/);
+  const checkoutFlow = propertySource
+    .split("async function beginCheckout(guestForm, button) {")[1]
+    .split("\nfunction openRazorpay")[0];
+  assert.match(
+    checkoutFlow,
+    /bookingSearchVersion !== state\.recommendationRequestVersion/,
+  );
+  assert.match(
+    checkoutFlow,
+    /selectionVersion !== state\.selectionPricingVersion/,
+  );
   assert.match(checkoutFlow, /state\.session\.activeCheckout =/);
   assert.match(checkoutFlow, /Check its status before making another payment/);
   assert.match(checkoutFlow, /return;[\s\S]*?openRazorpay\(\)/);
 });
 
 test("manual room quotes cannot overwrite a changed room selection or search", () => {
-  const manualFlow = propertySource.split("async function continueRoomSelection(button) {")[1].split("\nfunction availabilityCard")[0];
-  assert.match(manualFlow, /const selectionVersion = state\.selectionPricingVersion/);
-  assert.match(manualFlow, /const bookingSearchVersion = state\.recommendationRequestVersion/);
+  const manualFlow = propertySource
+    .split("async function continueRoomSelection(button) {")[1]
+    .split("\nfunction availabilityCard")[0];
+  assert.match(
+    manualFlow,
+    /const selectionVersion = state\.selectionPricingVersion/,
+  );
+  assert.match(
+    manualFlow,
+    /const bookingSearchVersion = state\.recommendationRequestVersion/,
+  );
   assert.equal(
-    (manualFlow.match(/selectionVersion !== state\.selectionPricingVersion/g) || []).length,
+    (
+      manualFlow.match(
+        /selectionVersion !== state\.selectionPricingVersion/g,
+      ) || []
+    ).length,
     3,
   );
 });
@@ -583,7 +785,7 @@ test("stale standard and mixed-room holds cannot restore obsolete guest checkout
     assert.match(
       propertySource,
       new RegExp(
-        "requestVersion !== state\\.recommendationRequestVersion \\|\\| " +
+        "requestVersion !== state\\.recommendationRequestVersion\\s*\\|\\|\\s*" +
           source.replace(".", "\\.") +
           "\\?\\.id !== fingerprint",
       ),
@@ -599,16 +801,24 @@ test("promotion edits invalidate an in-flight recommended quote", () => {
 });
 
 test("changing a booking removes persisted quotes and holds without losing payment recovery", () => {
-  const clearFlow = propertySource.split("function clearQuoteAndLater() {")[1].split("\nfunction showInlineMessage")[0];
+  const clearFlow = propertySource
+    .split("function clearQuoteAndLater() {")[1]
+    .split("\nfunction showInlineMessage")[0];
   for (const field of ["quote", "quoteId", "roomMixQuote", "hold", "holdId"]) {
-    assert.match(clearFlow, new RegExp("delete state\\.session\\." + field + ";"));
+    assert.match(
+      clearFlow,
+      new RegExp("delete state\\.session\\." + field + ";"),
+    );
   }
   assert.match(clearFlow, /saveBookingSession\(publicSlug, state\.session\)/);
   assert.doesNotMatch(clearFlow, /delete state\.session\.activeCheckout/);
 });
 
 test("delayed recommended quotes cannot restore an outdated booking after search edits", () => {
-  assert.match(propertySource, /const bookingSearchVersion = state\.recommendationRequestVersion/);
+  assert.match(
+    propertySource,
+    /const bookingSearchVersion = state\.recommendationRequestVersion/,
+  );
   assert.equal(
     (
       propertySource.match(
@@ -635,7 +845,6 @@ test("room shopping keeps Razorpay verification server-side", () => {
   assert.doesNotMatch(propertySource, /razorpay_signature/);
 });
 
-
 test("liked horizontal room-card presentation remains the shopping baseline", () => {
   assert.match(propertyHtml, /room-category-rail/);
   assert.match(propertySource, /room-category-card ota-rate-card/);
@@ -647,19 +856,34 @@ test("liked horizontal room-card presentation remains the shopping baseline", ()
 });
 
 test("room quantity is selected per category while party totals remain shared", () => {
-  assert.match(propertyHtml, /class="availability-form compact-search-form property-search-rail"/);
+  assert.match(
+    propertyHtml,
+    /class="availability-form compact-search-form property-search-rail"/,
+  );
   assert.match(propertyHtml, /name="unitCount" type="number"/);
   assert.match(propertyHtml, /name="adults" type="number"/);
   assert.match(propertyHtml, /name="children" type="number"/);
   assert.doesNotMatch(propertyHtml, /Choose how you would like to stay/);
   assert.match(propertySource, /state\.units = \[\s*\{\s*adults,/s);
-  assert.match(propertySource, /state\.requestedRooms = clamp\(Number\(form\.unitCount\.value/);
-  assert.match(propertySource, /function changeRoomQuantity\(category, defaultOption, change\)/);
+  assert.match(
+    propertySource,
+    /state\.requestedRooms = clamp\(Number\(form\.unitCount\.value/,
+  );
+  assert.match(
+    propertySource,
+    /function changeRoomQuantity\(category, defaultOption, change\)/,
+  );
   assert.match(propertySource, /room-quantity-picker/);
   assert.match(propertySource, /defaultRoomAllocation\(category\)/);
   assert.match(propertySource, /selectedPartyTotals\(\)/);
-  assert.match(propertySource, /state\.requestedRooms - totalSelectedRooms\(\)/);
-  assert.match(propertySource, /Math\.ceil\(remainingAdults \/ remainingPlannedRooms\)/);
+  assert.match(
+    propertySource,
+    /state\.requestedRooms - totalSelectedRooms\(\)/,
+  );
+  assert.match(
+    propertySource,
+    /Math\.ceil\(remainingAdults \/ remainingPlannedRooms\)/,
+  );
 });
 
 test("multi-room shopping discovers categories independently and exposes live stock", () => {
@@ -676,7 +900,10 @@ test("room allocation dynamically caps adults and occupancy-counting children", 
   assert.match(propertySource, /function roomAdultMaximum\(category, unit\)/);
   assert.match(propertySource, /function roomChildMaximum\(category, unit\)/);
   assert.match(propertySource, /function roomUnitValid\(category, unit\)/);
-  assert.match(propertySource, /integerSelect\(unit\.adults, 1, adultMaximum\)/);
+  assert.match(
+    propertySource,
+    /integerSelect\(unit\.adults, 1, adultMaximum\)/,
+  );
   assert.match(
     propertySource,
     /integerSelect\(unit\.childAges\.length, 0, childMaximum\)/,
@@ -691,8 +918,14 @@ test("search occupancy is guidance while inventory and room capacity remain enfo
   assert.match(propertySource, /valid: true,[\s\S]*?warning: mismatch/);
   assert.match(propertySource, /Different from your search:/);
   assert.match(propertySource, /roomCount !== state\.requestedRooms/);
-  assert.match(propertySource, /the selected child ages do not match your search/);
-  assert.match(propertySource, /selectionContinue\.disabled = !validation\.valid/);
+  assert.match(
+    propertySource,
+    /the selected child ages do not match your search/,
+  );
+  assert.match(
+    propertySource,
+    /selectionContinue\.disabled = !validation\.valid/,
+  );
   assert.match(propertySource, /exceeds its maximum occupancy/);
   assert.match(propertySource, /currently available/);
   assert.match(propertySource, /One selected room is no longer available/);
@@ -706,13 +939,11 @@ test("infant occupancy classification is isolated from exact quote child ages", 
   assert.match(propertySource, /childAges: \[\.\.\.unit\.childAges\]/);
 });
 
-
 test("Wildleaf Match sends the guest requested room count instead of inventing extra rooms", () => {
   assert.match(propertySource, /const requestedRooms = requestedRoomCount\(\)/);
   assert.match(propertySource, /requestedRooms,/);
   assert.match(propertySource, /!complexSearch \|\| requestedRooms > 6/);
 });
-
 
 test("homepage uses one directly editable search rail across viewports", () => {
   assert.doesNotMatch(homeHtml, /id="mobileSearchTrigger"/);
@@ -720,7 +951,10 @@ test("homepage uses one directly editable search rail across viewports", () => {
   assert.match(homeHtml, /id="destinationRail"/);
   assert.match(homeHtml, /home-hero hero-search-only/);
   assert.doesNotMatch(homeHtml, /Find a stay that feels right\./);
-  assert.match(discoveryStyles, /@media \(min-width: 821px\)[\s\S]*height:\s*64px;[\s\S]*grid-template-columns:[\s\S]*112px;[\s\S]*min-height:\s*42px;/);
+  assert.match(
+    discoveryStyles,
+    /@media \(min-width: 821px\)[\s\S]*height:\s*64px;[\s\S]*grid-template-columns:[\s\S]*112px;[\s\S]*min-height:\s*42px;/,
+  );
   assert.doesNotMatch(homeSource, /function openMobileSearch\(\)/);
   assert.doesNotMatch(homeSource, /function closeMobileSearch\(\)/);
   assert.match(homeSource, /function updateMobileSearchSummary\(\)/);
@@ -745,11 +979,13 @@ test("managed homepage heroes can be image-only without automatic fallback copy"
 
 test("room category photo action uses the room's own published media collection", () => {
   assert.match(propertySource, /category\.media \|\| \[\]/);
-  assert.match(propertySource, /function openPhotoCollection\(media, index = 0\)/);
+  assert.match(
+    propertySource,
+    /function openPhotoCollection\(media, index = 0\)/,
+  );
   assert.match(propertySource, /state\.photoMedia/);
   assert.match(propertySource, /openPhotoCollection\(roomMedia, 0\)/);
 });
-
 
 test("homepage supports managed hero campaigns and destination photography without changing booking search", () => {
   assert.match(homeHtml, /id="heroImage"/);

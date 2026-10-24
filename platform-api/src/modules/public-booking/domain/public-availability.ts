@@ -30,6 +30,13 @@ export interface PublicAvailabilityOptionView {
   mealPlanCode: string;
   currencyCode: string;
   requestedUnits: number;
+  includedAdults: number;
+  includedChildren: number;
+  maxAdults: number;
+  maxChildren: number;
+  maxOccupancy: number;
+  extraAdultNightlyFromMinor: number | null;
+  extraChildNightlyFromMinor: number | null;
   available: boolean;
   unavailableReasons: PublicAvailabilityReason[];
   nightlyFromMinor: number;

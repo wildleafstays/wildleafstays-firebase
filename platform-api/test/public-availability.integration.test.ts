@@ -470,6 +470,13 @@ describe("Phase 6B public availability and rate preview", () => {
         productType: string;
         available: boolean;
         unavailableReasons: string[];
+        includedAdults: number;
+        includedChildren: number;
+        maxAdults: number;
+        maxChildren: number;
+        maxOccupancy: number;
+        extraAdultNightlyFromMinor: number | null;
+        extraChildNightlyFromMinor: number | null;
         nightlyFromMinor: number;
         accommodationMinor: number;
         extraGuestMinor: number;
@@ -492,6 +499,13 @@ describe("Phase 6B public availability and rate preview", () => {
       productType: "ROOM_CATEGORY",
       available: true,
       unavailableReasons: [],
+      includedAdults: 2,
+      includedChildren: 0,
+      maxAdults: 3,
+      maxChildren: 2,
+      maxOccupancy: 4,
+      extraAdultNightlyFromMinor: 100_000,
+      extraChildNightlyFromMinor: 50_000,
       nightlyFromMinor: 500_000,
       accommodationMinor: 1_050_000,
       extraGuestMinor: 100_000,
@@ -503,6 +517,13 @@ describe("Phase 6B public availability and rate preview", () => {
       productType: "FULL_PROPERTY",
       available: true,
       unavailableReasons: [],
+      includedAdults: 4,
+      includedChildren: 0,
+      maxAdults: 6,
+      maxChildren: 4,
+      maxOccupancy: 8,
+      extraAdultNightlyFromMinor: null,
+      extraChildNightlyFromMinor: null,
       accommodationMinor: 2_100_000,
       extraGuestMinor: 100_000,
       estimatedTotalMinor: 2_200_000

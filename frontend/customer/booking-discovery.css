@@ -122,32 +122,63 @@
 /* SmartStay premium discovery: focus, motion, and consistent cards */
 .home-page .property-card {
   overflow: hidden;
-  border: 1px solid rgba(31,70,50,.12);
+  border: 1px solid rgba(31, 70, 50, 0.12);
   border-radius: 22px;
   background: #fff;
-  box-shadow: 0 8px 26px rgba(17,45,30,.055);
-  transition: transform .2s ease, box-shadow .2s ease;
+  box-shadow: 0 8px 26px rgba(17, 45, 30, 0.055);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 .home-page .property-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 18px 38px rgba(17,45,30,.11);
+  box-shadow: 0 18px 38px rgba(17, 45, 30, 0.11);
 }
-.home-page .property-card-image { object-fit: cover; transition: transform .4s ease; }
-.home-page .property-card:hover .property-card-image { transform: scale(1.035); }
-.home-page .property-card-body { display: flex; flex-direction: column; align-items: flex-start; }
-.home-page .property-card-body .property-cta { width: 100%; justify-content: center; margin-top: auto; }
-.home-page .smartstay-price-summary { width: 100%; margin-block: .8rem 1rem; }
+.home-page .property-card-image {
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+.home-page .property-card:hover .property-card-image {
+  transform: scale(1.035);
+}
+.home-page .property-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.home-page .property-card-body .property-cta {
+  width: 100%;
+  justify-content: center;
+  margin-top: auto;
+}
+.home-page .smartstay-price-summary {
+  width: 100%;
+  margin-block: 0.8rem 1rem;
+}
 .home-page .property-cta:focus-visible,
 .home-page .search-button:focus-visible,
 .home-page .search-card input:focus-visible,
-.home-page .search-card select:focus-visible { outline: 3px solid #cba765; outline-offset: 3px; }
+.home-page .search-card select:focus-visible {
+  outline: 3px solid #cba765;
+  outline-offset: 3px;
+}
 @media (prefers-reduced-motion: reduce) {
-  .home-page .property-card, .home-page .property-card-image { transition: none; }
-  .home-page .property-card:hover, .home-page .property-card:hover .property-card-image { transform: none; }
+  .home-page .property-card,
+  .home-page .property-card-image {
+    transition: none;
+  }
+  .home-page .property-card:hover,
+  .home-page .property-card:hover .property-card-image {
+    transform: none;
+  }
 }
 @media (max-width: 820px) {
-  .home-page .property-card { border-radius: 18px; }
-  .home-page .property-card:hover { transform: none; }
+  .home-page .property-card {
+    border-radius: 18px;
+  }
+  .home-page .property-card:hover {
+    transform: none;
+  }
 }
 
 /* Booking-mode choice shown on each property: easy to see and operate. */
@@ -156,7 +187,9 @@
   border-radius: 12px;
   padding-inline: 1.1rem;
   text-wrap: balance;
-  transition: border-color .2s ease, background-color .2s ease;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
 }
 .property-page .property-mode-alternative:focus-visible {
   outline: 3px solid #cba765;
@@ -167,16 +200,19 @@
     width: 100%;
     justify-content: center;
     text-align: center;
-    font-size: .84rem;
+    font-size: 0.84rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .property-page .property-mode-alternative { transition: none; }
+  .property-page .property-mode-alternative {
+    transition: none;
+  }
 }
 
-
 /* Keep taxonomy data available to the results system without crowding primary search. */
-.home-page .search-taxonomy[hidden] { display: none !important; }
+.home-page .search-taxonomy[hidden] {
+  display: none !important;
+}
 .home-page .search-card .smartstay-mode-choice {
   min-width: 185px;
   flex: 1 1 185px;
@@ -191,29 +227,42 @@
   border: 0;
   padding: 0.5rem 0;
 }
-.home-page .search-card #privateStay[hidden] { display: none !important; }
+.home-page .search-card #privateStay[hidden] {
+  display: none !important;
+}
 @media (min-width: 900px) {
-  .home-page .hero-content { margin-bottom: 2.5rem; }
-  .home-page .search-card { margin-top: 2rem; }
+  .home-page .hero-content {
+    margin-bottom: 2.5rem;
+  }
+  .home-page .search-card {
+    margin-top: 2rem;
+  }
 }
 
 /* Wildleaf Discovery 2026: compact frosted search, no ornamental excess. */
 .home-page .search-card {
   padding: 12px 14px;
   min-height: 88px;
-  border: 1px solid rgba(255,255,255,.75);
+  border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: 22px;
-  background: rgba(255,255,255,.82);
-  box-shadow: 0 18px 45px rgba(13,35,29,.18), inset 0 1px 0 rgba(255,255,255,.8);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+    0 18px 45px rgba(13, 35, 29, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
   -webkit-backdrop-filter: blur(22px) saturate(1.3);
   backdrop-filter: blur(22px) saturate(1.3);
 }
-.home-page .search-card .search-field { min-width: 0; }
+.home-page .search-card .search-field {
+  min-width: 0;
+}
 .home-page .search-card .search-field > span {
-  color: #50675e; font-size: .66rem; letter-spacing: .085em; text-transform: uppercase;
+  color: #50675e;
+  font-size: 0.66rem;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
 }
 .home-page .search-card .search-field input {
-  font-size: .88rem;
+  font-size: 0.88rem;
   font-weight: 650;
   color: #1c3a2d;
 }
@@ -222,52 +271,172 @@
   min-height: 50px;
   padding: 0 22px;
   border-radius: 15px;
-  font-size: .86rem;
+  font-size: 0.86rem;
   line-height: 1.2;
   white-space: nowrap;
-  box-shadow: 0 6px 14px rgba(17,63,49,.16);
+  box-shadow: 0 6px 14px rgba(17, 63, 49, 0.16);
 }
-.home-page #stayMode.sr-only { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important; }
-.home-page #stays[hidden], .home-page #discoveryToolbar[hidden] { display:none!important; }
-.home-page .discovery-toolbar { display:flex; justify-content:space-between; align-items:end; gap:20px; margin:0 0 22px; flex-wrap:wrap; }
-.home-page .discovery-heading-minimal h2 { margin:4px 0 0; font:700 clamp(1.65rem,3vw,2.6rem)/1.15 "Playfair Display",Georgia,serif; color:#173b2d; }
-.home-page .stay-mode-tabs { display:flex; flex-wrap:wrap; gap:8px; padding:5px; border-radius:999px; border:1px solid #dbe6df; background:#f4f8f4; }
-.home-page .stay-mode-tab { min-height:43px; cursor:pointer; border:0; border-radius:999px; background:transparent; color:#355346; font-weight:700; padding:10px 21px; font-size:.87rem; }
-.home-page .stay-mode-tab.is-active { color:#fff; background:#164936; box-shadow:0 5px 14px rgba(11,63,45,.17); }
-.home-page .stay-mode-tab:focus-visible { outline:3px solid #d5a75e; outline-offset:2px; }
-.home-page .property-category-rail { gap:20px; }
-.home-page .property-card { border-radius:18px; border-color:#e1e9e3; box-shadow:0 12px 30px rgba(17,42,31,.07); }
-.home-page .property-card-body { padding:18px 20px 20px; gap:7px; }
-.home-page .property-card-body h3 { font:700 clamp(1.15rem,1.5vw,1.42rem)/1.25 "Playfair Display",Georgia,serif; margin:0; }
-.home-page .property-location { font-size:.73rem; letter-spacing:.055em; text-transform:uppercase; font-weight:700; }
-.home-page .property-card .smartstay-offer-note { font-size:.79rem; line-height:1.35; margin:0; color:#63736c; }
-.home-page .property-card .smartstay-price-summary { margin:12px 0; border-top:1px solid #e7ece7; padding-top:12px; }
-.home-page .property-card .smartstay-price-value { font-size:1.16rem; }
-.home-page .property-card .property-cta { min-height:43px; border-radius:12px; font-size:.85rem; }
-@media(max-width:820px) {
- .home-page .search-card { padding:14px; border-radius:18px; background:rgba(255,255,255,.96); }
- .home-page .search-card .search-button { width:100%; min-height:48px; }
- .home-page .stay-mode-tabs { width:100%; border-radius:16px; }
- .home-page .stay-mode-tab { flex:1 1 auto; padding:9px 10px; }
- .home-page .discovery-toolbar { align-items:stretch; }
+.home-page #stayMode.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
-@media(prefers-reduced-motion:reduce) {
- .home-page .stay-mode-tab,.home-page .property-card { transition:none!important; }
+.home-page #stays[hidden],
+.home-page #discoveryToolbar[hidden] {
+  display: none !important;
+}
+.home-page .discovery-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 20px;
+  margin: 0 0 22px;
+  flex-wrap: wrap;
+}
+.home-page .discovery-heading-minimal h2 {
+  margin: 4px 0 0;
+  font:
+    700 clamp(1.65rem, 3vw, 2.6rem)/1.15 "Playfair Display",
+    Georgia,
+    serif;
+  color: #173b2d;
+}
+.home-page .stay-mode-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 5px;
+  border-radius: 999px;
+  border: 1px solid #dbe6df;
+  background: #f4f8f4;
+}
+.home-page .stay-mode-tab {
+  min-height: 43px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #355346;
+  font-weight: 700;
+  padding: 10px 21px;
+  font-size: 0.87rem;
+}
+.home-page .stay-mode-tab.is-active {
+  color: #fff;
+  background: #164936;
+  box-shadow: 0 5px 14px rgba(11, 63, 45, 0.17);
+}
+.home-page .stay-mode-tab:focus-visible {
+  outline: 3px solid #d5a75e;
+  outline-offset: 2px;
+}
+.home-page .property-category-rail {
+  gap: 20px;
+}
+.home-page .property-card {
+  border-radius: 18px;
+  border-color: #e1e9e3;
+  box-shadow: 0 12px 30px rgba(17, 42, 31, 0.07);
+}
+.home-page .property-card-body {
+  padding: 18px 20px 20px;
+  gap: 7px;
+}
+.home-page .property-card-body h3 {
+  font:
+    700 clamp(1.15rem, 1.5vw, 1.42rem)/1.25 "Playfair Display",
+    Georgia,
+    serif;
+  margin: 0;
+}
+.home-page .property-location {
+  font-size: 0.73rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.home-page .property-card .smartstay-offer-note {
+  font-size: 0.79rem;
+  line-height: 1.35;
+  margin: 0;
+  color: #63736c;
+}
+.home-page .property-card .smartstay-price-summary {
+  margin: 12px 0;
+  border-top: 1px solid #e7ece7;
+  padding-top: 12px;
+}
+.home-page .property-card .smartstay-price-value {
+  font-size: 1.16rem;
+}
+.home-page .property-card .property-cta {
+  min-height: 43px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+@media (max-width: 820px) {
+  .home-page .search-card {
+    padding: 14px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.96);
+  }
+  .home-page .search-card .search-button {
+    width: 100%;
+    min-height: 48px;
+  }
+  .home-page .stay-mode-tabs {
+    width: 100%;
+    border-radius: 16px;
+  }
+  .home-page .stay-mode-tab {
+    flex: 1 1 auto;
+    padding: 9px 10px;
+  }
+  .home-page .discovery-toolbar {
+    align-items: stretch;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-page .stay-mode-tab,
+  .home-page .property-card {
+    transition: none !important;
+  }
 }
 
 /* Flatten category rails visually into a single location-wide responsive grid.
    Keep the existing taxonomy fallback and backend eligibility code unchanged. */
 .home-page #stays:not([hidden]) #results {
- display:grid;
- grid-template-columns:repeat(3,minmax(0,1fr));
- gap:22px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
 }
 .home-page #stays #results > .property-category-section,
-.home-page #stays #results .property-category-rail { display:contents; }
-.home-page #stays #results .property-category-heading { display:none; }
-.home-page #stays #results > .empty-state { grid-column:1/-1; }
-@media (max-width:1020px) { .home-page #stays:not([hidden]) #results { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media (max-width:650px) { .home-page #stays:not([hidden]) #results { grid-template-columns:minmax(0,1fr); gap:16px; } }
+.home-page #stays #results .property-category-rail {
+  display: contents;
+}
+.home-page #stays #results .property-category-heading {
+  display: none;
+}
+.home-page #stays #results > .empty-state {
+  grid-column: 1/-1;
+}
+@media (max-width: 1020px) {
+  .home-page #stays:not([hidden]) #results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 650px) {
+  .home-page #stays:not([hidden]) #results {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
 
 /* A restrained booking rail: managed campaigns remain visual, while the
    fallback homepage is search-only and never invents a default hero. */
@@ -288,7 +457,10 @@
     height: 64px;
     max-width: 1120px;
     min-height: 62px;
-    grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.2fr) 112px;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.9fr) minmax(
+        0,
+        0.9fr
+      ) minmax(0, 1.2fr) 112px;
     padding: 5px 7px;
     border-radius: 17px;
   }
@@ -399,18 +571,47 @@
   }
 }
 
-.home-page .listing-facts { display:flex; gap:7px; flex-wrap:wrap; margin:4px 0 2px; }
+.home-page .listing-facts {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 4px 0 2px;
+}
 .home-page .listing-fact {
- display:inline-flex; align-items:center; min-height:29px; padding:5px 10px;
- background:#f2f7f3; border:1px solid #e0eae1; color:#305746;
- border-radius:999px; font-size:.72rem; font-weight:750; letter-spacing:.005em;
+  display: inline-flex;
+  align-items: center;
+  min-height: 29px;
+  padding: 5px 10px;
+  background: #f2f7f3;
+  border: 1px solid #e0eae1;
+  color: #305746;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.005em;
 }
-.home-page .smartstay-offer-label { display:inline-flex; align-items:center; border-radius:8px; padding:5px 8px; font-size:.72rem; }
-.home-page .property-card-body .smartstay-offer-note { color:#64756a; font-size:.73rem; }
+.home-page .smartstay-offer-label {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 0.72rem;
+}
+.home-page .property-card-body .smartstay-offer-note {
+  color: #64756a;
+  font-size: 0.73rem;
+}
 .home-page .property-card .smartstay-price-summary {
- display:grid; grid-template-columns:1fr; gap:3px; align-items:start;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3px;
+  align-items: start;
 }
-.home-page .property-card .smartstay-price-disclaimer { color:#819086; font-size:.65rem; line-height:1.35; }
+.home-page .property-card .smartstay-price-disclaimer {
+  color: #819086;
+  font-size: 0.65rem;
+  line-height: 1.35;
+}
 
 /* Unified property shopping: one page for rooms and exclusive use. */
 .property-body {
@@ -438,7 +639,10 @@
 
 .property-search-rail {
   display: grid;
-  grid-template-columns: minmax(300px, 1.7fr) minmax(74px, 0.42fr) minmax(74px, 0.42fr) minmax(74px, 0.42fr);
+  grid-template-columns: minmax(300px, 1.7fr) minmax(74px, 0.42fr) minmax(
+      74px,
+      0.42fr
+    ) minmax(74px, 0.42fr);
   align-items: stretch;
   gap: 0;
   padding: 5px;
@@ -534,12 +738,25 @@
     linear-gradient(120deg, rgba(9, 44, 31, 0.98), rgba(31, 83, 61, 0.94)),
     var(--property-cover, none) center / cover no-repeat;
   box-shadow: 0 18px 46px rgba(13, 49, 35, 0.16);
-  transition: border-color 180ms ease, transform 180ms ease;
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
 }
 
 .entire-property-card.selected {
   border-color: #d4b36d;
-  box-shadow: 0 0 0 3px rgba(212, 179, 109, 0.28), 0 18px 46px rgba(13, 49, 35, 0.16);
+  box-shadow:
+    0 0 0 3px rgba(212, 179, 109, 0.28),
+    0 18px 46px rgba(13, 49, 35, 0.16);
+}
+
+.entire-property-card.unavailable {
+  filter: saturate(0.72);
+}
+
+.entire-property-card.unavailable .entire-property-action .button {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .entire-property-card .option-kicker {
@@ -572,6 +789,19 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.entire-property-facts .entire-capacity-primary {
+  border-color: rgba(225, 196, 135, 0.55);
+  color: #fff6df;
+  background: rgba(212, 179, 109, 0.18);
+}
+
+.entire-search-party {
+  margin: -7px 0 12px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.78rem;
   font-weight: 700;
 }
 
@@ -775,8 +1005,12 @@
   }
 
   .property-shopping-shell .property-gallery-grid .property-gallery-tile,
-  .property-shopping-shell .property-gallery-grid .property-gallery-tile:first-child,
-  .property-shopping-shell .property-gallery-grid .property-gallery-tile:nth-child(n + 2) {
+  .property-shopping-shell
+    .property-gallery-grid
+    .property-gallery-tile:first-child,
+  .property-shopping-shell
+    .property-gallery-grid
+    .property-gallery-tile:nth-child(n + 2) {
     display: block;
     flex: 0 0 88%;
     height: 100%;
@@ -789,7 +1023,9 @@
     grid-template-rows: minmax(0, 1fr);
   }
 
-  .property-shopping-shell .property-gallery-grid.gallery-count-1 .property-gallery-tile:first-child {
+  .property-shopping-shell
+    .property-gallery-grid.gallery-count-1
+    .property-gallery-tile:first-child {
     grid-column: 1;
     grid-row: 1;
   }

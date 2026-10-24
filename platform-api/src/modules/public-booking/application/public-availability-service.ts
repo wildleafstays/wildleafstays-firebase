@@ -461,6 +461,14 @@ function optionForOffer(
   }, 0);
 
   const nightlyFromMinor = Math.min(...stayCalendar.map((day) => day.rateMinor));
+  const extraAdultNightlyFromMinor =
+    offer.product_type === "ROOM_CATEGORY"
+      ? Math.min(...stayCalendar.map((day) => day.extraAdultMinor))
+      : null;
+  const extraChildNightlyFromMinor =
+    offer.product_type === "ROOM_CATEGORY"
+      ? Math.min(...stayCalendar.map((day) => day.extraChildMinor))
+      : null;
 
   return {
     rateProductId: offer.rate_product_id,
@@ -473,6 +481,13 @@ function optionForOffer(
     mealPlanCode: offer.meal_plan_code,
     currencyCode: offer.currency_code,
     requestedUnits,
+    includedAdults,
+    includedChildren,
+    maxAdults,
+    maxChildren,
+    maxOccupancy,
+    extraAdultNightlyFromMinor,
+    extraChildNightlyFromMinor,
     available: reasons.length === 0,
     unavailableReasons: reasons,
     nightlyFromMinor,

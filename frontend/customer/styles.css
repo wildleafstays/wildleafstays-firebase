@@ -1034,11 +1034,99 @@ select:focus {
   font-size: 0.82rem;
   font-weight: 700;
 }
+
+.guest-voucher {
+  margin-top: 1.25rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid #d6e2d9;
+  border-radius: var(--radius-sm);
+  background: #fbfcfa;
+}
+.guest-voucher-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.guest-voucher-heading h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1.2rem;
+}
+.guest-voucher-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.45fr) minmax(0, 1fr);
+  margin: 0;
+  border-top: 1px solid #e0e7e1;
+}
+.guest-voucher-grid dt,
+.guest-voucher-grid dd {
+  margin: 0;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #e8ece8;
+  font-size: 0.8rem;
+}
+.guest-voucher-grid dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+.guest-voucher-grid dd {
+  color: var(--forest-900);
+  font-weight: 650;
+}
+.guest-voucher-note {
+  margin: 0.85rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
 .status-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
   margin-top: 1rem;
+}
+
+@media (max-width: 560px) {
+  .guest-voucher-heading {
+    display: grid;
+  }
+  .voucher-print {
+    width: 100%;
+    justify-content: center;
+  }
+  .guest-voucher-grid {
+    grid-template-columns: 1fr;
+  }
+  .guest-voucher-grid dt {
+    padding-bottom: 0.1rem;
+    border-bottom: 0;
+  }
+  .guest-voucher-grid dd {
+    padding-top: 0.1rem;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #statusSection,
+  #statusSection * {
+    visibility: visible;
+  }
+  #statusSection {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    box-shadow: none;
+  }
+  .voucher-print,
+  #statusSection > .status-icon,
+  #statusSection > .status-content > .button {
+    display: none !important;
+  }
 }
 .policy-grid {
   display: grid;
