@@ -67,6 +67,8 @@ const state = {
   roomSelections: new Map(),
   selectionPricingTimer: null,
   selectionPricingVersion: 0,
+  entirePricingTimer: null,
+  entirePricingVersion: 0,
   categoryAvailabilityCounts: new Map(),
   availabilityProbeCache: new Map(),
 };
@@ -1116,10 +1118,10 @@ function renderEntirePropertyOffer(nights) {
   entirePropertyOffer.classList.toggle("hidden", !state.allowsEntire);
   if (!state.allowsEntire) return;
 
-  const option = (state.entireAvailability?.options || []).find(
+  const publishedOption = (state.entireAvailability?.options || []).find(
     (candidate) => candidate.productType === "FULL_PROPERTY",
   );
-  if (!option) {
+  if (!publishedOption) {
     const unavailable = element("div", "entire-property-unavailable");
     unavailable.append(
       element("strong", "", "Entire property unavailable for these dates"),
@@ -1132,6 +1134,10 @@ function renderEntirePropertyOffer(nights) {
     entirePropertyOffer.append(unavailable);
     return;
   }
+  const option =
+    state.selectionType === "entire" && state.entireSelection?.option
+      ? state.entireSelection.option
+      : publishedOption;
 
   const card = element(
     "article",
@@ -1145,6 +1151,8 @@ function renderEntirePropertyOffer(nights) {
   }
   const content = element("div", "entire-property-card-copy");
   const requested = partyTotals();
+  const includedGuests =
+    Number(option.includedAdults || 0) + Number(option.includedChildren || 0);
   const categoryNames = (state.property.roomCategories || [])
     .map((category) => category.name)
     .filter(Boolean);
@@ -1162,8 +1170,9 @@ function renderEntirePropertyOffer(nights) {
     element(
       "span",
       "entire-capacity-primary",
-      `Maximum ${option.maxOccupancy} guests`,
+      `Base price includes ${includedOccupancyLabel(option)}`,
     ),
+    element("span", "", `Maximum ${option.maxOccupancy} guests`),
     element("span", "", `Up to ${option.maxAdults} adults`),
     element("span", "", `Up to ${option.maxChildren} children`),
     element("span", "", `${nights} ${nights === 1 ? "night" : "nights"}`),
@@ -1188,18 +1197,31 @@ function renderEntirePropertyOffer(nights) {
 
   const action = element("div", "entire-property-action");
   action.append(
-    element("small", "", "Estimated accommodation total"),
+    element(
+      "small",
+      "",
+      `Base price · includes ${includedOccupancyLabel(option)}`,
+    ),
     element(
       "strong",
       "",
-      money(option.estimatedTotalMinor, option.currencyCode),
+      `${money(option.nightlyFromMinor, option.currencyCode)} / night`,
     ),
     element(
       "span",
       "",
-      `${money(option.nightlyFromMinor, option.currencyCode)} nightly · GST and fees confirmed next`,
+      `${money(option.estimatedTotalMinor, option.currencyCode)} for ${nights} ${nights === 1 ? "night" : "nights"} · ${option.maxOccupancy > includedGuests ? `maximum ${option.maxOccupancy} guests; additional guests priced after allocation` : "full published capacity included"} · GST and fees confirmed next`,
     ),
   );
+  if (Number(state.entireSelection?.extraGuestMinor || 0) > 0) {
+    action.append(
+      element(
+        "span",
+        "entire-extra-price",
+        `Includes ${money(state.entireSelection.extraGuestMinor, option.currencyCode)} extra-person charges`,
+      ),
+    );
+  }
   const button = element(
     "button",
     `button ${state.selectionType === "entire" ? "button-secondary" : "button-primary"}`,
@@ -1210,11 +1232,14 @@ function renderEntirePropertyOffer(nights) {
         : "Unavailable for these dates",
   );
   button.type = "button";
-  button.disabled = !option.available;
+  button.disabled = !option.available || state.selectionType === "entire";
   button.setAttribute("aria-pressed", String(state.selectionType === "entire"));
   button.addEventListener("click", () => selectEntireProperty(option));
   action.append(button);
   card.append(content, action);
+  if (state.selectionType === "entire" && state.entireSelection) {
+    card.append(renderEntireRoomAllocationControls(option));
+  }
   entirePropertyOffer.append(card);
 }
 
@@ -1228,12 +1253,287 @@ function selectEntireProperty(option) {
     option,
     estimatedTotalMinor: option.estimatedTotalMinor,
     currencyCode: option.currencyCode,
+    roomAllocations: [],
+    pricingUnavailable: false,
   };
+  reconcileEntireRoomAllocations({ reset: true });
   renderAvailability(state.availability);
   showInlineMessage(
-    "The complete property is selected. Choose a room again if you prefer an individual-room stay.",
+    "The complete property is selected. Allocate guests to rooms, then continue to checkout.",
     "success",
   );
+}
+
+function entirePropertyRoomInventory() {
+  return (state.property?.roomCategories || []).flatMap((category) => {
+    const quantity = Math.max(
+      1,
+      Number(categoryAvailabilityCount(category.roomCategoryId) || 1),
+    );
+    return Array.from({ length: quantity }, (_, roomIndex) => ({
+      key: `${category.roomCategoryId}:${roomIndex}`,
+      category,
+      roomIndex,
+    }));
+  });
+}
+
+function reconcileEntireRoomAllocations({ reset = false } = {}) {
+  const selection = state.entireSelection;
+  if (!selection) return;
+  const existing = new Map(
+    (selection.roomAllocations || []).map((allocation) => [
+      allocation.key,
+      allocation,
+    ]),
+  );
+  selection.roomAllocations = entirePropertyRoomInventory().map((room) => {
+    const current = reset ? null : existing.get(room.key);
+    return {
+      ...room,
+      adults: Number(current?.adults || 0),
+      childAges: [...(current?.childAges || [])],
+    };
+  });
+  if (!reset) return;
+
+  let remainingAdults = Number(state.units[0]?.adults || 1);
+  const remainingChildAges = [...(state.units[0]?.childAges || [])];
+  const rooms = selection.roomAllocations;
+
+  while (remainingAdults > 0) {
+    const room = rooms.find(
+      (candidate) =>
+        candidate.adults <
+        Math.min(
+          Number(candidate.category.maxAdults || 20),
+          Number(candidate.category.maxOccupancy || 20) -
+            occupancyCountingChildren(candidate),
+        ),
+    );
+    if (!room) break;
+    room.adults += 1;
+    remainingAdults -= 1;
+  }
+
+  remainingChildAges.forEach((age) => {
+    const room = rooms.find((candidate) => {
+      if (candidate.adults < 1) return false;
+      const proposed = {
+        adults: candidate.adults,
+        childAges: [...candidate.childAges, age],
+      };
+      return roomUnitValid(candidate.category, proposed);
+    });
+    if (room) room.childAges.push(age);
+  });
+}
+
+function entireAllocationTotals() {
+  return (state.entireSelection?.roomAllocations || []).reduce(
+    (totals, room) => {
+      totals.adults += Number(room.adults || 0);
+      totals.children += room.childAges.length;
+      totals.occupancyChildren += occupancyCountingChildren(room);
+      if (room.adults || room.childAges.length) totals.occupiedRooms += 1;
+      totals.childAges.push(...room.childAges);
+      return totals;
+    },
+    {
+      adults: 0,
+      children: 0,
+      occupancyChildren: 0,
+      occupiedRooms: 0,
+      childAges: [],
+    },
+  );
+}
+
+function entireAllocationValidation() {
+  const selection = state.entireSelection;
+  const option = selection?.option;
+  const totals = entireAllocationTotals();
+  if (!selection || !option || totals.adults < 1) {
+    return {
+      valid: false,
+      warning: false,
+      message: "Add at least one adult to a room before continuing.",
+    };
+  }
+
+  const invalidRoom = selection.roomAllocations.find(
+    (room) =>
+      (room.childAges.length > 0 && room.adults < 1) ||
+      (!(room.adults === 0 && room.childAges.length === 0) &&
+        !roomUnitValid(room.category, room)),
+  );
+  if (invalidRoom) {
+    return {
+      valid: false,
+      warning: false,
+      message: `${invalidRoom.category.name} ${invalidRoom.roomIndex + 1} exceeds its room capacity or has children without an adult.`,
+    };
+  }
+
+  if (
+    totals.adults > Number(option.maxAdults || 0) ||
+    totals.children > Number(option.maxChildren || 0) ||
+    totals.adults + totals.occupancyChildren > Number(option.maxOccupancy || 0)
+  ) {
+    return {
+      valid: false,
+      warning: false,
+      message: `The allocation exceeds the property's maximum of ${option.maxOccupancy} guests, ${option.maxAdults} adults or ${option.maxChildren} children.`,
+    };
+  }
+
+  if (selection.pricingUnavailable) {
+    return {
+      valid: false,
+      warning: false,
+      message:
+        "This guest allocation could not be priced. Adjust the room guests and try again.",
+    };
+  }
+
+  const requested = partyTotals();
+  const requestedAges = [...(state.units[0]?.childAges || [])].sort(
+    (left, right) => left - right,
+  );
+  const selectedAges = [...totals.childAges].sort(
+    (left, right) => left - right,
+  );
+  const matchesSearch =
+    totals.adults === requested.adults &&
+    totals.children === requested.children &&
+    requestedAges.length === selectedAges.length &&
+    requestedAges.every((age, index) => age === selectedAges[index]);
+
+  return {
+    valid: true,
+    warning: !matchesSearch,
+    message: matchesSearch
+      ? `Your ${totals.adults + totals.children}-guest allocation matches the search.`
+      : `Your room allocation has ${guestSummary(totals)}, while your search has ${guestSummary(requested)}. Review the difference before continuing.`,
+  };
+}
+
+function renderEntireRoomAllocationControls(option) {
+  const section = element("section", "entire-room-allocation");
+  const heading = element("div", "entire-room-allocation-heading");
+  heading.append(
+    element("div", "", "Allocate guests to rooms"),
+    element(
+      "small",
+      "",
+      "Rooms may be left empty. Every occupied room with children must include an adult.",
+    ),
+  );
+  section.append(heading);
+
+  (state.entireSelection?.roomAllocations || []).forEach((room) => {
+    const row = element("div", "entire-room-allocation-row");
+    const identity = element("div", "entire-room-identity");
+    identity.append(
+      element("strong", "", `${room.category.name} ${room.roomIndex + 1}`),
+      element("small", "", `Maximum ${room.category.maxOccupancy} guests`),
+    );
+
+    const adultsLabel = element("label", "entire-room-guest-field");
+    adultsLabel.append(element("span", "", "Adults"));
+    const adultMaximum = Math.max(
+      0,
+      Math.min(
+        Number(room.category.maxAdults || 20),
+        Number(room.category.maxOccupancy || 20) -
+          occupancyCountingChildren(room),
+      ),
+    );
+    const adults = integerSelect(room.adults, 0, adultMaximum);
+    adults.setAttribute(
+      "aria-label",
+      `Adults in ${room.category.name} ${room.roomIndex + 1}`,
+    );
+    adults.addEventListener("change", () => {
+      clearQuoteAndLater();
+      room.adults = Number(adults.value);
+      renderAvailability(state.availability);
+      scheduleEntireSelectionPricing();
+    });
+    adultsLabel.append(adults);
+
+    const childrenLabel = element("label", "entire-room-guest-field");
+    childrenLabel.append(element("span", "", "Children"));
+    const childMaximum = roomChildMaximum(room.category, room);
+    const children = integerSelect(
+      room.childAges.length,
+      0,
+      Math.max(childMaximum, room.childAges.length),
+    );
+    children.setAttribute(
+      "aria-label",
+      `Children in ${room.category.name} ${room.roomIndex + 1}`,
+    );
+    children.addEventListener("change", () => {
+      clearQuoteAndLater();
+      const count = Number(children.value);
+      room.childAges = Array.from(
+        { length: count },
+        (_, childIndex) => room.childAges[childIndex] ?? 8,
+      );
+      renderAvailability(state.availability);
+      scheduleEntireSelectionPricing();
+    });
+    childrenLabel.append(children);
+    row.append(identity, adultsLabel, childrenLabel);
+
+    if (room.childAges.length) {
+      const ages = element("div", "entire-room-child-ages");
+      room.childAges.forEach((age, childIndex) => {
+        const label = element("label");
+        label.append(element("span", "", `Child ${childIndex + 1} age`));
+        const ageSelect = integerSelect(age, 0, 17, (value) =>
+          value === 0 ? "Under 1" : `${value} years`,
+        );
+        ageSelect.addEventListener("change", () => {
+          clearQuoteAndLater();
+          room.childAges[childIndex] = Number(ageSelect.value);
+          renderAvailability(state.availability);
+          scheduleEntireSelectionPricing();
+        });
+        label.append(ageSelect);
+        ages.append(label);
+      });
+      row.append(ages);
+    }
+    section.append(row);
+  });
+
+  const totals = entireAllocationTotals();
+  const validation = entireAllocationValidation();
+  const summary = element(
+    "div",
+    `entire-allocation-summary${validation.warning ? " has-warning" : ""}${validation.valid ? "" : " has-error"}`,
+  );
+  summary.append(
+    element(
+      "strong",
+      "",
+      `${guestSummary(totals)} across ${totals.occupiedRooms} ${totals.occupiedRooms === 1 ? "room" : "rooms"}`,
+    ),
+    element("span", "", validation.message),
+  );
+  if (Number(state.entireSelection?.extraGuestMinor || 0) > 0) {
+    summary.append(
+      element(
+        "span",
+        "entire-extra-total",
+        `Extra-person charges: ${money(state.entireSelection.extraGuestMinor, option.currencyCode)}`,
+      ),
+    );
+  }
+  section.append(summary);
+  return section;
 }
 
 async function refreshCategoryAvailabilityCounts(baseData, requestVersion) {
@@ -1287,6 +1587,7 @@ async function refreshCategoryAvailabilityCounts(baseData, requestVersion) {
   bounds.forEach(({ low }, categoryId) => {
     state.categoryAvailabilityCounts.set(categoryId, low);
   });
+  reconcileEntireRoomAllocations();
   renderAvailability(baseData);
 }
 
@@ -1708,6 +2009,11 @@ function changeRoomQuantity(category, defaultOption, change) {
 function switchToRoomSelection() {
   if (state.selectionType === "entire") {
     state.entireSelection = null;
+    state.entirePricingVersion += 1;
+    if (state.entirePricingTimer) {
+      window.clearTimeout(state.entirePricingTimer);
+      state.entirePricingTimer = null;
+    }
   }
   state.selectionType = "rooms";
 }
@@ -2150,6 +2456,71 @@ function scheduleSelectionPricing() {
   }, 300);
 }
 
+function scheduleEntireSelectionPricing() {
+  renderSelectionRibbon();
+  if (state.entirePricingTimer) {
+    window.clearTimeout(state.entirePricingTimer);
+  }
+  state.entirePricingTimer = window.setTimeout(() => {
+    state.entirePricingTimer = null;
+    void refreshEntireSelectionPricing();
+  }, 300);
+}
+
+async function refreshEntireSelectionPricing() {
+  const selection = state.entireSelection;
+  if (!selection || state.selectionType !== "entire") return;
+  const totals = entireAllocationTotals();
+  if (totals.adults < 1) {
+    selection.pricingUnavailable = false;
+    renderSelectionRibbon();
+    return;
+  }
+  const version = ++state.entirePricingVersion;
+
+  try {
+    const data = await apiRequest(
+      `/v1/public/properties/${encodeURIComponent(publicSlug)}/availability`,
+      {
+        method: "POST",
+        body: {
+          arrivalDate: form.arrivalDate.value,
+          departureDate: form.departureDate.value,
+          units: [
+            {
+              adults: totals.adults,
+              children: totals.occupancyChildren,
+            },
+          ],
+        },
+      },
+    );
+    if (version !== state.entirePricingVersion || !state.entireSelection)
+      return;
+    const priced = (data.options || []).find(
+      (candidate) =>
+        candidate.productType === "FULL_PROPERTY" &&
+        candidate.rateProductId === selection.option.rateProductId &&
+        candidate.available,
+    );
+    selection.pricingUnavailable = !priced;
+    if (priced) {
+      selection.option = { ...selection.option, ...priced };
+      selection.estimatedTotalMinor = priced.estimatedTotalMinor;
+      selection.accommodationMinor = priced.accommodationMinor;
+      selection.extraGuestMinor = priced.extraGuestMinor;
+      selection.currencyCode = priced.currencyCode;
+    }
+  } catch {
+    if (version !== state.entirePricingVersion || !state.entireSelection)
+      return;
+    selection.pricingUnavailable = true;
+  }
+  if (version === state.entirePricingVersion) {
+    renderAvailability(state.availability);
+  }
+}
+
 async function refreshSelectionPricing() {
   if (!state.roomSelections.size || state.selectionType !== "rooms") return;
   const version = ++state.selectionPricingVersion;
@@ -2209,21 +2580,28 @@ function renderSelectionRibbon() {
   }
 
   if (state.selectionType === "entire" && state.entireSelection) {
-    const party = partyTotals();
+    const party = entireAllocationTotals();
     const capacity = state.entireSelection.option;
+    const validation = entireAllocationValidation();
+    const includedGuests =
+      Number(capacity.includedAdults || 0) +
+      Number(capacity.includedChildren || 0);
     selectionSummary.textContent = `Entire ${state.property.name} selected`;
     selectionDates.textContent = selectionDateSummary();
     selectionAllocation.textContent =
-      `${guestSummary(party)} · maximum ${capacity.maxOccupancy} guests ` +
-      `(up to ${capacity.maxAdults} adults and ${capacity.maxChildren} children)`;
-    selectionNotice.textContent =
-      "Exclusive use reserves every available bedroom and shared space for your group.";
-    selectionRibbon.classList.remove("has-warning", "has-error");
+      `${guestSummary(party)} in ${party.occupiedRooms} ${party.occupiedRooms === 1 ? "room" : "rooms"} · ` +
+      `base price includes ${includedGuests} · maximum ${capacity.maxOccupancy} guests` +
+      (Number(state.entireSelection.extraGuestMinor || 0) > 0
+        ? ` · extra-person charges ${money(state.entireSelection.extraGuestMinor, state.entireSelection.currencyCode)}`
+        : "");
+    selectionNotice.textContent = validation.message;
+    selectionRibbon.classList.toggle("has-warning", validation.warning);
+    selectionRibbon.classList.toggle("has-error", !validation.valid);
     selectionTotal.textContent = money(
       state.entireSelection.estimatedTotalMinor,
       state.entireSelection.currencyCode,
     );
-    selectionContinue.disabled = false;
+    selectionContinue.disabled = !validation.valid;
     selectionContinue.textContent = "Continue to checkout";
     selectionRibbon.classList.remove("hidden");
     return;
@@ -2282,7 +2660,15 @@ async function continueEntireSelection(button) {
     renderSelectionRibbon();
     return;
   }
-  await startBooking(selection.option, button);
+  const validation = entireAllocationValidation();
+  if (!validation.valid) {
+    renderSelectionRibbon();
+    return;
+  }
+  const totals = entireAllocationTotals();
+  await startBookingWithUnits(selection.option, button, [
+    { adults: totals.adults, childAges: [...totals.childAges] },
+  ]);
 }
 
 async function continueRoomSelection(button) {
@@ -2489,6 +2875,10 @@ function availabilityCard(option, nights) {
 }
 
 async function startBooking(option, button) {
+  return startBookingWithUnits(option, button, state.units);
+}
+
+async function startBookingWithUnits(option, button, bookingUnits) {
   const idleLabel = button.textContent;
   clearHoldAndLater();
   state.roomMixQuote = null;
@@ -2499,7 +2889,7 @@ async function startBooking(option, button) {
     arrivalDate: form.arrivalDate.value,
     departureDate: form.departureDate.value,
     promotionCode: form.promotionCode.value.trim() || null,
-    units: state.units.map((unit) => ({
+    units: bookingUnits.map((unit) => ({
       adults: unit.adults,
       childAges: [...unit.childAges],
     })),
@@ -2903,6 +3293,24 @@ function bookingVoucherSnapshot() {
         ? Number(option?.maxOccupancy || 0)
         : Number(option?.maxOccupancy || category?.maxOccupancy || 0) *
           quantity,
+    includedAdults:
+      quote.productType === "FULL_PROPERTY"
+        ? Number(option?.includedAdults || 0)
+        : Number(option?.includedAdults || 0) * quantity,
+    includedChildren:
+      quote.productType === "FULL_PROPERTY"
+        ? Number(option?.includedChildren || 0)
+        : Number(option?.includedChildren || 0) * quantity,
+    roomAllocations:
+      quote.productType === "FULL_PROPERTY"
+        ? (state.entireSelection?.roomAllocations || [])
+            .filter((room) => room.adults || room.childAges.length)
+            .map((room) => ({
+              room: `${room.category.name} ${room.roomIndex + 1}`,
+              adults: room.adults,
+              childAges: [...room.childAges],
+            }))
+        : [],
     extraGuestMinor: Number(quote.extraGuestMinor || 0),
     totalMinor: Number(quote.totalMinor || 0),
     currencyCode: quote.currencyCode || "INR",
@@ -3176,6 +3584,8 @@ function renderGuestVoucher(reference) {
   const details = element("dl", "guest-voucher-grid");
   const bookedGuests =
     Number(voucher.adults || 0) + Number(voucher.children || 0);
+  const includedGuests =
+    Number(voucher.includedAdults || 0) + Number(voucher.includedChildren || 0);
   const rows = [
     ["Reservation", reference],
     [
@@ -3191,6 +3601,9 @@ function renderGuestVoucher(reference) {
       "Maximum permitted",
       `${voucher.maxOccupancy} guests · up to ${voucher.maxAdults} adults and ${voucher.maxChildren} children`,
     ],
+    ...(includedGuests
+      ? [["Base price occupancy", `${includedGuests} guests included`]]
+      : []),
     [
       "Occupancy used",
       `${bookedGuests} of ${voucher.maxOccupancy} permitted guests`,
@@ -3211,6 +3624,17 @@ function renderGuestVoucher(reference) {
   }
   if (active.leadGuest?.name) {
     rows.splice(1, 0, ["Lead guest", active.leadGuest.name]);
+  }
+  if (voucher.roomAllocations?.length) {
+    rows.splice(rows.length - 1, 0, [
+      "Room allocation",
+      voucher.roomAllocations
+        .map(
+          (room) =>
+            `${room.room}: ${room.adults} ${room.adults === 1 ? "adult" : "adults"}, ${room.childAges.length} ${room.childAges.length === 1 ? "child" : "children"}`,
+        )
+        .join(" · "),
+    ]);
   }
   rows.forEach(([label, value]) => {
     details.append(element("dt", "", label), element("dd", "", value || "—"));
@@ -3405,9 +3829,14 @@ function clearResultsAfterSearchChange() {
   state.categoryAvailabilityCounts.clear();
   state.availabilityProbeCache.clear();
   state.selectionPricingVersion += 1;
+  state.entirePricingVersion += 1;
   if (state.selectionPricingTimer) {
     window.clearTimeout(state.selectionPricingTimer);
     state.selectionPricingTimer = null;
+  }
+  if (state.entirePricingTimer) {
+    window.clearTimeout(state.entirePricingTimer);
+    state.entirePricingTimer = null;
   }
   availabilityResults.replaceChildren();
   availabilityMessage.classList.add("hidden");
@@ -3657,4 +4086,5 @@ window.addEventListener("pagehide", () => {
   if (state.countdownTimer) window.clearInterval(state.countdownTimer);
   if (state.selectionPricingTimer)
     window.clearTimeout(state.selectionPricingTimer);
+  if (state.entirePricingTimer) window.clearTimeout(state.entirePricingTimer);
 });

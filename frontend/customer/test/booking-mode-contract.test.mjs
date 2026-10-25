@@ -112,6 +112,15 @@ test("room and entire-property choices disclose canonical occupancy and extra-pe
   assert.match(propertySource, /function renderRoomAllocationControls/);
   assert.match(propertySource, /total updates automatically/);
   assert.match(propertySource, /Maximum \$\{option\.maxOccupancy\} guests/);
+  assert.match(propertySource, /Base price · includes/);
+  assert.match(
+    propertySource,
+    /function renderEntireRoomAllocationControls\(option\)/,
+  );
+  assert.match(propertySource, /function entireAllocationValidation\(\)/);
+  assert.match(propertySource, /function refreshEntireSelectionPricing\(\)/);
+  assert.match(propertySource, /Allocate guests to rooms/);
+  assert.match(propertySource, /Room allocation/);
   assert.match(propertySource, /function bookingVoucherSnapshot/);
   assert.match(propertySource, /function renderGuestVoucher/);
   assert.match(propertySource, /Maximum permitted/);
