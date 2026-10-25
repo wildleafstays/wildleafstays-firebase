@@ -4,6 +4,7 @@ import {
   uploadFile,
 } from "./api-client.js";
 import {
+  GUEST_DISPLAY_CATALOG,
   PROPERTY_AMENITY_GROUPS,
   ROOM_AMENITY_GROUPS,
 } from "./amenity-catalog.js";
@@ -1473,6 +1474,377 @@ function fillGuestContentForm(form, guestContent = {}) {
   });
 }
 
+function guestValueKey(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("en-IN");
+}
+
+function safeGuestRecordPart(value) {
+  return String(value || "")
+    .replace(/[|\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function guestCheckbox(label, checked, onChange) {
+  const option = document.createElement("label");
+  option.className = "guest-choice";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = checked;
+  input.addEventListener("change", onChange);
+  option.append(input, textElement("span", "", label));
+  return { option, input };
+}
+
+function renderGuestChoiceOptions(containerId, catalog, selected, targetName) {
+  const container = byId(containerId);
+  const form = byId("profileForm");
+  if (!container || !form?.elements[targetName]) return;
+  const selectedItems = Array.isArray(selected) ? selected.filter(Boolean) : [];
+  const known = new Map(
+    catalog.map(([, label]) => [guestValueKey(label), label]),
+  );
+  const options = [
+    ...catalog.map(([, label]) => label),
+    ...selectedItems.filter((value) => !known.has(guestValueKey(value))),
+  ];
+  const selectedKeys = new Set(selectedItems.map(guestValueKey));
+  container.replaceChildren();
+
+  const sync = () => {
+    form.elements[targetName].value = [
+      ...container.querySelectorAll("input:checked"),
+    ]
+      .map((input) => input.dataset.label)
+      .join("\n");
+  };
+
+  options.forEach((label) => {
+    const { option, input } = guestCheckbox(
+      label,
+      selectedKeys.has(guestValueKey(label)),
+      sync,
+    );
+    input.dataset.label = label;
+    if (!known.has(guestValueKey(label))) option.classList.add("legacy");
+    container.append(option);
+  });
+  sync();
+}
+
+function selectControl(label, values, selectedValue) {
+  const wrapper = document.createElement("label");
+  wrapper.textContent = label;
+  const select = document.createElement("select");
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value || "Select";
+    select.append(option);
+  });
+  select.value = values.includes(selectedValue) ? selectedValue : "";
+  wrapper.append(select);
+  return { wrapper, select };
+}
+
+function renderStructuredGuestOptions({
+  containerId,
+  catalog,
+  records,
+  targetName,
+  kind,
+}) {
+  const container = byId(containerId);
+  const form = byId("profileForm");
+  if (!container || !form?.elements[targetName]) return;
+  const savedRecords = Array.isArray(records)
+    ? records.filter((item) => item?.name)
+    : [];
+  const savedByName = new Map(
+    savedRecords.map((record) => [guestValueKey(record.name), record]),
+  );
+  const known = new Map(
+    catalog.map(([, label]) => [guestValueKey(label), label]),
+  );
+  const names = [
+    ...catalog.map(([, label]) => label),
+    ...savedRecords
+      .map((record) => record.name)
+      .filter((name) => !known.has(guestValueKey(name))),
+  ];
+  container.replaceChildren();
+
+  const sync = () => {
+    const lines = [...container.querySelectorAll(".guest-structured-option")]
+      .filter((card) => card.querySelector("input[type='checkbox']").checked)
+      .map((card) => {
+        const values = Object.fromEntries(
+          [...card.querySelectorAll("[data-record-field]")].map((control) => [
+            control.dataset.recordField,
+            safeGuestRecordPart(control.value),
+          ]),
+        );
+        if (kind === "facility") {
+          return [
+            card.dataset.label,
+            values.description,
+            values.access,
+            values.pricing,
+            values.hours,
+            values.restrictions,
+            values.mediaId,
+          ].join(" | ");
+        }
+        return [
+          card.dataset.label,
+          values.description,
+          values.availability,
+          values.pricing,
+          values.hours,
+          values.conditions,
+          values.mediaId,
+        ].join(" | ");
+      });
+    form.elements[targetName].value = lines.join("\n");
+  };
+
+  names.forEach((label) => {
+    const saved = savedByName.get(guestValueKey(label)) || {};
+    const card = document.createElement("article");
+    card.className = "guest-structured-option";
+    card.dataset.label = label;
+    if (!known.has(guestValueKey(label))) card.classList.add("legacy");
+    const { option, input } = guestCheckbox(label, Boolean(saved.name), () => {
+      card.classList.toggle("selected", input.checked);
+      details.hidden = !input.checked;
+      sync();
+    });
+    option.classList.add("guest-structured-toggle");
+    const details = document.createElement("div");
+    details.className = "guest-structured-details";
+    details.hidden = !input.checked;
+
+    const description = document.createElement("label");
+    description.textContent = "Guest description";
+    const descriptionInput = document.createElement("input");
+    descriptionInput.maxLength = 500;
+    descriptionInput.value = saved.description || "";
+    descriptionInput.dataset.recordField = "description";
+    description.append(descriptionInput);
+    details.append(description);
+
+    if (kind === "facility") {
+      const access = selectControl(
+        "Access",
+        ["", "Private", "Shared", "Exclusive"],
+        saved.access || "",
+      );
+      access.select.dataset.recordField = "access";
+      const pricing = selectControl(
+        "Pricing",
+        ["", "Included", "Chargeable", "On Request"],
+        saved.pricing || "",
+      );
+      pricing.select.dataset.recordField = "pricing";
+      details.append(access.wrapper, pricing.wrapper);
+    } else {
+      const availability = selectControl(
+        "Availability",
+        ["", "Included", "Chargeable", "On Request"],
+        saved.availability || saved.pricing || "",
+      );
+      availability.select.dataset.recordField = "availability";
+      const pricing = document.createElement("input");
+      pricing.type = "hidden";
+      pricing.dataset.recordField = "pricing";
+      pricing.value = saved.pricing || availability.select.value;
+      availability.select.addEventListener("change", () => {
+        pricing.value = availability.select.value;
+      });
+      details.append(availability.wrapper, pricing);
+    }
+
+    const hours = document.createElement("label");
+    hours.textContent = "Hours / timing";
+    const hoursInput = document.createElement("input");
+    hoursInput.maxLength = 120;
+    hoursInput.value = saved.hours || "";
+    hoursInput.dataset.recordField = "hours";
+    hours.append(hoursInput);
+    const notes = document.createElement("label");
+    notes.textContent = kind === "facility" ? "Restrictions" : "Conditions";
+    const notesInput = document.createElement("input");
+    notesInput.maxLength = 300;
+    notesInput.value =
+      (kind === "facility" ? saved.restrictions : saved.conditions) || "";
+    notesInput.dataset.recordField =
+      kind === "facility" ? "restrictions" : "conditions";
+    notes.append(notesInput);
+    const mediaId = document.createElement("input");
+    mediaId.type = "hidden";
+    mediaId.value = saved.mediaId || "";
+    mediaId.dataset.recordField = "mediaId";
+    details.append(hours, notes, mediaId);
+    details.addEventListener("input", sync);
+    details.addEventListener("change", sync);
+    card.classList.toggle("selected", input.checked);
+    card.append(option, details);
+    container.append(card);
+  });
+  sync();
+}
+
+function renderGuestDistanceOptions(records) {
+  const container = byId("guestDistanceOptions");
+  const form = byId("profileForm");
+  if (!container || !form?.elements.guestLocationDistances) return;
+  const savedRecords = Array.isArray(records)
+    ? records.filter((item) => item?.name)
+    : [];
+  const savedByName = new Map(
+    savedRecords.map((item) => [guestValueKey(item.name), item]),
+  );
+  const known = new Map(
+    GUEST_DISPLAY_CATALOG.distances.map(([, label]) => [
+      guestValueKey(label),
+      label,
+    ]),
+  );
+  const names = [
+    ...GUEST_DISPLAY_CATALOG.distances.map(([, label]) => label),
+    ...savedRecords
+      .map((item) => item.name)
+      .filter((name) => !known.has(guestValueKey(name))),
+  ];
+  container.replaceChildren();
+  const sync = () => {
+    form.elements.guestLocationDistances.value = [
+      ...container.querySelectorAll("input"),
+    ]
+      .filter((input) => input.value.trim())
+      .map(
+        (input) =>
+          `${input.dataset.label} | ${safeGuestRecordPart(input.value)}`,
+      )
+      .join("\n");
+  };
+  names.forEach((label) => {
+    const field = document.createElement("label");
+    field.className = "guest-distance-field";
+    field.textContent = label;
+    if (!known.has(guestValueKey(label))) field.classList.add("legacy");
+    const input = document.createElement("input");
+    input.maxLength = 80;
+    input.placeholder = "e.g. 7 km";
+    input.dataset.label = label;
+    input.value = savedByName.get(guestValueKey(label))?.distance || "";
+    input.addEventListener("input", sync);
+    field.append(input);
+    container.append(field);
+  });
+  sync();
+}
+
+function setupGuestEditorTabs() {
+  const workspace = document.querySelector(".guest-display-workspace");
+  if (!workspace || workspace.dataset.ready === "true") return;
+  workspace.dataset.ready = "true";
+  workspace.querySelectorAll("[data-guest-editor-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.guestEditorTab;
+      workspace
+        .querySelectorAll("[data-guest-editor-tab]")
+        .forEach((item) => item.classList.toggle("active", item === button));
+      workspace
+        .querySelectorAll("[data-guest-editor-panel]")
+        .forEach((panel) =>
+          panel.classList.toggle(
+            "hidden",
+            panel.dataset.guestEditorPanel !== key,
+          ),
+        );
+    });
+  });
+}
+
+function renderGuestDisplayControls(guestContent = {}) {
+  setupGuestEditorTabs();
+  const overview = guestContent.overview || {};
+  const location = guestContent.location || {};
+  const things = guestContent.thingsToKnow || {};
+  renderGuestChoiceOptions(
+    "guestHighlightOptions",
+    GUEST_DISPLAY_CATALOG.highlights,
+    overview.highlights,
+    "guestHighlights",
+  );
+  renderGuestChoiceOptions(
+    "guestIdealForOptions",
+    GUEST_DISPLAY_CATALOG.idealFor,
+    overview.idealFor,
+    "guestIdealFor",
+  );
+  renderStructuredGuestOptions({
+    containerId: "guestFacilityOptions",
+    catalog: GUEST_DISPLAY_CATALOG.facilities,
+    records: guestContent.facilities,
+    targetName: "guestFacilityDetails",
+    kind: "facility",
+  });
+  renderStructuredGuestOptions({
+    containerId: "guestServiceOptions",
+    catalog: GUEST_DISPLAY_CATALOG.services,
+    records: guestContent.services,
+    targetName: "guestServiceDetails",
+    kind: "service",
+  });
+  renderGuestDistanceOptions(location.distances);
+  renderGuestChoiceOptions(
+    "guestTransportationOptions",
+    GUEST_DISPLAY_CATALOG.transportation,
+    location.transportation,
+    "guestTransportation",
+  );
+  renderGuestChoiceOptions(
+    "guestAccessibilityOptions",
+    GUEST_DISPLAY_CATALOG.accessibility,
+    location.accessibility,
+    "guestAccessibility",
+  );
+  renderGuestChoiceOptions(
+    "guestConnectivityOptions",
+    GUEST_DISPLAY_CATALOG.connectivity,
+    location.connectivity,
+    "guestConnectivity",
+  );
+  renderGuestChoiceOptions(
+    "guestGoodToKnowOptions",
+    GUEST_DISPLAY_CATALOG.thingsToKnow.goodToKnow,
+    things.goodToKnow,
+    "guestGoodToKnow",
+  );
+  renderGuestChoiceOptions(
+    "guestAccessibilityNoteOptions",
+    GUEST_DISPLAY_CATALOG.thingsToKnow.accessibility,
+    things.accessibility,
+    "guestAccessibilityNotes",
+  );
+  renderGuestChoiceOptions(
+    "guestSeasonalOptions",
+    GUEST_DISPLAY_CATALOG.thingsToKnow.seasonal,
+    things.seasonal,
+    "guestSeasonalInformation",
+  );
+  renderGuestChoiceOptions(
+    "guestLimitationOptions",
+    GUEST_DISPLAY_CATALOG.thingsToKnow.limitations,
+    things.limitations,
+    "guestLimitations",
+  );
+}
+
 function formatGuestLines(items) {
   return Array.isArray(items) ? items.filter(Boolean).join("\n") : "";
 }
@@ -1908,6 +2280,7 @@ function renderEditor() {
   renderProfilePropertyTaxonomyFields(property);
   fillForm(byId("profileForm"), property);
   fillGuestContentForm(byId("profileForm"), property.guestContent);
+  renderGuestDisplayControls(property.guestContent);
   fillForm(byId("policiesForm"), onboarding.policies || {});
 
   renderOwnerResponsibility();

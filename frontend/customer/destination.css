@@ -2,7 +2,7 @@
   min-width: 320px;
   overflow-x: clip;
   color: #15231d;
-  background: #fcfcfa;
+  background: var(--wildleaf-cream, #fffaf0);
   font-family: "Manrope", "DM Sans", system-ui, sans-serif;
 }
 
@@ -1101,4 +1101,12 @@
   .destination-loading {
     animation: none;
   }
+}
+
+.destination-topbar {
+  background: linear-gradient(135deg, var(--wildleaf-cream, #fffaf0), #fff 72%);
+}
+
+.destination-results-section {
+  background: linear-gradient(180deg, var(--wildleaf-sage, #edf7f0), transparent 480px);
 }

@@ -60,6 +60,16 @@ const mobileSearchStyles = await readFile(
   new URL("../mobile-search.css", import.meta.url),
   "utf8",
 );
+
+test("customer pages share the Wildleaf palette and property tab tones", () => {
+  assert.match(homeHtml, /href="\/wildleaf-theme\.css"/);
+  assert.match(destinationHtml, /href="\/wildleaf-theme\.css"/);
+  assert.match(entirePropertyHtml, /href="\/wildleaf-theme\.css"/);
+  assert.match(propertyHtml, /href="\/wildleaf-theme\.css"/);
+  assert.match(discoveryStyles, /property-tab-panel\[data-tab="overview"\]/);
+  assert.match(discoveryStyles, /property-tab-panel\[data-tab="reviews"\]/);
+});
+
 test("homepage search opens a dedicated destination experience", () => {
   assert.doesNotMatch(homeHtml, /id="modeAll"|id="modeHotel"|id="modeVilla"/);
   assert.doesNotMatch(homeHtml, /id="entirePropertyEntry"/);

@@ -1,0 +1,41 @@
+:root {
+  --wildleaf-forest: #0b513c;
+  --wildleaf-forest-deep: #083b2d;
+  --wildleaf-cream: #fffaf0;
+  --wildleaf-sage: #edf7f0;
+  --wildleaf-sky: #eef6fb;
+  --wildleaf-blush: #fff1ed;
+  --wildleaf-lilac: #f4f1fb;
+  --wildleaf-sand: #fbf3df;
+  --wildleaf-gold: #c9953d;
+  --wildleaf-ink: #17251f;
+  --wildleaf-muted: #65716b;
+  --wildleaf-line: #dfe7e1;
+}
+
+/* Shared section tones keep the customer site and partner portal visually
+   related without introducing loud, one-off colour choices. */
+.tone-overview {
+  --section-tint: var(--wildleaf-sage);
+}
+.tone-about {
+  --section-tint: var(--wildleaf-cream);
+}
+.tone-facilities {
+  --section-tint: var(--wildleaf-sky);
+}
+.tone-services {
+  --section-tint: var(--wildleaf-blush);
+}
+.tone-location {
+  --section-tint: var(--wildleaf-sage);
+}
+.tone-things {
+  --section-tint: var(--wildleaf-sand);
+}
+.tone-rules {
+  --section-tint: var(--wildleaf-lilac);
+}
+.tone-reviews {
+  --section-tint: var(--wildleaf-cream);
+}

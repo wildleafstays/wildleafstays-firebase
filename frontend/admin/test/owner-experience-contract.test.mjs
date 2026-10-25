@@ -13,6 +13,16 @@ const experienceCss = fs.readFileSync(
   "utf8",
 );
 
+const amenityCatalog = fs.readFileSync(
+  new URL("../amenity-catalog.js", import.meta.url),
+  "utf8",
+);
+
+const sharedTheme = fs.readFileSync(
+  new URL("../../wildleaf-theme.css", import.meta.url),
+  "utf8",
+);
+
 test("room category setup uses owner language and hides internal category code", () => {
   const match = html.match(/<form id="roomCategoryForm"[\s\S]*?<\/form>/);
 
@@ -140,6 +150,29 @@ test("property owners manage every public property-tab detail in the profile wor
   assert.match(html, /id="amenitiesForm"/);
   assert.match(html, /id="imageUploadForm"/);
   assert.match(html, /id="commercialRulesForm"/);
+});
+
+test("guest display uses controlled choices instead of pipe-delimited owner input", () => {
+  const profile = html.match(/<form id="profileForm"[\s\S]*?<\/form>/);
+  assert.ok(profile, "property profile form must exist");
+  assert.match(profile[0], /class="span-two guest-display-workspace"/);
+  assert.match(profile[0], /id="guestHighlightOptions"/);
+  assert.match(profile[0], /id="guestFacilityOptions"/);
+  assert.match(profile[0], /id="guestServiceOptions"/);
+  assert.match(profile[0], /id="guestDistanceOptions"/);
+  assert.match(profile[0], /Ratings are never owner-entered/);
+  assert.doesNotMatch(profile[0], /One item per line, separated with \|/);
+  assert.doesNotMatch(profile[0], /Swimming Pool \| Outdoor pool/);
+  assert.match(js, /function renderGuestDisplayControls/);
+  assert.match(js, /GUEST_DISPLAY_CATALOG/);
+  assert.match(js, /data-record-field/);
+  assert.match(amenityCatalog, /export const GUEST_DISPLAY_CATALOG/);
+});
+
+test("admin loads the shared Wildleaf colour system", () => {
+  assert.match(html, /href="\/wildleaf-theme\.css"/);
+  assert.match(experienceCss, /--wo-sage: var\(--wildleaf-sage/);
+  assert.match(sharedTheme, /\.tone-overview/);
 });
 
 test("a new property draft opens before its sale mode and rates are configured", () => {

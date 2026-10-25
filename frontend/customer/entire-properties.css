@@ -1,6 +1,6 @@
 .catalog-page {
   min-height: 100vh;
-  background: #fbfaf7;
+  background: var(--wildleaf-cream, #fffaf0);
 }
 
 .catalog-header {
@@ -596,4 +596,12 @@
   .entire-property-hero-dot {
     transition: none;
   }
+}
+
+.catalog-page .catalog-filter-shell {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--wildleaf-cream, #fffaf0) 96%, transparent) 0%, color-mix(in srgb, var(--wildleaf-cream, #fffaf0) 90%, transparent) 78%, transparent 100%);
+}
+
+.catalog-results-section {
+  background: linear-gradient(180deg, var(--wildleaf-sage, #edf7f0), transparent 480px);
 }

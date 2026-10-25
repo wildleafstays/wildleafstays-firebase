@@ -2343,3 +2343,17 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Shared colour rhythm for dynamic property information tabs. */
+.property-tab-panel[data-tab="overview"] { --property-tab-tint: var(--wildleaf-sage, #edf7f0); }
+.property-tab-panel[data-tab="about"] { --property-tab-tint: var(--wildleaf-cream, #fffaf0); }
+.property-tab-panel[data-tab="facilities"] { --property-tab-tint: var(--wildleaf-sky, #eef6fb); }
+.property-tab-panel[data-tab="services"] { --property-tab-tint: var(--wildleaf-blush, #fff1ed); }
+.property-tab-panel[data-tab="location"] { --property-tab-tint: var(--wildleaf-sage, #edf7f0); }
+.property-tab-panel[data-tab="things"] { --property-tab-tint: var(--wildleaf-sand, #fbf3df); }
+.property-tab-panel[data-tab="rules"] { --property-tab-tint: var(--wildleaf-lilac, #f4f1fb); }
+.property-tab-panel[data-tab="reviews"] { --property-tab-tint: var(--wildleaf-cream, #fffaf0); }
+
+.property-tab-panel[data-tab] {
+  background: linear-gradient(135deg, var(--property-tab-tint), #fff 72%);
+}
