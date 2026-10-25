@@ -155,6 +155,26 @@ test("property page lets guests choose the existing entire-property or room flow
   assert.match(propertySource, /state\.displayMode/);
 });
 
+test("mobile property content is viewport-bound while tabs remain horizontally scrollable", () => {
+  assert.match(mobileSearchStyles, /Property mobile viewport guard/);
+  assert.match(
+    mobileSearchStyles,
+    /\.property-body:not\(\.checkout-view\) \.property-shopping-shell\s*\{[\s\S]*?min-width: 0;[\s\S]*?max-width: calc\(100% - 20px\);/,
+  );
+  assert.match(
+    mobileSearchStyles,
+    /\.property-body:not\(\.checkout-view\) \.property-information\s*\{\s*overflow: hidden;/,
+  );
+  assert.match(
+    mobileSearchStyles,
+    /\.property-body:not\(\.checkout-view\) \.property-tabs\s*\{[\s\S]*?overflow-x: auto;[\s\S]*?touch-action: pan-x;/,
+  );
+  assert.match(
+    mobileSearchStyles,
+    /\.property-body:not\(\.checkout-view\) \.property-tab-panel\s*\{\s*overflow: hidden;/,
+  );
+});
+
 test("entire-property privacy and room choice stay on one property page", () => {
   assert.match(propertySource, /No unrelated overnight guests/);
   assert.match(propertySource, /function selectEntireProperty\(option\)/);

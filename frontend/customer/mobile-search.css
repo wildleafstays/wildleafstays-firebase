@@ -362,3 +362,184 @@
     height: 40px;
   }
 }
+
+/*
+ * Property mobile viewport guard.
+ *
+ * The property composition is a column flex layout on phones. Its tab rail and
+ * rich booking cards have deliberately wide min-content sizes, so flex items
+ * must explicitly be allowed to shrink. Otherwise those children widen the
+ * document and mobile browsers render the page as though it were zoomed in.
+ * Keep this final and mobile-only: desktop remains unchanged and the tab rail
+ * is the only property-information element that scrolls horizontally.
+ */
+@media (max-width: 760px) {
+  html,
+  body.property-body {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .property-body *,
+  .property-body *::before,
+  .property-body *::after {
+    box-sizing: border-box;
+  }
+
+  .property-body:not(.checkout-view) .property-page {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .property-body:not(.checkout-view) .property-shopping-shell {
+    width: calc(100% - 20px) !important;
+    min-width: 0;
+    max-width: calc(100% - 20px);
+    margin-inline: auto;
+  }
+
+  .property-body:not(.checkout-view) .property-shopping-shell > *,
+  .property-body:not(.checkout-view) .property-identity-copy,
+  .property-body:not(.checkout-view) .property-title-facts,
+  .property-body:not(.checkout-view) .property-information,
+  .property-body:not(.checkout-view) .property-tab-panel,
+  .property-body:not(.checkout-view) .property-tab-content,
+  .property-body:not(.checkout-view) .plan-your-stay,
+  .property-body:not(.checkout-view) .property-main,
+  .property-body:not(.checkout-view) .booking-section,
+  .property-body:not(.checkout-view) .entire-property-offer,
+  .property-body:not(.checkout-view) .entire-property-card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .property-body:not(.checkout-view) .property-information {
+    overflow: hidden;
+  }
+
+  .property-body:not(.checkout-view) .property-tabs {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .property-body:not(.checkout-view) .property-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .property-body:not(.checkout-view) .property-tab {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: max-content;
+    max-width: none;
+    white-space: nowrap;
+    scroll-snap-align: start;
+  }
+
+  .property-body:not(.checkout-view) .property-tab-panel {
+    overflow: hidden;
+  }
+
+  .property-body:not(.checkout-view) :is(
+      .property-tab-copy,
+      .property-tab-empty,
+      .guest-row-copy,
+      .guest-location-card,
+      .guest-facility-card,
+      .guest-setting-card,
+      .entire-property-card > *,
+      .entire-property-promise,
+      .entire-property-action,
+      .entire-room-allocation,
+      .room-category-card,
+      .room-category-content,
+      .room-allocation-row,
+      .rate-plan-choice
+    ) {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .property-body:not(.checkout-view) :is(
+      .guest-metric-grid,
+      .guest-about-grid,
+      .guest-highlight-grid,
+      .guest-ideal-grid,
+      .guest-distance-grid,
+      .guest-facility-grid,
+      .tab-detail-grid,
+      .tab-card-grid,
+      .tab-amenity-grid,
+      .review-list
+    ) > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .property-body:not(.checkout-view) .property-gallery,
+  .property-body:not(.checkout-view) .property-gallery-grid,
+  .property-body:not(.checkout-view) .availability-results,
+  .property-body:not(.checkout-view) .room-category-rail {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .property-body:not(.checkout-view) .entire-property-card {
+    overflow: hidden;
+  }
+
+  .property-header {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  .property-header .back-link {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.76rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 350px) {
+  .property-body:not(.checkout-view) .property-shopping-shell {
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px);
+  }
+
+  .property-body:not(.checkout-view) .property-title-facts {
+    gap: 6px;
+  }
+
+  .property-body:not(.checkout-view) .property-title-facts h1 {
+    font-size: 1.58rem;
+  }
+
+  .property-body:not(.checkout-view) .property-mobile-type {
+    padding-inline: 7px;
+    font-size: 0.56rem;
+  }
+
+  .property-body:not(.checkout-view) .entire-property-card {
+    padding: 19px;
+  }
+}
