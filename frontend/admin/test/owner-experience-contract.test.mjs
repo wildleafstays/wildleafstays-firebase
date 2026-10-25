@@ -169,6 +169,18 @@ test("guest display uses controlled choices instead of pipe-delimited owner inpu
   assert.match(amenityCatalog, /export const GUEST_DISPLAY_CATALOG/);
 });
 
+test("guest display accepts null content from legacy property records", () => {
+  assert.match(js, /function normalizeGuestContent\(guestContent\)/);
+  assert.match(
+    js,
+    /guestContent &&[\s\S]*?typeof guestContent === "object"[\s\S]*?!Array\.isArray\(guestContent\)[\s\S]*?\? guestContent[\s\S]*?: \{\}/,
+  );
+  assert.match(
+    js,
+    /function renderGuestDisplayControls\(guestContent = \{\}\)[\s\S]*?const content = normalizeGuestContent\(guestContent\)[\s\S]*?const overview = content\.overview \|\| \{\}/,
+  );
+});
+
 test("admin loads the shared Wildleaf colour system", () => {
   assert.match(html, /href="\/wildleaf-theme\.css"/);
   assert.match(experienceCss, /--wo-sage: var\(--wildleaf-sage/);

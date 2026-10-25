@@ -1417,13 +1417,22 @@ function fillForm(form, values) {
   }
 }
 
+function normalizeGuestContent(guestContent) {
+  return guestContent &&
+    typeof guestContent === "object" &&
+    !Array.isArray(guestContent)
+    ? guestContent
+    : {};
+}
+
 function fillGuestContentForm(form, guestContent = {}) {
-  const overview = guestContent?.overview || {};
-  const about = guestContent?.about || {};
-  const location = guestContent?.location || {};
-  const things = guestContent?.thingsToKnow || {};
-  const rules = guestContent?.rules || {};
-  const reviews = guestContent?.reviews || {};
+  const content = normalizeGuestContent(guestContent);
+  const overview = content.overview || {};
+  const about = content.about || {};
+  const location = content.location || {};
+  const things = content.thingsToKnow || {};
+  const rules = content.rules || {};
+  const reviews = content.reviews || {};
   fillForm(form, {
     guestHighlights: formatGuestLines(overview.highlights),
     guestIdealFor: formatGuestLines(overview.idealFor),
@@ -1439,7 +1448,7 @@ function fillGuestContentForm(form, guestContent = {}) {
     guestLayoutDescription: about.layout,
     guestBathroomsDescription: about.bathroomsDescription,
     guestPrivacyDescription: about.privacy,
-    guestFacilityDetails: formatGuestRecords(guestContent?.facilities, [
+    guestFacilityDetails: formatGuestRecords(content.facilities, [
       "name",
       "description",
       "access",
@@ -1448,7 +1457,7 @@ function fillGuestContentForm(form, guestContent = {}) {
       "restrictions",
       "mediaId",
     ]),
-    guestServiceDetails: formatGuestRecords(guestContent?.services, [
+    guestServiceDetails: formatGuestRecords(content.services, [
       "name",
       "description",
       "availability",
@@ -1771,9 +1780,10 @@ function setupGuestEditorTabs() {
 
 function renderGuestDisplayControls(guestContent = {}) {
   setupGuestEditorTabs();
-  const overview = guestContent.overview || {};
-  const location = guestContent.location || {};
-  const things = guestContent.thingsToKnow || {};
+  const content = normalizeGuestContent(guestContent);
+  const overview = content.overview || {};
+  const location = content.location || {};
+  const things = content.thingsToKnow || {};
   renderGuestChoiceOptions(
     "guestHighlightOptions",
     GUEST_DISPLAY_CATALOG.highlights,
@@ -1789,14 +1799,14 @@ function renderGuestDisplayControls(guestContent = {}) {
   renderStructuredGuestOptions({
     containerId: "guestFacilityOptions",
     catalog: GUEST_DISPLAY_CATALOG.facilities,
-    records: guestContent.facilities,
+    records: content.facilities,
     targetName: "guestFacilityDetails",
     kind: "facility",
   });
   renderStructuredGuestOptions({
     containerId: "guestServiceOptions",
     catalog: GUEST_DISPLAY_CATALOG.services,
-    records: guestContent.services,
+    records: content.services,
     targetName: "guestServiceDetails",
     kind: "service",
   });
