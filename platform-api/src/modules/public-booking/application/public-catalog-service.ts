@@ -153,7 +153,8 @@ export class PublicCatalogService {
         sizeSqm: row.size_sqm === null ? null : Number(row.size_sqm),
         bedConfiguration: row.bed_configuration,
         extraBedAllowed: row.extra_bed_allowed,
-        defaultViewLabel: row.default_view_label
+        defaultViewLabel: row.default_view_label,
+        unitCount: row.unit_count
       };
     });
 
@@ -199,6 +200,7 @@ export class PublicCatalogService {
         locationDescription: record.location_description,
         mapUrl: record.map_url,
         nearbyAttractions: record.nearby_attractions,
+        guestContent: record.guest_content,
         roomCategories,
         amenities,
         policies,

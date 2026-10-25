@@ -48,7 +48,8 @@ export class PropertyRepository {
         public_address: null,
         location_description: null,
         map_url: null,
-        nearby_attractions: null
+        nearby_attractions: null,
+        guest_content: null
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -112,6 +113,7 @@ export class PropertyRepository {
         location_description: input.locationDescription ?? null,
         map_url: input.mapUrl ?? null,
         nearby_attractions: input.nearbyAttractions ?? null,
+        guest_content: input.guestContent ?? null,
         version: sql<number>`version + 1`,
         updated_at: sql<Date>`now()`
       })

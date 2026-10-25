@@ -105,7 +105,7 @@ test("BOTH properties present rooms and entire-property inventory together", () 
   assert.match(propertySource, /function renderEntirePropertyOffer\(nights\)/);
 });
 
-test("property page uses one compact planner and database-backed information tabs", () => {
+test("property page uses one compact planner and eight database-backed information tabs", () => {
   assert.match(propertyHtml, /id="planYourStayTitle">Plan Your Stay/);
   assert.match(propertyHtml, /id="availabilityForm"/);
   assert.equal((propertyHtml.match(/id="availabilityForm"/g) || []).length, 1);
@@ -116,22 +116,43 @@ test("property page uses one compact planner and database-backed information tab
   assert.doesNotMatch(propertyHtml, /class="panel-section policies-section"/);
   for (const label of [
     "Overview",
-    "About Home",
-    "Cancellation",
-    "Reviews",
-    "Amenities",
+    "About Property",
+    "Facilities/Spaces",
     "Services",
-    "Spaces",
-    "Location",
+    "Location & Accessibility",
+    "Things to Know",
+    "Rules and Policies",
+    "Reviews",
   ]) {
     assert.match(propertySource, new RegExp(`"${label}"`));
   }
+  assert.match(propertySource, /function guestContent\(property\)/);
+  assert.match(propertySource, /property\.guestContent/);
+  assert.match(propertySource, /renderGuestOverview/);
+  assert.match(propertySource, /renderGuestAbout/);
+  assert.match(propertySource, /renderGuestFacilities/);
+  assert.match(propertySource, /renderGuestServices/);
+  assert.match(propertySource, /renderGuestLocation/);
+  assert.match(propertySource, /renderGuestThings/);
+  assert.match(propertySource, /renderGuestRules/);
+  assert.match(propertySource, /renderGuestReviews/);
   assert.match(propertySource, /property\.servicesDescription/);
   assert.match(propertySource, /property\.spacesDescription/);
   assert.match(propertySource, /property\.nearbyAttractions/);
   assert.match(propertySource, /property\.cancellation/);
   assert.match(propertySource, /property\.reviews/);
   assert.doesNotMatch(propertySource, /Live choices are ready for/);
+});
+
+test("property page lets guests choose the existing entire-property or room flow", () => {
+  assert.match(propertyHtml, /id="stayModeChooser"/);
+  assert.match(propertyHtml, /id="chooseEntireProperty"/);
+  assert.match(propertyHtml, /id="chooseIndividualRooms"/);
+  assert.match(
+    propertySource,
+    /function selectStayDisplayMode\(mode, reveal\)/,
+  );
+  assert.match(propertySource, /state\.displayMode/);
 });
 
 test("entire-property privacy and room choice stay on one property page", () => {
@@ -1051,13 +1072,19 @@ test("customer booking pages use one compact, functional mobile search interface
   assert.match(mobileSearchSource, /Check-in/);
   assert.match(mobileSearchSource, /Check-out/);
   assert.match(mobileSearchSource, /Kids/);
-  assert.match(mobileSearchSource, /dispatchEvent\(new Event\(type, \{ bubbles: true \}\)\)/);
+  assert.match(
+    mobileSearchSource,
+    /dispatchEvent\(new Event\(type, \{ bubbles: true \}\)\)/,
+  );
   assert.match(mobileSearchStyles, /@media \(max-width: 760px\)/);
   assert.match(
     mobileSearchStyles,
     /@media \(max-width: 760px\)[\s\S]*\.mobile-search-source\s*\{[\s\S]*display:\s*none\s*!important/,
   );
-  assert.match(mobileSearchStyles, /\.property-quick-facts\s*\{[\s\S]*display:\s*none/);
+  assert.match(
+    mobileSearchStyles,
+    /\.property-quick-facts\s*\{[\s\S]*display:\s*none/,
+  );
   assert.match(propertyHtml, /id="propertyMobileType"/);
   assert.match(propertySource, /propertyMobileType/);
   assert.match(destinationSource, /destinationMobileSearch\.refresh\(\)/);

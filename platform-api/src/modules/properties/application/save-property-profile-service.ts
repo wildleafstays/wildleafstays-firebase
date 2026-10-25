@@ -45,6 +45,7 @@ function auditSnapshot(property: PropertyRecord): JsonObject {
     locationDescription: property.location_description,
     mapUrl: property.map_url,
     nearbyAttractions: property.nearby_attractions,
+    guestContent: property.guest_content,
     status: property.status,
     version: property.version
   };

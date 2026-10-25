@@ -57,18 +57,23 @@ test("role-aware navigation separates hotel owners from Wildleaf reviewers", () 
 });
 
 test("profilePayload omits empty optional values and keeps optimistic versioning", () => {
+  const payload = profilePayload(
+    {
+      name: "  Pine House  ",
+      timezone: "Asia/Kolkata",
+      propertyCategoryId: "category-1",
+      propertyTypeId: "type-1",
+      city: "",
+      latitude: "30.123",
+    },
+    4,
+  );
+
   assert.deepEqual(
-    profilePayload(
-      {
-        name: "  Pine House  ",
-        timezone: "Asia/Kolkata",
-        propertyCategoryId: "category-1",
-        propertyTypeId: "type-1",
-        city: "",
-        latitude: "30.123",
-      },
-      4,
-    ),
+    {
+      ...payload,
+      guestContent: undefined,
+    },
     {
       version: 4,
       name: "Pine House",
@@ -76,8 +81,11 @@ test("profilePayload omits empty optional values and keeps optimistic versioning
       propertyCategoryId: "category-1",
       propertyTypeId: "type-1",
       latitude: 30.123,
+      guestContent: undefined,
     },
   );
+  assert.deepEqual(payload.guestContent.facilities, []);
+  assert.deepEqual(payload.guestContent.services, []);
 });
 
 test("profilePayload synchronizes guest-facing tab content", () => {

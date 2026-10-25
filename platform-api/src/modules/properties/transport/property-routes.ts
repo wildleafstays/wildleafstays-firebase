@@ -65,6 +65,7 @@ interface SavePropertyProfileBody extends JsonObject {
   locationDescription?: string;
   mapUrl?: string;
   nearbyAttractions?: string;
+  guestContent?: JsonObject;
 }
 
 interface OwnerResponsibilityBody extends JsonObject {
@@ -147,6 +148,7 @@ const propertySchema = {
     "locationDescription",
     "mapUrl",
     "nearbyAttractions",
+    "guestContent",
     "createdAt",
     "updatedAt"
   ],
@@ -182,6 +184,9 @@ const propertySchema = {
     locationDescription: nullableString,
     mapUrl: nullableString,
     nearbyAttractions: nullableString,
+    guestContent: {
+      anyOf: [{ type: "object", additionalProperties: true }, { type: "null" }]
+    },
     createdAt: { type: "string" },
     updatedAt: { type: "string" }
   }
@@ -248,7 +253,8 @@ const saveProfileBodySchema = {
     publicAddress: { type: "string", maxLength: 500 },
     locationDescription: { type: "string", maxLength: 5000 },
     mapUrl: { type: "string", format: "uri", maxLength: 2000 },
-    nearbyAttractions: { type: "string", maxLength: 5000 }
+    nearbyAttractions: { type: "string", maxLength: 5000 },
+    guestContent: { type: "object", additionalProperties: true }
   }
 } as const;
 
@@ -515,7 +521,8 @@ export async function registerPropertyRoutes(
               publicAddress: body.publicAddress?.trim() || null,
               locationDescription: body.locationDescription?.trim() || null,
               mapUrl: body.mapUrl?.trim() || null,
-              nearbyAttractions: body.nearbyAttractions?.trim() || null
+              nearbyAttractions: body.nearbyAttractions?.trim() || null,
+              guestContent: body.guestContent ?? null
             },
             requestMetadata(request, "partner-api")
           )

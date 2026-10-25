@@ -164,7 +164,8 @@ const roomCategorySchema = {
     "sizeSqm",
     "bedConfiguration",
     "extraBedAllowed",
-    "defaultViewLabel"
+    "defaultViewLabel",
+    "unitCount"
   ],
   properties: {
     roomCategoryId: { type: "string", format: "uuid" },
@@ -181,7 +182,8 @@ const roomCategorySchema = {
     sizeSqm: nullableNumber,
     bedConfiguration: nullableString,
     extraBedAllowed: { type: "boolean" },
-    defaultViewLabel: nullableString
+    defaultViewLabel: nullableString,
+    unitCount: { type: "integer", minimum: 0 }
   }
 } as const;
 
@@ -275,6 +277,7 @@ const propertyDetailSchema = {
     "locationDescription",
     "mapUrl",
     "nearbyAttractions",
+    "guestContent",
     "roomCategories",
     "amenities",
     "policies",
@@ -293,6 +296,9 @@ const propertyDetailSchema = {
     locationDescription: nullableString,
     mapUrl: nullableString,
     nearbyAttractions: nullableString,
+    guestContent: {
+      anyOf: [{ type: "object", additionalProperties: true }, { type: "null" }]
+    },
     roomCategories: { type: "array", items: roomCategorySchema },
     amenities: { type: "array", items: amenitySchema },
     policies: {

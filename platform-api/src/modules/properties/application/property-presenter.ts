@@ -33,6 +33,7 @@ export interface PropertyView extends JsonObject {
   locationDescription: string | null;
   mapUrl: string | null;
   nearbyAttractions: string | null;
+  guestContent: JsonObject | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,6 +71,7 @@ export function presentProperty(row: PropertyRecord): PropertyView {
     locationDescription: row.location_description,
     mapUrl: row.map_url,
     nearbyAttractions: row.nearby_attractions,
+    guestContent: row.guest_content,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString()
   };

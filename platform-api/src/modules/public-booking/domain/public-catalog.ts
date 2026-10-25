@@ -1,3 +1,5 @@
+import type { JsonObject } from "../../../infrastructure/database/types.js";
+
 export interface PublicDestinationView {
   city: string;
   stateRegion: string | null;
@@ -39,6 +41,7 @@ export interface PublicRoomCategoryView {
   bedConfiguration: string | null;
   extraBedAllowed: boolean;
   defaultViewLabel: string | null;
+  unitCount?: number;
 }
 
 export interface PublicRoomCategoryMediaView {
@@ -102,6 +105,7 @@ export interface PublicPropertyDetailView extends PublicPropertySummaryView {
   locationDescription?: string | null;
   mapUrl?: string | null;
   nearbyAttractions?: string | null;
+  guestContent?: JsonObject | null;
   roomCategories: PublicRoomCategoryView[];
   amenities: PublicAmenityView[];
   policies: PublicPoliciesView | null;

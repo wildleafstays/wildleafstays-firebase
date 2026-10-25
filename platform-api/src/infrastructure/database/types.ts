@@ -248,6 +248,11 @@ export interface PropertiesTable {
     string | null | undefined,
     string | null | undefined
   >;
+  guest_content: ColumnType<
+    JsonObject | null,
+    JsonObject | null | undefined,
+    JsonObject | null | undefined
+  >;
   submission_sequence: Generated<number>;
   submitted_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;
   approved_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;

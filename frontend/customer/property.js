@@ -40,6 +40,10 @@ const selectionTotal = document.querySelector("#selectionTotal");
 const selectionContinue = document.querySelector("#selectionContinue");
 const entirePropertyOffer = document.querySelector("#entirePropertyOffer");
 const roomChoiceDivider = document.querySelector("#roomChoiceDivider");
+const availabilitySection = document.querySelector("#availabilitySection");
+const stayModeChooser = document.querySelector("#stayModeChooser");
+const chooseEntireProperty = document.querySelector("#chooseEntireProperty");
+const chooseIndividualRooms = document.querySelector("#chooseIndividualRooms");
 
 const state = {
   property: null,
@@ -58,6 +62,7 @@ const state = {
   entireSelection: null,
   allowsRooms: true,
   allowsEntire: false,
+  displayMode: null,
   requestedRooms: clamp(Number(query.get("rooms") || 1), 1, 20),
   availabilityTimer: null,
   availabilityRequestVersion: 0,
@@ -152,6 +157,12 @@ function wireEvents() {
       void continueRoomSelection(selectionContinue);
     }
   });
+  chooseEntireProperty?.addEventListener("click", () =>
+    selectStayDisplayMode("entire", true),
+  );
+  chooseIndividualRooms?.addEventListener("click", () =>
+    selectStayDisplayMode("rooms", true),
+  );
 
   const photoDialog = document.querySelector("#propertyPhotoDialog");
   document
@@ -320,6 +331,661 @@ function updatePlannerNightCount() {
 }
 
 function renderPropertyTabs(property) {
+  const tabs = document.querySelector("#propertyTabs");
+  const panel = document.querySelector("#propertyTabPanel");
+  if (!tabs || !panel) return;
+
+  const definitions = [
+    ["overview", "Overview", () => renderGuestOverview(property)],
+    ["about", "About Property", () => renderGuestAbout(property)],
+    ["facilities", "Facilities/Spaces", () => renderGuestFacilities(property)],
+    ["services", "Services", () => renderGuestServices(property)],
+    [
+      "location",
+      "Location & Accessibility",
+      () => renderGuestLocation(property),
+    ],
+    ["things", "Things to Know", () => renderGuestThings(property)],
+    ["rules", "Rules and Policies", () => renderGuestRules(property)],
+    ["reviews", "Reviews", () => renderGuestReviews(property)],
+  ];
+
+  const activate = (key, focus = false) => {
+    const selected = definitions.find(([id]) => id === key) || definitions[0];
+    const previousTop = tabs.getBoundingClientRect().top;
+    tabs.querySelectorAll("[role='tab']").forEach((tab) => {
+      const active = tab.dataset.tab === selected[0];
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+      tab.classList.toggle("active", active);
+      if (active && focus) {
+        tab.focus({ preventScroll: true });
+        tab.scrollIntoView({ inline: "center", block: "nearest" });
+      }
+    });
+    panel.hidden = false;
+    panel.dataset.tab = selected[0];
+    panel.setAttribute("aria-labelledby", `property-tab-${selected[0]}`);
+    panel.replaceChildren(selected[2]());
+    const currentTop = tabs.getBoundingClientRect().top;
+    if (Math.abs(currentTop - previousTop) > 1) {
+      window.scrollBy({ top: currentTop - previousTop, behavior: "auto" });
+    }
+  };
+
+  tabs.replaceChildren(
+    ...definitions.map(([key, label], index) => {
+      const button = element("button", "property-tab", label);
+      button.type = "button";
+      button.id = `property-tab-${key}`;
+      button.dataset.tab = key;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-controls", "propertyTabPanel");
+      button.setAttribute("aria-selected", String(index === 0));
+      button.tabIndex = index === 0 ? 0 : -1;
+      button.addEventListener("click", () => activate(key, true));
+      button.addEventListener("keydown", (event) => {
+        if (!new Set(["ArrowLeft", "ArrowRight", "Home", "End"]).has(event.key))
+          return;
+        event.preventDefault();
+        const current = definitions.findIndex(([id]) => id === key);
+        const next =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? definitions.length - 1
+              : (current +
+                  (event.key === "ArrowRight" ? 1 : -1) +
+                  definitions.length) %
+                definitions.length;
+        activate(definitions[next][0], true);
+      });
+      return button;
+    }),
+  );
+  activate("overview");
+}
+
+function guestContent(property) {
+  return property.guestContent && typeof property.guestContent === "object"
+    ? property.guestContent
+    : {};
+}
+
+function guestArray(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function roomTotals(property) {
+  const categories = property.roomCategories || [];
+  const rooms = categories.reduce(
+    (total, category) => total + Math.max(0, Number(category.unitCount) || 0),
+    0,
+  );
+  const maximumGuests = categories.reduce(
+    (total, category) =>
+      total +
+      Math.max(0, Number(category.unitCount) || 0) *
+        Math.max(0, Number(category.maxOccupancy) || 0),
+    0,
+  );
+  return { categories, rooms, maximumGuests };
+}
+
+function guestIcon(label) {
+  const normalized = String(label || "").toLowerCase();
+  const match = [
+    [/pool|water/, "♨"],
+    [/garden|lawn|orchard/, "♧"],
+    [/restaurant|meal|food|dining|chef/, "♨"],
+    [/mountain|view|trail|nature/, "△"],
+    [/parking|transfer|taxi|vehicle/, "▣"],
+    [/room|bed/, "▰"],
+    [/guest|group|family|couple/, "♙"],
+    [/wifi|network|connect/, "⌁"],
+    [/rule|policy|check/, "✓"],
+  ].find(([pattern]) => pattern.test(normalized));
+  return match?.[1] || "◇";
+}
+
+function guestMetric(label, value, detail = "") {
+  const card = element("article", "guest-metric-card");
+  card.append(
+    element("span", "guest-card-icon", guestIcon(label)),
+    element("strong", "", String(value)),
+    element("small", "", label),
+  );
+  if (detail) card.append(element("small", "guest-metric-detail", detail));
+  return card;
+}
+
+function guestChipList(items, className = "guest-chip-list") {
+  const list = element("div", className);
+  guestArray(items).forEach((item) => {
+    const label = typeof item === "string" ? item : item.name;
+    if (!label) return;
+    const chip = element("span", "guest-info-chip");
+    chip.append(
+      element("span", "guest-info-chip-icon", guestIcon(label)),
+      element("span", "", label),
+    );
+    list.append(chip);
+  });
+  return list;
+}
+
+function appendExpandableDescription(section, copy) {
+  if (!copy) return false;
+  const words = String(copy).trim().split(/\s+/);
+  const paragraph = element("p", "property-tab-copy");
+  if (words.length <= 48) {
+    paragraph.textContent = copy;
+    section.append(paragraph);
+    return true;
+  }
+  const short = `${words.slice(0, 48).join(" ")}…`;
+  paragraph.textContent = short;
+  const toggle = element("button", "property-copy-toggle", "Read more⌄");
+  toggle.type = "button";
+  let expanded = false;
+  toggle.addEventListener("click", () => {
+    expanded = !expanded;
+    paragraph.textContent = expanded ? copy : short;
+    toggle.textContent = expanded ? "Read less⌃" : "Read more⌄";
+  });
+  section.append(paragraph, toggle);
+  return true;
+}
+
+function renderGuestOverview(property) {
+  const content = guestContent(property);
+  const overview = content.overview || {};
+  const totals = roomTotals(property);
+  const section = propertyTabSection("Overview");
+  let populated = appendExpandableDescription(
+    section,
+    property.shortDescription || property.description,
+  );
+
+  const metrics = element("div", "guest-metric-grid");
+  if (totals.rooms)
+    metrics.append(
+      guestMetric(
+        "Rooms",
+        totals.rooms,
+        `${totals.categories.length} ${totals.categories.length === 1 ? "category" : "categories"}`,
+      ),
+    );
+  if (totals.categories.length)
+    metrics.append(guestMetric("Categories", totals.categories.length));
+  if (totals.maximumGuests)
+    metrics.append(guestMetric("Guests", `Up to ${totals.maximumGuests}`));
+  if (property.propertyTypeName)
+    metrics.append(guestMetric("Property type", property.propertyTypeName));
+  if (metrics.children.length) {
+    section.append(metrics);
+    populated = true;
+  }
+
+  const highlights = guestArray(overview.highlights).length
+    ? guestArray(overview.highlights)
+    : (property.amenities || []).slice(0, 8).map((item) => item.name);
+  if (highlights.length) {
+    section.append(element("h3", "guest-subheading", "Highlights"));
+    section.append(guestChipList(highlights, "guest-highlight-grid"));
+    populated = true;
+  }
+  if (guestArray(overview.idealFor).length) {
+    section.append(element("h3", "guest-subheading", "Ideal for"));
+    section.append(guestChipList(overview.idealFor, "guest-ideal-grid"));
+    populated = true;
+  }
+  if (overview.setting) {
+    const setting = element("aside", "guest-setting-card");
+    setting.append(element("strong", "", overview.setting));
+    section.append(setting);
+    populated = true;
+  }
+  if (!populated) appendEmptyTabState(section);
+  return section;
+}
+
+function renderGuestAbout(property) {
+  const about = guestContent(property).about || {};
+  const totals = roomTotals(property);
+  const section = propertyTabSection("Property at a Glance");
+  const metrics = element("div", "guest-about-grid");
+  const facts = [
+    ["Buildings", about.buildings],
+    ["Floors", about.floors],
+    ["Rooms", totals.rooms],
+    ["Bathrooms", about.bathrooms],
+    ["Guests", totals.maximumGuests ? `Up to ${totals.maximumGuests}` : null],
+    ["Room Categories", totals.categories.length],
+    ["Type", property.propertyTypeName],
+    ["Renovated", about.renovationYear],
+  ].filter(
+    ([, value]) =>
+      value !== null && value !== undefined && value !== "" && value !== 0,
+  );
+  facts.forEach(([label, value]) => metrics.append(guestMetric(label, value)));
+  if (metrics.children.length) section.append(metrics);
+
+  const layout = [
+    ["Entrance & Driveway", about.entrance],
+    ["Lobby & Common Areas", about.layout],
+    [
+      "Bedrooms",
+      totals.categories
+        .map((category) =>
+          [
+            category.unitCount ? `${category.unitCount} ×` : "",
+            category.name,
+            category.bedConfiguration,
+            category.defaultViewLabel,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        )
+        .filter(Boolean)
+        .join("; "),
+    ],
+    ["Bathrooms", about.bathroomsDescription],
+    ["Privacy & Exclusivity", about.privacy],
+  ].filter(([, value]) => value);
+  if (layout.length) {
+    section.append(element("h3", "guest-subheading", "Property Layout"));
+    const list = element("div", "guest-row-list");
+    layout.forEach(([label, value]) => list.append(guestInfoRow(label, value)));
+    section.append(list);
+  }
+  if (about.plotArea || about.builtUpArea || about.constructionYear) {
+    section.append(
+      element(
+        "p",
+        "guest-footnote",
+        [
+          about.plotArea ? `Plot: ${about.plotArea}` : null,
+          about.builtUpArea ? `Built-up: ${about.builtUpArea}` : null,
+          about.constructionYear ? `Built: ${about.constructionYear}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      ),
+    );
+  }
+  if (!metrics.children.length && !layout.length) appendEmptyTabState(section);
+  return section;
+}
+
+function guestInfoRow(label, copy, status = "") {
+  const row = element("article", "guest-info-row");
+  row.append(element("span", "guest-row-icon", guestIcon(label)));
+  const body = element("div", "guest-row-copy");
+  body.append(element("strong", "", label));
+  if (copy) body.append(element("p", "", copy));
+  row.append(body);
+  if (status) row.append(element("span", "guest-status-pill", status));
+  row.append(element("span", "guest-row-arrow", "›"));
+  return row;
+}
+
+function mergeGuestRecords(primary, fallback) {
+  const merged = new Map();
+  [...guestArray(primary), ...guestArray(fallback)].forEach((item) => {
+    const record = typeof item === "string" ? { name: item } : item;
+    if (!record?.name) return;
+    const key = record.name.trim().toLowerCase();
+    merged.set(key, { ...(merged.get(key) || {}), ...record });
+  });
+  return [...merged.values()];
+}
+
+function renderGuestFacilities(property) {
+  const serviceCategories = new Set([
+    "SERVICES",
+    "PARKING_TRANSPORT",
+    "FOOD_BEVERAGE",
+  ]);
+  const amenities = (property.amenities || [])
+    .filter((item) => !serviceCategories.has(item.category))
+    .map((item) => ({ name: item.name, description: item.details }));
+  const facilities = mergeGuestRecords(
+    guestContent(property).facilities,
+    amenities,
+  );
+  const section = propertyTabSection(
+    "Property Facilities",
+    property.spacesDescription ||
+      "Explore the spaces that make your stay special.",
+  );
+  if (!facilities.length) {
+    appendEmptyTabState(section);
+    return section;
+  }
+  const grid = element("div", "guest-facility-grid");
+  facilities.forEach((facility) => {
+    const card = element("article", "guest-facility-card");
+    if (facility.mediaId) {
+      const image = element("img", "guest-facility-image");
+      image.src = propertyMediaUrl(facility.mediaId);
+      image.alt = facility.name;
+      image.loading = "lazy";
+      card.append(image);
+    }
+    const body = element("div", "guest-facility-copy");
+    body.append(element("strong", "", facility.name));
+    if (facility.description)
+      body.append(element("p", "", facility.description));
+    const meta = [facility.access, facility.pricing, facility.hours]
+      .filter(Boolean)
+      .join(" · ");
+    if (meta) body.append(element("small", "", meta));
+    if (facility.restrictions)
+      body.append(element("small", "guest-restriction", facility.restrictions));
+    card.append(body);
+    grid.append(card);
+  });
+  section.append(grid);
+  return section;
+}
+
+function renderGuestServices(property) {
+  const serviceCategories = new Set([
+    "SERVICES",
+    "PARKING_TRANSPORT",
+    "FOOD_BEVERAGE",
+  ]);
+  const amenities = (property.amenities || [])
+    .filter((item) => serviceCategories.has(item.category))
+    .map((item) => ({ name: item.name, description: item.details }));
+  const services = mergeGuestRecords(
+    guestContent(property).services,
+    amenities,
+  );
+  const section = propertyTabSection(
+    "Guest Services",
+    property.servicesDescription ||
+      "Thoughtful services to make your stay comfortable.",
+  );
+  if (!services.length) {
+    appendEmptyTabState(section);
+    return section;
+  }
+  const filters = element("div", "guest-filter-pills");
+  const list = element("div", "guest-row-list");
+  const render = (filter) => {
+    list.replaceChildren();
+    services
+      .filter((service) =>
+        filter === "All"
+          ? true
+          : String(service.availability || service.pricing || "")
+              .toLowerCase()
+              .includes(filter.toLowerCase()),
+      )
+      .forEach((service) => {
+        const detail = [service.description, service.hours, service.conditions]
+          .filter(Boolean)
+          .join(" · ");
+        list.append(
+          guestInfoRow(
+            service.name,
+            detail,
+            service.availability || service.pricing || "",
+          ),
+        );
+      });
+  };
+  ["All", "Included", "Chargeable", "On Request"].forEach((label, index) => {
+    const button = element(
+      "button",
+      `guest-filter${index === 0 ? " active" : ""}`,
+      label,
+    );
+    button.type = "button";
+    button.addEventListener("click", () => {
+      filters
+        .querySelectorAll("button")
+        .forEach((candidate) =>
+          candidate.classList.toggle("active", candidate === button),
+        );
+      render(label);
+    });
+    filters.append(button);
+  });
+  render("All");
+  section.append(filters, list);
+  return section;
+}
+
+function renderGuestLocation(property) {
+  const location = guestContent(property).location || {};
+  const section = propertyTabSection("Location & Accessibility");
+  let populated = false;
+  if (property.publicAddress || property.locationDescription) {
+    const card = element("article", "guest-location-card");
+    card.append(element("span", "guest-card-icon", "⌖"));
+    const copy = element("div");
+    if (property.publicAddress)
+      copy.append(element("strong", "", property.publicAddress));
+    if (property.locationDescription)
+      copy.append(element("p", "", property.locationDescription));
+    const mapUrl = safeExternalUrl(property.mapUrl);
+    if (mapUrl) {
+      const link = element("a", "guest-map-link", "View on Google Maps ↗");
+      link.href = mapUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      copy.append(link);
+    }
+    card.append(copy);
+    section.append(card);
+    populated = true;
+  }
+  if (guestArray(location.distances).length) {
+    section.append(element("h3", "guest-subheading", "Distances"));
+    const grid = element("div", "guest-distance-grid");
+    location.distances.forEach((item) => {
+      if (item?.name && item?.distance)
+        grid.append(guestMetric(item.name, item.distance));
+    });
+    section.append(grid);
+    populated = true;
+  }
+  const attractions = String(property.nearbyAttractions || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const groups = [
+    ["Transportation", location.transportation],
+    ["Accessibility", location.accessibility],
+    ["Connectivity", location.connectivity],
+    ["Nearby Attractions", attractions],
+  ].filter(([, items]) => guestArray(items).length);
+  groups.forEach(([title, items]) => {
+    section.append(element("h3", "guest-subheading", title));
+    const list = element("div", "guest-row-list compact");
+    guestArray(items).forEach((item) =>
+      list.append(guestInfoRow(String(item), "")),
+    );
+    section.append(list);
+    populated = true;
+  });
+  if (!populated) appendEmptyTabState(section);
+  return section;
+}
+
+function renderGuestThings(property) {
+  const things = guestContent(property).thingsToKnow || {};
+  const section = propertyTabSection(
+    "Things to Know",
+    "Important information to help you plan your stay better.",
+  );
+  const groups = [
+    ["Good to Know", things.goodToKnow],
+    ["Accessibility", things.accessibility],
+    ["Seasonal", things.seasonal],
+    ["Limitations", things.limitations],
+  ].filter(([, items]) => guestArray(items).length);
+  if (!groups.length) {
+    appendEmptyTabState(section);
+    return section;
+  }
+  const filters = element("div", "guest-filter-pills");
+  const list = element("div", "guest-row-list");
+  const render = (items) => {
+    list.replaceChildren(
+      ...guestArray(items).map((item) => guestInfoRow(String(item), "")),
+    );
+  };
+  groups.forEach(([label, items], index) => {
+    const button = element(
+      "button",
+      `guest-filter${index === 0 ? " active" : ""}`,
+      label,
+    );
+    button.type = "button";
+    button.addEventListener("click", () => {
+      filters
+        .querySelectorAll("button")
+        .forEach((candidate) =>
+          candidate.classList.toggle("active", candidate === button),
+        );
+      render(items);
+    });
+    filters.append(button);
+  });
+  render(groups[0][1]);
+  section.append(filters, list);
+  return section;
+}
+
+function renderGuestRules(property) {
+  const policies = property.policies || {};
+  const cancellation = property.cancellation;
+  const rules = guestContent(property).rules || {};
+  const section = propertyTabSection(
+    "Rules and Policies",
+    "Please read the house rules and booking policies before making a reservation.",
+  );
+  const items = [
+    [
+      "Check-in & Check-out",
+      [
+        property.checkInTime
+          ? `Check-in: ${formatTime(property.checkInTime)}`
+          : null,
+        property.checkOutTime
+          ? `Check-out: ${formatTime(property.checkOutTime)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    ],
+    ["Cancellation Policy", cancellation?.policyText],
+    ["Guest & Occupancy Policy", policies.houseRules],
+    ["Kids Policy", humanizeCode(policies.childrenPolicy)],
+    ["Pet Policy", humanizeCode(policies.petsPolicy)],
+    ["Smoking Policy", humanizeCode(policies.smokingPolicy)],
+    ["Parties & Events", humanizeCode(policies.partiesEventsPolicy)],
+    [
+      "Quiet Hours",
+      policies.quietHoursStart && policies.quietHoursEnd
+        ? `${formatTime(policies.quietHoursStart)} – ${formatTime(policies.quietHoursEnd)}`
+        : null,
+    ],
+    [
+      "Minimum Check-in Age",
+      policies.minimumCheckinAge ? `${policies.minimumCheckinAge} years` : null,
+    ],
+    ...guestArray(rules.additional).map((item) => ["Property Rule", item]),
+  ].filter(([, value]) => value);
+  if (!items.length) appendEmptyTabState(section);
+  else {
+    const list = element("div", "guest-row-list");
+    items.forEach(([label, value]) => list.append(guestInfoRow(label, value)));
+    section.append(list);
+  }
+  return section;
+}
+
+function renderGuestReviews(property) {
+  const reviews = property.reviews || [];
+  const reviewLinks = guestContent(property).reviews || {};
+  const section = propertyTabSection(
+    "Reviews",
+    "See what verified guests have to say.",
+  );
+  const googleUrl = safeExternalUrl(reviewLinks.googleReviewsUrl);
+  if (googleUrl) {
+    const google = element("article", "google-review-card");
+    google.append(
+      element("strong", "google-review-brand", "G  Google Reviews"),
+    );
+    const link = element("a", "button button-primary", "Read Google Reviews ↗");
+    link.href = googleUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    google.append(link);
+    section.append(google);
+  }
+  if (reviews.length) {
+    const average =
+      reviews.reduce((total, review) => total + review.rating, 0) /
+      reviews.length;
+    section.append(
+      element("h3", "guest-subheading", "Guest Reviews on Wildleaf"),
+      element(
+        "p",
+        "review-summary",
+        `${average.toFixed(1)} out of 5 · ${reviews.length} verified ${reviews.length === 1 ? "stay" : "stays"}`,
+      ),
+    );
+    const list = element("div", "review-list");
+    reviews.forEach((review) => {
+      const card = element("article", "property-info-card review-card");
+      card.append(
+        element(
+          "strong",
+          "review-rating",
+          `${"★".repeat(review.rating)} ${review.rating}/5`,
+        ),
+      );
+      if (review.title) card.append(element("h3", "", review.title));
+      card.append(
+        element("p", "", review.reviewText),
+        element(
+          "small",
+          "",
+          `${review.reviewerDisplayName} · ${new Date(review.publishedAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`,
+        ),
+      );
+      list.append(card);
+    });
+    section.append(list);
+  }
+  const writeUrl = safeExternalUrl(reviewLinks.googleWriteReviewUrl);
+  if (writeUrl) {
+    const link = element("a", "guest-review-write", "Write a Google review ↗");
+    link.href = writeUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    section.append(link);
+  }
+  if (!googleUrl && !reviews.length) {
+    section.append(
+      element(
+        "p",
+        "property-tab-empty",
+        "No verified guest reviews have been published for this property yet.",
+      ),
+    );
+  }
+  return section;
+}
+
+function renderLegacyPropertyTabs(property) {
   const tabs = document.querySelector("#propertyTabs");
   const panel = document.querySelector("#propertyTabPanel");
   if (!tabs || !panel) return;
@@ -769,8 +1435,50 @@ function configureBookingMode(property) {
     property.saleMode === "BOTH";
   state.allowsEntire =
     property.saleMode === "FULL_PROPERTY_ONLY" || property.saleMode === "BOTH";
+  const requestedMode = query.get("stayMode");
+  state.displayMode =
+    requestedMode === "room" && state.allowsRooms
+      ? "rooms"
+      : requestedMode === "entire" && state.allowsEntire
+        ? "entire"
+        : state.allowsEntire
+          ? "entire"
+          : "rooms";
+  configureStayModeChooser();
   smartMatchSection?.classList.toggle("hidden", !state.allowsRooms);
   form.unitCount.value = String(state.requestedRooms);
+}
+
+function configureStayModeChooser() {
+  if (!stayModeChooser) return;
+  stayModeChooser.classList.toggle(
+    "hidden",
+    checkoutView || (!state.allowsRooms && !state.allowsEntire),
+  );
+  chooseEntireProperty?.classList.toggle("hidden", !state.allowsEntire);
+  chooseIndividualRooms?.classList.toggle("hidden", !state.allowsRooms);
+  selectStayDisplayMode(state.displayMode, false);
+}
+
+function selectStayDisplayMode(mode, reveal) {
+  if (mode === "entire" && !state.allowsEntire) mode = "rooms";
+  if (mode === "rooms" && !state.allowsRooms) mode = "entire";
+  state.displayMode = mode;
+  availabilitySection?.setAttribute("data-display-mode", mode || "");
+  availabilitySection
+    ?.closest(".property-main")
+    ?.setAttribute("data-display-mode", mode || "");
+  [chooseEntireProperty, chooseIndividualRooms].forEach((button) => {
+    if (!button) return;
+    const active = button.dataset.stayDisplay === mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (reveal) {
+    const target =
+      mode === "entire" ? entirePropertyOffer : availabilityResults;
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function configureBackLink(property) {

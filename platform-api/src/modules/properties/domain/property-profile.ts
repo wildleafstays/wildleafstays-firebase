@@ -1,3 +1,5 @@
+import type { JsonObject } from "../../../infrastructure/database/types.js";
+
 export const SaleModes = {
   ROOMS_ONLY: "ROOMS_ONLY",
   FULL_PROPERTY_ONLY: "FULL_PROPERTY_ONLY",
@@ -44,4 +46,5 @@ export interface SavePropertyProfileInput {
   locationDescription?: string | null;
   mapUrl?: string | null;
   nearbyAttractions?: string | null;
+  guestContent?: JsonObject | null;
 }

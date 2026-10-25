@@ -105,7 +105,88 @@ export function profilePayload(form, version) {
     if (form[key] !== "" && form[key] !== undefined)
       body[key] = Number(form[key]);
   }
+  body.guestContent = guestContentPayload(form);
   return body;
+}
+
+export function guestContentPayload(form) {
+  const lines = (key) =>
+    String(form[key] || "")
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+  const text = (key) => String(form[key] || "").trim() || null;
+  const number = (key) => {
+    const value = String(form[key] ?? "").trim();
+    return value === "" ? null : Number(value);
+  };
+  const records = (key, fields) =>
+    lines(key).map((line) => {
+      const values = line.split("|").map((value) => value.trim());
+      return Object.fromEntries(
+        fields
+          .map((field, index) => [field, values[index] || null])
+          .filter(([, value]) => value),
+      );
+    });
+
+  return {
+    overview: {
+      highlights: lines("guestHighlights"),
+      idealFor: lines("guestIdealFor"),
+      setting: text("guestPropertySetting"),
+    },
+    about: {
+      buildings: number("guestBuildings"),
+      floors: number("guestFloors"),
+      bathrooms: number("guestBathrooms"),
+      plotArea: text("guestPlotArea"),
+      builtUpArea: text("guestBuiltUpArea"),
+      constructionYear: number("guestConstructionYear"),
+      renovationYear: number("guestRenovationYear"),
+      entrance: text("guestEntranceDescription"),
+      layout: text("guestLayoutDescription"),
+      bathroomsDescription: text("guestBathroomsDescription"),
+      privacy: text("guestPrivacyDescription"),
+    },
+    facilities: records("guestFacilityDetails", [
+      "name",
+      "description",
+      "access",
+      "pricing",
+      "hours",
+      "restrictions",
+      "mediaId",
+    ]),
+    services: records("guestServiceDetails", [
+      "name",
+      "description",
+      "availability",
+      "pricing",
+      "hours",
+      "conditions",
+      "mediaId",
+    ]),
+    location: {
+      distances: records("guestLocationDistances", ["name", "distance"]),
+      transportation: lines("guestTransportation"),
+      accessibility: lines("guestAccessibility"),
+      connectivity: lines("guestConnectivity"),
+    },
+    thingsToKnow: {
+      goodToKnow: lines("guestGoodToKnow"),
+      accessibility: lines("guestAccessibilityNotes"),
+      seasonal: lines("guestSeasonalInformation"),
+      limitations: lines("guestLimitations"),
+    },
+    rules: {
+      additional: lines("guestAdditionalRules"),
+    },
+    reviews: {
+      googleReviewsUrl: text("guestGoogleReviewsUrl"),
+      googleWriteReviewUrl: text("guestGoogleWriteReviewUrl"),
+    },
+  };
 }
 
 export function reviewQueuePath(status, cursor = null) {

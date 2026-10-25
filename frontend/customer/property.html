@@ -165,6 +165,40 @@
           ></div>
         </section>
 
+        <section
+          id="stayModeChooser"
+          class="stay-mode-chooser hidden"
+          aria-labelledby="stayModeChooserTitle"
+        >
+          <h2 id="stayModeChooserTitle">Choose Your Stay</h2>
+          <div
+            class="stay-mode-options"
+            role="group"
+            aria-label="Choose accommodation type"
+          >
+            <button
+              id="chooseEntireProperty"
+              class="stay-mode-option"
+              type="button"
+              data-stay-display="entire"
+              aria-pressed="false"
+            >
+              <span class="stay-mode-option-icon" aria-hidden="true">⌂</span>
+              <span>Entire Property</span>
+            </button>
+            <button
+              id="chooseIndividualRooms"
+              class="stay-mode-option"
+              type="button"
+              data-stay-display="rooms"
+              aria-pressed="false"
+            >
+              <span class="stay-mode-option-icon" aria-hidden="true">▰</span>
+              <span>Individual Rooms</span>
+            </button>
+          </div>
+        </section>
+
         <div class="property-main">
           <section
             id="availabilitySection"

@@ -76,6 +76,7 @@ export interface PublicPropertyRecord {
   location_description: string | null;
   map_url: string | null;
   nearby_attractions: string | null;
+  guest_content: Record<string, unknown> | null;
   cover_media_id: string | null;
   starting_room_rate_minor: number | null;
   currency_code: string | null;
@@ -95,6 +96,7 @@ export interface PublicRoomCategoryRecord {
   bed_configuration: string | null;
   extra_bed_allowed: boolean;
   default_view_label: string | null;
+  unit_count: number;
 }
 
 export interface PublicAmenityRecord {
@@ -230,6 +232,7 @@ export class PublicCatalogRepository {
         "p.location_description as location_description",
         "p.map_url as map_url",
         "p.nearby_attractions as nearby_attractions",
+        "p.guest_content as guest_content",
         "cover.id as cover_media_id",
         startingRoomRateMinor.as("starting_room_rate_minor"),
         startingRoomCurrencyCode.as("currency_code")
@@ -309,6 +312,7 @@ export class PublicCatalogRepository {
         "p.location_description as location_description",
         "p.map_url as map_url",
         "p.nearby_attractions as nearby_attractions",
+        "p.guest_content as guest_content",
         "cover.id as cover_media_id",
         startingRoomRateMinor.as("starting_room_rate_minor"),
         startingRoomCurrencyCode.as("currency_code")
@@ -338,7 +342,15 @@ export class PublicCatalogRepository {
         "size_sqm",
         "bed_configuration",
         "extra_bed_allowed",
-        "default_view_label"
+        "default_view_label",
+        sql<number>`(
+          select count(*)::integer
+          from physical_units unit
+          where unit.organization_id = room_categories.organization_id
+            and unit.property_id = room_categories.property_id
+            and unit.room_category_id = room_categories.id
+            and unit.status = 'ACTIVE'
+        )`.as("unit_count")
       ])
       .where("organization_id", "=", organizationId)
       .where("property_id", "=", propertyId)

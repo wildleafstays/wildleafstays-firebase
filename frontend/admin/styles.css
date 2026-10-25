@@ -1741,6 +1741,37 @@ label small {
   }
 }
 
+.guest-content-editor {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--brand) 4%);
+}
+
+.guest-content-editor > summary {
+  padding: 0.9rem 1rem;
+  color: var(--brand);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.guest-content-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 0 1rem 1rem;
+}
+
+@media (max-width: 720px) {
+  .guest-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .guest-content-grid .span-two {
+    grid-column: auto;
+  }
+}
+
 /* Compact owner workspace: the calendar is the primary tool. */
 .owner-calendar-titlebar {
   display: flex;

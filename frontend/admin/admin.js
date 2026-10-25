@@ -199,7 +199,10 @@ function taxonomyTypeById(typeId) {
   );
 }
 
-function taxonomyTypesForCategory(categoryId, { includeDisabled = false } = {}) {
+function taxonomyTypesForCategory(
+  categoryId,
+  { includeDisabled = false } = {},
+) {
   return (state.propertyTaxonomy.types || [])
     .filter(
       (propertyType) =>
@@ -279,7 +282,10 @@ function populateTaxonomyTypeSelect(
   }
 
   select.disabled = !categoryId || types.length === 0;
-  if (selectedId && types.some((propertyType) => propertyType.id === selectedId)) {
+  if (
+    selectedId &&
+    types.some((propertyType) => propertyType.id === selectedId)
+  ) {
     select.value = selectedId;
   }
 }
@@ -648,9 +654,11 @@ function setupHomepageDisclosurePanels() {
     item.matches("section.homepage-manager-card"),
   );
   for (const [index, card] of cards.entries()) {
-    const title = card.querySelector("h3")?.textContent?.trim() ||
+    const title =
+      card.querySelector("h3")?.textContent?.trim() ||
       `Content section ${index + 1}`;
-    const description = card.querySelector(".card-heading .muted")?.textContent?.trim() || "";
+    const description =
+      card.querySelector(".card-heading .muted")?.textContent?.trim() || "";
     const details = document.createElement("details");
     details.className = "partner-disclosure";
     const summary = document.createElement("summary");
@@ -733,16 +741,31 @@ function setupCommandCenterWorkspaces() {
   quick.className = "command-quick-links";
   quick.setAttribute("aria-label", "Management workspaces");
   const choices = [
-    ["All Hotels", "Every hotel, owner email, hotel contact, rooms and amenities", "hotels"],
-    ["Property approvals & submitted hotels", "Inspect property submissions and existing review details", "reviews"],
-    ["Website studio", "Manage campaign slides and destination content", "homepage"],
+    [
+      "All Hotels",
+      "Every hotel, owner email, hotel contact, rooms and amenities",
+      "hotels",
+    ],
+    [
+      "Property approvals & submitted hotels",
+      "Inspect property submissions and existing review details",
+      "reviews",
+    ],
+    [
+      "Website studio",
+      "Manage campaign slides and destination content",
+      "homepage",
+    ],
   ];
   for (const [label, description, target] of choices) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "command-quick-link";
     button.dataset.commandTarget = target;
-    button.append(textElement("strong", "", label), textElement("small", "", description));
+    button.append(
+      textElement("strong", "", label),
+      textElement("small", "", description),
+    );
     button.addEventListener("click", () => {
       if (!availableScreens(state.session).includes(target)) return;
       void run(() => showScreen(target));
@@ -764,16 +787,16 @@ function setupSingleCommandNavigation() {
   button.addEventListener("click", () => void run(() => showScreen("control")));
   const container = document.querySelector("#portal .workspace");
   container?.prepend(button);
-
 }
 setupSingleCommandNavigation();
-
-
 
 function setupHomepageCreateSlidePanels() {
   for (const [formId, label] of [
     ["homepageHeroCreateForm", "Add a new homepage campaign slide"],
-    ["entirePropertyHeroCreateForm", "Add a new entire-property campaign slide"],
+    [
+      "entirePropertyHeroCreateForm",
+      "Add a new entire-property campaign slide",
+    ],
   ]) {
     const form = byId(formId);
     if (!form || form.closest(".partner-create-slide")) continue;
@@ -783,14 +806,16 @@ function setupHomepageCreateSlidePanels() {
     summary.textContent = label;
     form.replaceWith(wrap);
     wrap.append(summary, form);
-    const list = byId(formId === "homepageHeroCreateForm" ? "homepageHeroList" : "entirePropertyHeroList");
+    const list = byId(
+      formId === "homepageHeroCreateForm"
+        ? "homepageHeroList"
+        : "entirePropertyHeroList",
+    );
     if (list) list.after(wrap);
   }
 }
 
 setupHomepageCreateSlidePanels();
-
-
 
 function setEditorSectionStatus(sectionKey, label, complete = false) {
   const status = byId(`editorSectionStatus-${sectionKey}`);
@@ -1076,7 +1101,9 @@ async function showScreen(name) {
   const [eyebrow, title] = screenCopy[name];
   byId("screenEyebrow").textContent = eyebrow;
   byId("screenTitle").textContent = title;
-  const isSuperAdmin = (state.session?.platformRoles || []).includes("SUPER_ADMIN");
+  const isSuperAdmin = (state.session?.platformRoles || []).includes(
+    "SUPER_ADMIN",
+  );
   portal.classList.toggle("command-center-mode", isSuperAdmin);
   const accountControls = byId("portal").querySelector(".sidebar-foot");
   if (accountControls) {
@@ -1084,7 +1111,8 @@ async function showScreen(name) {
     const target = isSuperAdmin
       ? byId("portal").querySelector(".workspace")
       : byId("portal").querySelector(".sidebar");
-    if (target && accountControls.parentElement !== target) target.append(accountControls);
+    if (target && accountControls.parentElement !== target)
+      target.append(accountControls);
   }
   const back = byId("commandBackButton");
   if (back) back.hidden = !isSuperAdmin || name === "control";
@@ -1349,9 +1377,7 @@ async function openProperty(organizationId, propertyId) {
   // Property profile section. Load that profile first so opening registration
   // never depends on a rates workspace that cannot exist yet.
   const [profile] = await Promise.all([
-    api(
-      `/v1/partner/organizations/${organizationId}/properties/${propertyId}`,
-    ),
+    api(`/v1/partner/organizations/${organizationId}/properties/${propertyId}`),
     loadPublicPropertyTaxonomy(),
   ]);
   state.property = profile.property;
@@ -1360,25 +1386,20 @@ async function openProperty(organizationId, propertyId) {
   // policies for an accepted property. Complete that transaction before the
   // commercial snapshot is loaded so readiness never observes a stale gap.
   const hotelGst = await api(`${base}/commercial/hotel-gst-consent`);
-  const [
-    onboarding,
-    layout,
-    commercial,
-    ratePlans,
-    ownerResponsibility,
-  ] = await Promise.all([
-    api(
-      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
-    ),
-    api(
-      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
-    ),
-    api(`${base}/commercial`),
-    state.property.saleMode
-      ? api(`${base}/rates/plans`)
-      : Promise.resolve({ ratePlans: [] }),
-    api(`${base}/owner-responsibility`),
-  ]);
+  const [onboarding, layout, commercial, ratePlans, ownerResponsibility] =
+    await Promise.all([
+      api(
+        `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
+      ),
+      api(
+        `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
+      ),
+      api(`${base}/commercial`),
+      state.property.saleMode
+        ? api(`${base}/rates/plans`)
+        : Promise.resolve({ ratePlans: [] }),
+      api(`${base}/owner-responsibility`),
+    ]);
   state.onboarding = onboarding;
   state.layout = layout;
   state.commercial = commercial;
@@ -1393,6 +1414,74 @@ function fillForm(form, values) {
   for (const [key, value] of Object.entries(values || {})) {
     if (form.elements[key]) form.elements[key].value = value ?? "";
   }
+}
+
+function fillGuestContentForm(form, guestContent = {}) {
+  const overview = guestContent?.overview || {};
+  const about = guestContent?.about || {};
+  const location = guestContent?.location || {};
+  const things = guestContent?.thingsToKnow || {};
+  const rules = guestContent?.rules || {};
+  const reviews = guestContent?.reviews || {};
+  fillForm(form, {
+    guestHighlights: formatGuestLines(overview.highlights),
+    guestIdealFor: formatGuestLines(overview.idealFor),
+    guestPropertySetting: overview.setting,
+    guestBuildings: about.buildings,
+    guestFloors: about.floors,
+    guestBathrooms: about.bathrooms,
+    guestPlotArea: about.plotArea,
+    guestBuiltUpArea: about.builtUpArea,
+    guestConstructionYear: about.constructionYear,
+    guestRenovationYear: about.renovationYear,
+    guestEntranceDescription: about.entrance,
+    guestLayoutDescription: about.layout,
+    guestBathroomsDescription: about.bathroomsDescription,
+    guestPrivacyDescription: about.privacy,
+    guestFacilityDetails: formatGuestRecords(guestContent?.facilities, [
+      "name",
+      "description",
+      "access",
+      "pricing",
+      "hours",
+      "restrictions",
+      "mediaId",
+    ]),
+    guestServiceDetails: formatGuestRecords(guestContent?.services, [
+      "name",
+      "description",
+      "availability",
+      "pricing",
+      "hours",
+      "conditions",
+      "mediaId",
+    ]),
+    guestLocationDistances: formatGuestRecords(location.distances, [
+      "name",
+      "distance",
+    ]),
+    guestTransportation: formatGuestLines(location.transportation),
+    guestAccessibility: formatGuestLines(location.accessibility),
+    guestConnectivity: formatGuestLines(location.connectivity),
+    guestGoodToKnow: formatGuestLines(things.goodToKnow),
+    guestAccessibilityNotes: formatGuestLines(things.accessibility),
+    guestSeasonalInformation: formatGuestLines(things.seasonal),
+    guestLimitations: formatGuestLines(things.limitations),
+    guestAdditionalRules: formatGuestLines(rules.additional),
+    guestGoogleReviewsUrl: reviews.googleReviewsUrl,
+    guestGoogleWriteReviewUrl: reviews.googleWriteReviewUrl,
+  });
+}
+
+function formatGuestLines(items) {
+  return Array.isArray(items) ? items.filter(Boolean).join("\n") : "";
+}
+
+function formatGuestRecords(items, fields) {
+  if (!Array.isArray(items)) return "";
+  return items
+    .map((item) => fields.map((field) => item?.[field] || "").join(" | "))
+    .join("\n");
 }
 
 function renderPropertyAmenities(amenities, editable) {
@@ -1647,8 +1736,7 @@ function renderCancellationPolicyList(policies, selectedPolicy) {
   const deleteButton = byId("deleteCancellationRuleButton");
   const selectedIsAssigned = selectedPolicy
     ? Array.from(currentAssignments.values()).some(
-        (assignment) =>
-          assignment.cancellation_policy_id === selectedPolicy.id,
+        (assignment) => assignment.cancellation_policy_id === selectedPolicy.id,
       )
     : false;
   deleteButton.classList.toggle("hidden", !selectedPolicy);
@@ -1819,6 +1907,7 @@ function renderEditor() {
   byId("editorStatus").textContent = property.status.replaceAll("_", " ");
   renderProfilePropertyTaxonomyFields(property);
   fillForm(byId("profileForm"), property);
+  fillGuestContentForm(byId("profileForm"), property.guestContent);
   fillForm(byId("policiesForm"), onboarding.policies || {});
 
   renderOwnerResponsibility();
@@ -2604,8 +2693,7 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
       state.commercial?.cancellationPolicies || []
     ).find(
       (policy) =>
-        policy.id === cancellationPolicyIdInput &&
-        policy.status === "ACTIVE",
+        policy.id === cancellationPolicyIdInput && policy.status === "ACTIVE",
     );
     if (!cancellationPolicy) {
       const code = `CANCEL_${Date.now().toString(36).toUpperCase()}`.slice(
@@ -2770,9 +2858,7 @@ byId("commercialRulesForm").addEventListener("submit", (event) => {
     // without a promotion campaign is a valid, bookable configuration, so
     // initialize it as NO_PROMOTIONS instead of leaving quote creation in an
     // incomplete state.
-    const promotionConfiguration = await api(
-      `${base}/promotions`,
-    );
+    const promotionConfiguration = await api(`${base}/promotions`);
     if (!promotionConfiguration.settingsVersions?.length) {
       await idempotent(
         `${base}/promotions/settings`,
@@ -3222,7 +3308,9 @@ byId("physicalUnitForm").addEventListener("submit", (event) => {
 
     const physicalUnitId = result?.physicalUnit?.id;
     if (!physicalUnitId) {
-      throw new Error("The room was created but its identifier was not returned.");
+      throw new Error(
+        "The room was created but its identifier was not returned.",
+      );
     }
     if (photos.length) {
       await uploadPhysicalUnitPhotos(physicalUnitId, photos, {
@@ -3578,21 +3666,43 @@ function renderHotelDirectory() {
   const list = byId("hotelDirectoryList");
   const query = byId("hotelDirectorySearch").value.trim().toLowerCase();
   list.replaceChildren();
-  const hotels = hotelDirectoryItems.filter(item =>
-    [item.name, item.legalBusinessName, item.city, item.tradingName]
-      .some(value => String(value || "").toLowerCase().includes(query))
+  const hotels = hotelDirectoryItems.filter((item) =>
+    [item.name, item.legalBusinessName, item.city, item.tradingName].some(
+      (value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(query),
+    ),
   );
-  if (!hotels.length) list.append(textElement("p", "empty-state", "No matching hotels in the loaded directory."));
+  if (!hotels.length)
+    list.append(
+      textElement(
+        "p",
+        "empty-state",
+        "No matching hotels in the loaded directory.",
+      ),
+    );
   for (const [index, hotel] of hotels.entries()) {
     const details = document.createElement("details");
     details.className = "command-hotel";
     const summary = document.createElement("summary");
     const name = textElement("strong", "", hotel.name);
-    const context = textElement("small", "", [hotel.city, hotel.stateRegion, hotel.status].filter(Boolean).join(" · "));
+    const context = textElement(
+      "small",
+      "",
+      [hotel.city, hotel.stateRegion, hotel.status].filter(Boolean).join(" · "),
+    );
     const caption = document.createElement("span");
     caption.className = "command-hotel-caption";
     caption.append(name, context);
-    summary.append(caption, textElement("span", "command-hotel-count", `${hotel.totalPhysicalUnits} units`));
+    summary.append(
+      caption,
+      textElement(
+        "span",
+        "command-hotel-count",
+        `${hotel.totalPhysicalUnits} units`,
+      ),
+    );
     const body = document.createElement("div");
     body.className = "command-hotel-body";
     const fields = [
@@ -3600,31 +3710,63 @@ function renderHotelDirectory() {
       ["Trading name", hotel.tradingName],
       ["Hotel email", hotel.hotelContactEmail],
       ["Hotel phone", hotel.hotelContactPhone],
-      ["Address", [hotel.addressLine1, hotel.city, hotel.stateRegion].filter(Boolean).join(", ")],
+      [
+        "Address",
+        [hotel.addressLine1, hotel.city, hotel.stateRegion]
+          .filter(Boolean)
+          .join(", "),
+      ],
       ["Booking mode", hotel.saleMode],
       ["Description", hotel.description],
     ];
     for (const [label, value] of fields) {
       const line = document.createElement("p");
-      line.append(textElement("strong", "", `${label}: `), textElement("span", "", value || "Not provided"));
+      line.append(
+        textElement("strong", "", `${label}: `),
+        textElement("span", "", value || "Not provided"),
+      );
       body.append(line);
     }
     body.append(textElement("h4", "", "Registered business owners"));
-    if (!hotel.ownerContacts?.length) body.append(textElement("p", "muted", "No active owner contact recorded."));
+    if (!hotel.ownerContacts?.length)
+      body.append(
+        textElement("p", "muted", "No active owner contact recorded."),
+      );
     for (const owner of hotel.ownerContacts || []) {
-      body.append(textElement("p", "", `${owner.name || "Owner"} · ${owner.email || "Email not supplied"}`));
+      body.append(
+        textElement(
+          "p",
+          "",
+          `${owner.name || "Owner"} · ${owner.email || "Email not supplied"}`,
+        ),
+      );
     }
     body.append(textElement("h4", "", "Room categories"));
-    if (!hotel.roomCategories?.length) body.append(textElement("p", "muted", "No room categories registered."));
+    if (!hotel.roomCategories?.length)
+      body.append(textElement("p", "muted", "No room categories registered."));
     for (const room of hotel.roomCategories || []) {
-      body.append(textElement("p", "", `${room.name} · ${room.physicalUnitCount} physical units · ${room.status}`));
+      body.append(
+        textElement(
+          "p",
+          "",
+          `${room.name} · ${room.physicalUnitCount} physical units · ${room.status}`,
+        ),
+      );
     }
     body.append(textElement("h4", "", "Property amenities"));
-    body.append(textElement("p", "", hotel.amenities?.length ? hotel.amenities.map(a => a.name).join(" · ") : "None recorded"));
+    body.append(
+      textElement(
+        "p",
+        "",
+        hotel.amenities?.length
+          ? hotel.amenities.map((a) => a.name).join(" · ")
+          : "None recorded",
+      ),
+    );
     details.append(summary, body);
     details.addEventListener("toggle", () => {
       if (!details.open) return;
-      list.querySelectorAll("details.command-hotel").forEach(other => {
+      list.querySelectorAll("details.command-hotel").forEach((other) => {
         if (other !== details) other.open = false;
       });
     });
@@ -3633,7 +3775,9 @@ function renderHotelDirectory() {
   byId("loadMoreHotels").classList.toggle("hidden", !hotelDirectoryCursor);
 }
 byId("hotelDirectorySearch").addEventListener("input", renderHotelDirectory);
-byId("loadMoreHotels").addEventListener("click", () => run(() => loadHotelDirectory(true)));
+byId("loadMoreHotels").addEventListener("click", () =>
+  run(() => loadHotelDirectory(true)),
+);
 
 async function loadControlCenter(append) {
   const dateInput = byId("controlCenterDate");
@@ -5012,7 +5156,10 @@ function renderReviewList() {
       ),
     );
     if (availableScreens(state.session).includes("hotels")) {
-      const openDirectory = button("View all hotels", () => void run(() => showScreen("hotels")));
+      const openDirectory = button(
+        "View all hotels",
+        () => void run(() => showScreen("hotels")),
+      );
       openDirectory.type = "button";
       empty.append(openDirectory);
     }
@@ -5245,7 +5392,6 @@ async function refreshReviewSelection(message) {
   showMessage(message);
 }
 
-
 function homepageMediaUrl(mediaId) {
   return `/v1/public/homepage/media/${encodeURIComponent(mediaId)}`;
 }
@@ -5410,7 +5556,9 @@ function renderHeroSlidesForPlacement(placement, listId, emptyMessage) {
     const overlay = document.createElement("div");
     overlay.className = "homepage-preview-overlay";
     if (slide.offerLabel) {
-      overlay.append(textElement("span", "homepage-preview-offer", slide.offerLabel));
+      overlay.append(
+        textElement("span", "homepage-preview-offer", slide.offerLabel),
+      );
     }
     if (slide.headline) {
       overlay.append(textElement("strong", "", slide.headline));
@@ -5430,7 +5578,11 @@ function renderHeroSlidesForPlacement(placement, listId, emptyMessage) {
         slide.enabled ? "status-pill complete" : "status-pill",
         slide.enabled ? "Enabled" : "Hidden",
       ),
-      textElement("small", "muted", `Order ${slide.sortOrder} · version ${slide.version}`),
+      textElement(
+        "small",
+        "muted",
+        `Order ${slide.sortOrder} · version ${slide.version}`,
+      ),
     );
 
     const form = document.createElement("form");
@@ -5526,7 +5678,9 @@ function renderHeroSlidesForPlacement(placement, listId, emptyMessage) {
         );
         await loadHomepageContent();
         showMessage("✓ Homepage hero image replaced successfully.");
-        showHomepageAcknowledgement("Homepage hero image replaced successfully.");
+        showHomepageAcknowledgement(
+          "Homepage hero image replaced successfully.",
+        );
       });
     });
 
@@ -5565,7 +5719,9 @@ function renderHeroSlidesForPlacement(placement, listId, emptyMessage) {
       textElement("small", "", slide.headline || "Untitled campaign"),
     );
     const summaryMeta = document.createElement("span");
-    summaryMeta.className = slide.enabled ? "partner-slide-state enabled" : "partner-slide-state";
+    summaryMeta.className = slide.enabled
+      ? "partner-slide-state enabled"
+      : "partner-slide-state";
     summaryMeta.textContent = slide.enabled ? "Published" : "Hidden";
     summary.append(thumb, summaryText, summaryMeta);
     const body = document.createElement("div");
@@ -5604,12 +5760,16 @@ function renderHomepageDestinationOptions() {
     option.value = "";
     select.append(option);
     select.disabled = true;
-    byId("homepageDestinationForm").querySelector('button[type="submit"]').disabled = true;
+    byId("homepageDestinationForm").querySelector(
+      'button[type="submit"]',
+    ).disabled = true;
     return;
   }
 
   select.disabled = false;
-  byId("homepageDestinationForm").querySelector('button[type="submit"]').disabled = false;
+  byId("homepageDestinationForm").querySelector(
+    'button[type="submit"]',
+  ).disabled = false;
   const placeholder = textElement("option", "", "Choose a live destination");
   placeholder.value = "";
   placeholder.selected = true;
@@ -5647,8 +5807,7 @@ function renderHomepageDestinationImages() {
     const preview = document.createElement("div");
     preview.className = "homepage-content-preview destination-preview";
     const image = document.createElement("img");
-    image.src =
-      destination.previewUrl || homepageMediaUrl(destination.imageId);
+    image.src = destination.previewUrl || homepageMediaUrl(destination.imageId);
     image.alt =
       destination.altText ||
       `${destination.city}${destination.stateRegion ? `, ${destination.stateRegion}` : ""}`;
@@ -5658,7 +5817,11 @@ function renderHomepageDestinationImages() {
     label.className = "homepage-destination-preview-label";
     label.append(
       textElement("strong", "", destination.city),
-      textElement("small", "", destination.stateRegion || destination.countryCode),
+      textElement(
+        "small",
+        "",
+        destination.stateRegion || destination.countryCode,
+      ),
     );
     preview.append(label);
 
@@ -5690,7 +5853,9 @@ function renderHomepageDestinationImages() {
         );
         await loadHomepageContent();
         showMessage("✓ Destination homepage settings saved successfully.");
-        showHomepageAcknowledgement("Destination homepage settings saved successfully.");
+        showHomepageAcknowledgement(
+          "Destination homepage settings saved successfully.",
+        );
       });
     });
 
@@ -5756,7 +5921,6 @@ function renderHomepageDestinationImages() {
   }
 }
 
-
 function taxonomyEditorDisclosure(label, description, card, list) {
   const details = document.createElement("details");
   details.className = "partner-taxonomy-item";
@@ -5794,9 +5958,11 @@ function setupTaxonomyCreateDisclosures() {
     details.append(form);
     details.addEventListener("toggle", () => {
       if (!details.open) return;
-      grid.querySelectorAll("details.partner-taxonomy-create").forEach((other) => {
-        if (other !== details) other.open = false;
-      });
+      grid
+        .querySelectorAll("details.partner-taxonomy-create")
+        .forEach((other) => {
+          if (other !== details) other.open = false;
+        });
     });
   }
 }
@@ -5812,7 +5978,9 @@ function renderPropertyTaxonomyManager() {
 
   const categoryList = byId("propertyCategoryAdminList");
   categoryList.replaceChildren();
-  for (const [index, category] of (state.propertyTaxonomy.categories || []).entries()) {
+  for (const [index, category] of (
+    state.propertyTaxonomy.categories || []
+  ).entries()) {
     const card = document.createElement("article");
     card.className = "homepage-content-item taxonomy-content-item";
 
@@ -5874,7 +6042,9 @@ function renderPropertyTaxonomyManager() {
 
   const typeList = byId("propertyTypeAdminList");
   typeList.replaceChildren();
-  for (const [index, propertyType] of (state.propertyTaxonomy.types || []).entries()) {
+  for (const [index, propertyType] of (
+    state.propertyTaxonomy.types || []
+  ).entries()) {
     const parent = taxonomyCategoryById(propertyType.categoryId);
     const card = document.createElement("article");
     card.className = "homepage-content-item taxonomy-content-item";
@@ -5986,8 +6156,12 @@ function bindHeroCreateForm(formId, placement, successLabel) {
 
       const query = new URLSearchParams({
         placement,
-        focalXPercent: String(homepageNumberOrDefault(values.focalXPercent, 50)),
-        focalYPercent: String(homepageNumberOrDefault(values.focalYPercent, 50)),
+        focalXPercent: String(
+          homepageNumberOrDefault(values.focalXPercent, 50),
+        ),
+        focalYPercent: String(
+          homepageNumberOrDefault(values.focalYPercent, 50),
+        ),
         sortOrder: String(homepageNumberOrDefault(values.sortOrder, 0)),
         enabled: String(form.elements.enabled.checked),
       });
