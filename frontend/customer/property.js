@@ -89,9 +89,13 @@ function wireEvents() {
     form.departureDate.min = minimumDeparture;
     if (form.departureDate.value <= form.arrivalDate.value)
       form.departureDate.value = minimumDeparture;
+    updatePlannerNightCount();
     scheduleAvailabilitySearch();
   });
-  form.departureDate.addEventListener("change", scheduleAvailabilitySearch);
+  form.departureDate.addEventListener("change", () => {
+    updatePlannerNightCount();
+    scheduleAvailabilitySearch();
+  });
   form.unitCount.addEventListener("change", () => {
     state.requestedRooms = clamp(Number(form.unitCount.value || 1), 1, 20);
     form.unitCount.value = String(state.requestedRooms);
@@ -192,6 +196,7 @@ function configureInitialSearch() {
     },
   ];
   renderOccupancyUnits();
+  updatePlannerNightCount();
 }
 
 async function loadProperty() {
@@ -255,12 +260,7 @@ function renderProperty(property) {
     .filter(Boolean)
     .join(" · ");
   document.querySelector("#propertySummary").textContent =
-    property.shortDescription ||
-    "A thoughtful Wildleaf stay with live availability.";
-  document.querySelector("#propertyDescription").textContent =
-    property.description ||
-    property.shortDescription ||
-    "Discover a stay designed for unhurried days and memorable evenings.";
+    property.shortDescription || property.description || "";
 
   document.querySelector("#bookingModeBadge").textContent =
     property.saleMode === "FULL_PROPERTY_ONLY"
@@ -268,8 +268,6 @@ function renderProperty(property) {
       : property.saleMode === "ROOMS_ONLY"
         ? "Private rooms"
         : "Rooms or entire property";
-  document.querySelector("#propertyOverviewHeading").textContent =
-    "About this stay";
   const facts = document.querySelector("#propertyFacts");
   facts.replaceChildren(
     fact(
@@ -282,52 +280,344 @@ function renderProperty(property) {
     ),
     fact("Category", property.propertyCategoryName || "Wildleaf stay"),
     fact("Type", property.propertyTypeName || "Stay"),
-    fact("Check-in", formatTime(property.checkInTime) || "Contact property"),
-    fact("Check-out", formatTime(property.checkOutTime) || "Contact property"),
   );
 
   renderPropertyGallery(property);
-  renderStayConfiguration(property.roomCategories || []);
+  renderPropertyTabs(property);
+}
 
-  const amenities = document.querySelector("#amenities");
-  const amenityItems = property.amenities || [];
-  const renderAmenities = (expanded = false) => {
-    const visibleItems = expanded ? amenityItems : amenityItems.slice(0, 8);
-    amenities.replaceChildren(
-      ...visibleItems.map((item) => {
-        const chip = element("span", "amenity-chip");
-        chip.append(
-          element("strong", "", item.name),
-          item.details
-            ? element("small", "", item.details)
-            : document.createTextNode(""),
-        );
-        return chip;
-      }),
-    );
-    if (amenityItems.length > 8) {
-      const toggle = element(
-        "button",
-        "amenity-toggle",
-        expanded ? "Show fewer" : `View all ${amenityItems.length}`,
-      );
-      toggle.type = "button";
-      toggle.setAttribute("aria-expanded", String(expanded));
-      toggle.addEventListener("click", () => renderAmenities(!expanded));
-      amenities.append(toggle);
-    }
+function updatePlannerNightCount() {
+  const badge = document.querySelector("#plannerNightCount");
+  if (!badge || !form.arrivalDate.value || !form.departureDate.value) return;
+  const nights = Math.max(
+    1,
+    Math.round(
+      (new Date(`${form.departureDate.value}T00:00:00`).getTime() -
+        new Date(`${form.arrivalDate.value}T00:00:00`).getTime()) /
+        86400000,
+    ),
+  );
+  badge.textContent = `${nights} ${nights === 1 ? "night" : "nights"}`;
+}
+
+function renderPropertyTabs(property) {
+  const tabs = document.querySelector("#propertyTabs");
+  const panel = document.querySelector("#propertyTabPanel");
+  if (!tabs || !panel) return;
+
+  const definitions = [
+    ["overview", "Overview", () => renderOverviewTab(property)],
+    ["about", "About Home", () => renderAboutTab(property)],
+    ["cancellation", "Cancellation", () => renderCancellationTab(property)],
+    ["reviews", "Reviews", () => renderReviewsTab(property)],
+    ["amenities", "Amenities", () => renderAmenitiesTab(property)],
+    ["services", "Services", () => renderServicesTab(property)],
+    ["spaces", "Spaces", () => renderSpacesTab(property)],
+    ["location", "Location", () => renderLocationTab(property)],
+  ];
+
+  const activate = (key, focus = false, reveal = true) => {
+    const selected = definitions.find(([id]) => id === key) || definitions[0];
+    tabs.querySelectorAll("[role='tab']").forEach((tab) => {
+      const active = tab.dataset.tab === selected[0];
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+      tab.classList.toggle("active", active);
+      if (active && focus) tab.focus();
+    });
+    panel.hidden = !reveal;
+    panel.setAttribute("aria-labelledby", `property-tab-${selected[0]}`);
+    panel.replaceChildren(selected[2]());
   };
-  renderAmenities();
-  if (!property.amenities?.length)
-    amenities.append(
+
+  tabs.replaceChildren(
+    ...definitions.map(([key, label], index) => {
+      const button = element("button", "property-tab", label);
+      button.type = "button";
+      button.id = `property-tab-${key}`;
+      button.dataset.tab = key;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-controls", "propertyTabPanel");
+      button.setAttribute("aria-selected", String(index === 0));
+      button.tabIndex = index === 0 ? 0 : -1;
+      button.addEventListener("click", () => activate(key));
+      button.addEventListener("keydown", (event) => {
+        if (!new Set(["ArrowLeft", "ArrowRight", "Home", "End"]).has(event.key))
+          return;
+        event.preventDefault();
+        const current = definitions.findIndex(([id]) => id === key);
+        const next =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? definitions.length - 1
+              : (current +
+                  (event.key === "ArrowRight" ? 1 : -1) +
+                  definitions.length) %
+                definitions.length;
+        activate(definitions[next][0], true);
+      });
+      return button;
+    }),
+  );
+  activate("overview", false, false);
+}
+
+function propertyTabSection(title, copy = null) {
+  const section = element("section", "property-tab-content");
+  section.append(element("h2", "", title));
+  if (copy) section.append(element("p", "property-tab-copy", copy));
+  return section;
+}
+
+function appendEmptyTabState(section) {
+  section.append(
+    element(
+      "p",
+      "property-tab-empty",
+      "This information has not been published for this property.",
+    ),
+  );
+}
+
+function renderOverviewTab(property) {
+  const section = propertyTabSection(
+    "At a glance",
+    property.shortDescription || property.description,
+  );
+  const details = element("div", "tab-detail-grid");
+  const rows = [
+    ["Check-in", formatTime(property.checkInTime)],
+    ["Check-out", formatTime(property.checkOutTime)],
+    ["Stay", document.querySelector("#bookingModeBadge")?.textContent],
+  ].filter(([, value]) => value);
+  rows.forEach(([label, value]) => details.append(fact(label, value)));
+  if (rows.length) section.append(details);
+  if (!property.shortDescription && !property.description && !rows.length)
+    appendEmptyTabState(section);
+  return section;
+}
+
+function renderAboutTab(property) {
+  const section = propertyTabSection("About this home", property.description);
+  const categories = (property.roomCategories || []).filter(
+    (category) => category.name || category.description,
+  );
+  if (categories.length) {
+    const list = element("div", "tab-card-grid");
+    categories.forEach((category) => {
+      const card = element("article", "property-info-card");
+      if (category.name) card.append(element("h3", "", category.name));
+      if (category.description)
+        card.append(element("p", "", category.description));
+      list.append(card);
+    });
+    section.append(list);
+  }
+  const policies = property.policies;
+  if (policies) {
+    const policyItems = [
+      ["Children", humanizeCode(policies.childrenPolicy)],
+      ["Pets", humanizeCode(policies.petsPolicy)],
+      ["Smoking", humanizeCode(policies.smokingPolicy)],
+      ["Events", humanizeCode(policies.partiesEventsPolicy)],
+      [
+        "Minimum check-in age",
+        policies.minimumCheckinAge ? String(policies.minimumCheckinAge) : null,
+      ],
+      [
+        "Quiet hours",
+        policies.quietHoursStart && policies.quietHoursEnd
+          ? `${formatTime(policies.quietHoursStart)} – ${formatTime(policies.quietHoursEnd)}`
+          : null,
+      ],
+      ["House rules", policies.houseRules],
+    ].filter(([, value]) => value);
+    if (policyItems.length) {
+      section.append(element("h3", "", "House rules and policies"));
+      const list = element("div", "tab-card-grid policy-tab-grid");
+      policyItems.forEach(([label, value]) => {
+        const card = element("article", "property-info-card");
+        card.append(element("strong", "", label), element("p", "", value));
+        list.append(card);
+      });
+      section.append(list);
+    }
+  }
+  if (!property.description && !categories.length && !policies)
+    appendEmptyTabState(section);
+  return section;
+}
+
+function humanizeCode(value) {
+  if (!value) return null;
+  return String(value)
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function renderCancellationTab(property) {
+  const cancellation = property.cancellation;
+  const section = propertyTabSection(
+    cancellation?.name || "Cancellation and refunds",
+    cancellation?.policyText,
+  );
+  if (!cancellation?.policyText) appendEmptyTabState(section);
+  return section;
+}
+
+function renderReviewsTab(property) {
+  const reviews = property.reviews || [];
+  const section = propertyTabSection("Verified guest reviews");
+  if (!reviews.length) {
+    section.append(
       element(
         "p",
-        "muted",
-        "Property amenities will appear here as they are published.",
+        "property-tab-empty",
+        "No verified guest reviews have been published for this property yet.",
       ),
     );
+    return section;
+  }
+  const average =
+    reviews.reduce((total, review) => total + review.rating, 0) /
+    reviews.length;
+  section.append(
+    element(
+      "p",
+      "review-summary",
+      `${average.toFixed(1)} out of 5 · ${reviews.length} verified ${reviews.length === 1 ? "stay" : "stays"}`,
+    ),
+  );
+  const list = element("div", "review-list");
+  reviews.forEach((review) => {
+    const card = element("article", "property-info-card review-card");
+    card.append(
+      element(
+        "strong",
+        "review-rating",
+        `${"★".repeat(review.rating)} ${review.rating}/5`,
+      ),
+    );
+    if (review.title) card.append(element("h3", "", review.title));
+    card.append(
+      element("p", "", review.reviewText),
+      element(
+        "small",
+        "",
+        `${review.reviewerDisplayName} · ${new Date(review.publishedAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`,
+      ),
+    );
+    list.append(card);
+  });
+  section.append(list);
+  return section;
+}
 
-  renderPolicies(property.policies);
+function amenityList(items) {
+  const list = element("div", "tab-amenity-grid");
+  items.forEach((item) => {
+    const card = element("article", "property-info-card amenity-detail-card");
+    card.append(element("strong", "", item.name));
+    if (item.details) card.append(element("small", "", item.details));
+    list.append(card);
+  });
+  return list;
+}
+
+function renderAmenitiesTab(property) {
+  const items = property.amenities || [];
+  const section = propertyTabSection("Amenities and facilities");
+  if (items.length) section.append(amenityList(items));
+  else appendEmptyTabState(section);
+  return section;
+}
+
+function renderServicesTab(property) {
+  const serviceCategories = new Set([
+    "SERVICES",
+    "PARKING_TRANSPORT",
+    "FOOD_BEVERAGE",
+  ]);
+  const items = (property.amenities || []).filter((item) =>
+    serviceCategories.has(item.category),
+  );
+  const section = propertyTabSection(
+    "Available services",
+    property.servicesDescription,
+  );
+  if (items.length) section.append(amenityList(items));
+  if (!property.servicesDescription && !items.length)
+    appendEmptyTabState(section);
+  return section;
+}
+
+function renderSpacesTab(property) {
+  const spaceCategories = new Set([
+    "LEISURE",
+    "FAMILY",
+    "BUSINESS",
+    "OUTDOOR",
+    "OTHER",
+  ]);
+  const items = (property.amenities || []).filter((item) =>
+    spaceCategories.has(item.category),
+  );
+  const section = propertyTabSection(
+    "Spaces and shared areas",
+    property.spacesDescription,
+  );
+  if (items.length) section.append(amenityList(items));
+  if (!property.spacesDescription && !items.length)
+    appendEmptyTabState(section);
+  return section;
+}
+
+function safeExternalUrl(value) {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    return new Set(["http:", "https:"]).has(parsed.protocol)
+      ? parsed.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function renderLocationTab(property) {
+  const section = propertyTabSection("Location", property.locationDescription);
+  if (property.publicAddress)
+    section.append(
+      element("p", "property-public-address", property.publicAddress),
+    );
+  const attractions = String(property.nearbyAttractions || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (attractions.length) {
+    section.append(element("h3", "", "Nearby attractions"));
+    const list = element("ul", "nearby-attraction-list");
+    attractions.forEach((item) => list.append(element("li", "", item)));
+    section.append(list);
+  }
+  const mapUrl = safeExternalUrl(property.mapUrl);
+  if (mapUrl) {
+    const link = element("a", "button button-secondary map-link", "Open map");
+    link.href = mapUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    section.append(link);
+  }
+  if (
+    !property.locationDescription &&
+    !property.publicAddress &&
+    !attractions.length &&
+    !mapUrl
+  )
+    appendEmptyTabState(section);
+  return section;
 }
 
 function renderPropertyGallery(property) {
@@ -464,26 +754,6 @@ function configureBookingMode(property) {
   form.unitCount.value = String(state.requestedRooms);
 }
 
-function renderStayConfiguration(categories) {
-  const container = document.querySelector("#stayConfiguration");
-  container.replaceChildren();
-
-  const names = categories.map((category) => category.name).filter(Boolean);
-  if (state.allowsEntire && names.length) {
-    const summary = element("div", "villa-source-summary");
-    summary.append(
-      element("strong", "", "One property, two ways to stay"),
-      element(
-        "p",
-        "",
-        "Choose the rooms that suit your group, or reserve every active room and shared space for complete privacy when the property is available.",
-      ),
-      element("p", "villa-includes", `Room types: ${names.join(" · ")}`),
-    );
-    container.append(summary);
-  }
-}
-
 function configureBackLink(property) {
   const link = document.querySelector("#backToResults");
   if (!link) return;
@@ -497,34 +767,6 @@ function configureBackLink(property) {
   const destination =
     query.get("destination") || property.city || "all-destinations";
   link.href = `/stays/${encodeURIComponent(slugify(destination))}?${search}`;
-}
-
-function renderPolicies(policies) {
-  const container = document.querySelector("#policies");
-  if (!policies) {
-    container.replaceChildren(
-      element(
-        "p",
-        "muted",
-        "Detailed property policies will be shared before booking.",
-      ),
-    );
-    return;
-  }
-  const entries = [
-    ["Children", policies.childrenPolicy],
-    ["Pets", policies.petsPolicy],
-    ["Smoking", policies.smokingPolicy],
-    ["Events", policies.partiesEventsPolicy],
-    ["House rules", policies.houseRules],
-  ].filter(([, value]) => value);
-  container.replaceChildren(
-    ...entries.map(([label, value]) => {
-      const card = element("article", "policy-card");
-      card.append(element("h3", "", label), element("p", "", value));
-      return card;
-    }),
-  );
 }
 
 function renderOccupancyUnits() {
@@ -1072,16 +1314,18 @@ function renderAvailability(data) {
   const groups = groupRoomOptions(roomOptions);
   const nights = data.search.nights;
   renderEntirePropertyOffer(nights);
-  showInlineMessage(
+  if (
     availableRoomOptions.length ||
-      state.entireSelection ||
-      availableEntireOption()
-      ? `Live choices are ready for ${nights} ${nights === 1 ? "night" : "nights"}. Select the rooms you need or reserve the complete property.`
-      : "No booking option currently satisfies these dates and guests.",
-    availableRoomOptions.length || availableEntireOption()
-      ? "success"
-      : "warning",
-  );
+    state.entireSelection ||
+    availableEntireOption()
+  ) {
+    availabilityMessage.classList.add("hidden");
+  } else {
+    showInlineMessage(
+      "No booking option currently satisfies these dates and guests.",
+      "warning",
+    );
+  }
 
   availabilityResults.classList.add("room-category-rail");
   if (state.allowsRooms) {

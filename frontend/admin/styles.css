@@ -200,6 +200,16 @@ button {
   display: grid;
   gap: 1rem;
 }
+
+.form-section-heading {
+  margin-top: 0.35rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line, #e2e7e2);
+}
+
+.form-section-heading h4 {
+  margin: 0 0 0.25rem;
+}
 .two-column {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

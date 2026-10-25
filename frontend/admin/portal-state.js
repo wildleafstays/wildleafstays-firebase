@@ -91,6 +91,12 @@ export function profilePayload(form, version) {
     "contactEmail",
     "checkInTime",
     "checkOutTime",
+    "servicesDescription",
+    "spacesDescription",
+    "publicAddress",
+    "locationDescription",
+    "mapUrl",
+    "nearbyAttractions",
   ]) {
     const value = String(form[key] || "").trim();
     if (value) body[key] = value;

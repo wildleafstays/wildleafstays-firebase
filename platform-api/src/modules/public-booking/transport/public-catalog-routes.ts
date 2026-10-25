@@ -237,6 +237,30 @@ const mediaSchema = {
   }
 } as const;
 
+const cancellationSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["name", "policyText"],
+  properties: {
+    name: { type: "string" },
+    policyText: nullableString
+  }
+} as const;
+
+const guestReviewSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "rating", "title", "reviewText", "reviewerDisplayName", "publishedAt"],
+  properties: {
+    id: { type: "string", format: "uuid" },
+    rating: { type: "integer", minimum: 1, maximum: 5 },
+    title: nullableString,
+    reviewText: { type: "string" },
+    reviewerDisplayName: { type: "string" },
+    publishedAt: { type: "string" }
+  }
+} as const;
+
 const propertyDetailSchema = {
   type: "object",
   additionalProperties: false,
@@ -245,22 +269,40 @@ const propertyDetailSchema = {
     "description",
     "checkInTime",
     "checkOutTime",
+    "servicesDescription",
+    "spacesDescription",
+    "publicAddress",
+    "locationDescription",
+    "mapUrl",
+    "nearbyAttractions",
     "roomCategories",
     "amenities",
     "policies",
-    "media"
+    "media",
+    "cancellation",
+    "reviews"
   ],
   properties: {
     ...propertySummarySchema.properties,
     description: nullableString,
     checkInTime: nullableString,
     checkOutTime: nullableString,
+    servicesDescription: nullableString,
+    spacesDescription: nullableString,
+    publicAddress: nullableString,
+    locationDescription: nullableString,
+    mapUrl: nullableString,
+    nearbyAttractions: nullableString,
     roomCategories: { type: "array", items: roomCategorySchema },
     amenities: { type: "array", items: amenitySchema },
     policies: {
       anyOf: [policiesSchema, { type: "null" }]
     },
-    media: { type: "array", items: mediaSchema }
+    media: { type: "array", items: mediaSchema },
+    cancellation: {
+      anyOf: [cancellationSchema, { type: "null" }]
+    },
+    reviews: { type: "array", items: guestReviewSchema }
   }
 } as const;
 

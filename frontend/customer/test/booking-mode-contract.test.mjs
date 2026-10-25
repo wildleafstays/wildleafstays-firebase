@@ -97,6 +97,35 @@ test("BOTH properties present rooms and entire-property inventory together", () 
   assert.match(propertySource, /function renderEntirePropertyOffer\(nights\)/);
 });
 
+test("property page uses one compact planner and database-backed information tabs", () => {
+  assert.match(propertyHtml, /id="planYourStayTitle">Plan Your Stay/);
+  assert.match(propertyHtml, /id="availabilityForm"/);
+  assert.equal((propertyHtml.match(/id="availabilityForm"/g) || []).length, 1);
+  assert.match(propertyHtml, /Update Stay Details/);
+  assert.match(propertyHtml, /id="propertyTabs"/);
+  assert.match(propertyHtml, /id="propertyTabPanel"/);
+  assert.doesNotMatch(propertyHtml, /class="property-overview panel-section"/);
+  assert.doesNotMatch(propertyHtml, /class="panel-section policies-section"/);
+  for (const label of [
+    "Overview",
+    "About Home",
+    "Cancellation",
+    "Reviews",
+    "Amenities",
+    "Services",
+    "Spaces",
+    "Location",
+  ]) {
+    assert.match(propertySource, new RegExp(`"${label}"`));
+  }
+  assert.match(propertySource, /property\.servicesDescription/);
+  assert.match(propertySource, /property\.spacesDescription/);
+  assert.match(propertySource, /property\.nearbyAttractions/);
+  assert.match(propertySource, /property\.cancellation/);
+  assert.match(propertySource, /property\.reviews/);
+  assert.doesNotMatch(propertySource, /Live choices are ready for/);
+});
+
 test("entire-property privacy and room choice stay on one property page", () => {
   assert.match(propertySource, /No unrelated overnight guests/);
   assert.match(propertySource, /function selectEntireProperty\(option\)/);
@@ -472,8 +501,6 @@ test("property booking always uses one unified selector", () => {
 });
 
 test("entire-property presentation explains the shared property clearly", () => {
-  assert.match(propertySource, /One property, two ways to stay/);
-  assert.match(propertySource, /reserve every active room and shared space/);
   assert.match(
     propertySource,
     /Every active bedroom and shared space is reserved together/,
@@ -520,11 +547,8 @@ test("hotel room categories are not repeated in the property summary", () => {
     propertySource,
     /const card = element\("article", "room-category-summary"\)/,
   );
-  assert.match(
-    propertySource,
-    /function renderStayConfiguration\(categories\)/,
-  );
-  assert.match(propertySource, /if \(state\.allowsEntire && names\.length\)/);
+  assert.doesNotMatch(propertyHtml, /id="stayConfiguration"/);
+  assert.match(propertySource, /function renderAboutTab\(property\)/);
 });
 
 test("available rates use OTA-style room facts and calendar-backed totals", () => {
@@ -865,13 +889,10 @@ test("liked horizontal room-card presentation remains the shopping baseline", ()
 });
 
 test("room quantity is selected per category while party totals remain shared", () => {
-  assert.match(
-    propertyHtml,
-    /class="availability-form compact-search-form property-search-rail"/,
-  );
-  assert.match(propertyHtml, /name="unitCount" type="number"/);
-  assert.match(propertyHtml, /name="adults" type="number"/);
-  assert.match(propertyHtml, /name="children" type="number"/);
+  assert.match(propertyHtml, /class="availability-form property-planner-form"/);
+  assert.match(propertyHtml, /name="unitCount"[\s\S]{0,120}type="number"/);
+  assert.match(propertyHtml, /name="adults"[\s\S]{0,120}type="number"/);
+  assert.match(propertyHtml, /name="children"[\s\S]{0,120}type="number"/);
   assert.doesNotMatch(propertyHtml, /Choose how you would like to stay/);
   assert.match(propertySource, /state\.units = \[\s*\{\s*adults,/s);
   assert.match(

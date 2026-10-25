@@ -84,15 +84,25 @@ export class PublicCatalogService {
       throw new NotFoundError("Public property not found");
     }
 
-    const [roomRows, roomMediaRows, physicalRoomMediaRows, amenityRows, policyRow, mediaRows] =
-      await Promise.all([
-        this.repository.listRoomCategories(db, record.organization_id, record.id),
-        this.repository.listRoomCategoryMedia(db, record.organization_id, record.id),
-        this.repository.listPhysicalUnitMedia(db, record.organization_id, record.id),
-        this.repository.listAmenities(db, record.organization_id, record.id),
-        this.repository.getPolicies(db, record.organization_id, record.id),
-        this.repository.listMedia(db, record.organization_id, record.id)
-      ]);
+    const [
+      roomRows,
+      roomMediaRows,
+      physicalRoomMediaRows,
+      amenityRows,
+      policyRow,
+      mediaRows,
+      cancellationRow,
+      reviewRows
+    ] = await Promise.all([
+      this.repository.listRoomCategories(db, record.organization_id, record.id),
+      this.repository.listRoomCategoryMedia(db, record.organization_id, record.id),
+      this.repository.listPhysicalUnitMedia(db, record.organization_id, record.id),
+      this.repository.listAmenities(db, record.organization_id, record.id),
+      this.repository.getPolicies(db, record.organization_id, record.id),
+      this.repository.listMedia(db, record.organization_id, record.id),
+      this.repository.getCancellation(db, record.organization_id, record.id),
+      this.repository.listGuestReviews(db, record.organization_id, record.id)
+    ]);
 
     const categoryMedia = new Map<string, PublicRoomCategoryMediaView[]>();
     for (const media of roomMediaRows) {
@@ -183,10 +193,30 @@ export class PublicCatalogService {
         description: record.description,
         checkInTime: record.check_in_time,
         checkOutTime: record.check_out_time,
+        servicesDescription: record.services_description,
+        spacesDescription: record.spaces_description,
+        publicAddress: record.public_address,
+        locationDescription: record.location_description,
+        mapUrl: record.map_url,
+        nearbyAttractions: record.nearby_attractions,
         roomCategories,
         amenities,
         policies,
-        media
+        media,
+        cancellation: cancellationRow
+          ? {
+              name: cancellationRow.name,
+              policyText: cancellationRow.policy_text
+            }
+          : null,
+        reviews: reviewRows.map((review) => ({
+          id: review.id,
+          rating: review.rating,
+          title: review.title,
+          reviewText: review.review_text,
+          reviewerDisplayName: review.reviewer_display_name,
+          publishedAt: review.published_at.toISOString()
+        }))
       }
     };
   }

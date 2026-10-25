@@ -32,7 +32,12 @@ test("role-aware navigation separates hotel owners from Wildleaf reviewers", () 
     "reservations",
     "calendar",
   ]);
-  assert.deepEqual(availableScreens(reviewer), ["control", "hotels", "homepage", "reviews"]);
+  assert.deepEqual(availableScreens(reviewer), [
+    "control",
+    "hotels",
+    "homepage",
+    "reviews",
+  ]);
   assert.equal(canReviewProperties(owner), false);
   assert.equal(canReviewProperties(reviewer), true);
   assert.equal(canUseControlCenter(reviewer), true);
@@ -42,10 +47,7 @@ test("role-aware navigation separates hotel owners from Wildleaf reviewers", () 
     canManageHomepageContent({ platformRoles: ["CONTENT_MANAGER"] }),
     true,
   );
-  assert.equal(
-    canManageHomepageContent({ platformRoles: ["ANALYST"] }),
-    false,
-  );
+  assert.equal(canManageHomepageContent({ platformRoles: ["ANALYST"] }), false);
   assert.equal(
     canManagePlatformReservations({ platformRoles: ["ANALYST"] }),
     false,
@@ -76,6 +78,31 @@ test("profilePayload omits empty optional values and keeps optimistic versioning
       latitude: 30.123,
     },
   );
+});
+
+test("profilePayload synchronizes guest-facing tab content", () => {
+  const payload = profilePayload(
+    {
+      name: "Pine House",
+      timezone: "Asia/Kolkata",
+      propertyCategoryId: "category-1",
+      propertyTypeId: "type-1",
+      servicesDescription: "Daily housekeeping",
+      spacesDescription: "Garden and lounge",
+      publicAddress: "Upper Mall, Kasauli",
+      locationDescription: "A quiet hillside setting",
+      mapUrl: "https://maps.example.test/pine-house",
+      nearbyAttractions: "Mall Road · 4 km",
+    },
+    5,
+  );
+
+  assert.equal(payload.servicesDescription, "Daily housekeeping");
+  assert.equal(payload.spacesDescription, "Garden and lounge");
+  assert.equal(payload.publicAddress, "Upper Mall, Kasauli");
+  assert.equal(payload.locationDescription, "A quiet hillside setting");
+  assert.equal(payload.mapUrl, "https://maps.example.test/pine-house");
+  assert.equal(payload.nearbyAttractions, "Mall Road · 4 km");
 });
 
 test("review queue filters and cursors are encoded as query parameters", () => {
@@ -140,7 +167,7 @@ test("homepage hero metadata is optional and save actions are acknowledged", () 
   );
   assert.match(
     html,
-    /Display order\s*<span class="optional">optional<\/span>[\s\S]*?name="sortOrder"[^>]*value="0" \/>/,
+    /Display order\s*<span class="optional">optional<\/span>[\s\S]*?name="sortOrder"[\s\S]*?value="0"[\s\S]*?\/>/,
   );
   assert.match(source, /function homepageNumberOrDefault\(value, fallback\)/);
   assert.match(source, /function showHomepageAcknowledgement\(message\)/);
@@ -152,19 +179,31 @@ test("Super Admin can manage Entire Property campaigns through the shared hero s
   assert.match(html, /id="entirePropertyHeroCreateForm"/);
   assert.match(html, /id="entirePropertyHeroList"/);
   assert.match(html, /Entire Property hero campaigns/);
-  assert.match(html, /Offer \/ banner text <span class="optional">optional<\/span>/);
+  assert.match(
+    html,
+    /Offer \/ banner text <span class="optional">optional<\/span>/,
+  );
   assert.match(html, /CTA button text <span class="optional">optional<\/span>/);
   assert.match(source, /bindHeroCreateForm\(/);
-  assert.match(source, /"entirePropertyHeroCreateForm",[\s\S]*"ENTIRE_PROPERTY"/);
+  assert.match(
+    source,
+    /"entirePropertyHeroCreateForm",[\s\S]*"ENTIRE_PROPERTY"/,
+  );
   assert.match(source, /renderEntirePropertyHeroSlides\(\)/);
   assert.match(source, /slide\.placement === placement/);
   assert.match(source, /placement: slide\.placement \|\| placement/);
 });
 
 test("property categories and types come from the taxonomy APIs instead of frontend enums", () => {
-  assert.match(html, /id="createPropertyCategory"[^>]*name="propertyCategoryId"/);
+  assert.match(
+    html,
+    /id="createPropertyCategory"[^>]*name="propertyCategoryId"/,
+  );
   assert.match(html, /id="createPropertyType"[^>]*name="propertyTypeId"/);
-  assert.match(html, /id="profilePropertyCategory"[^>]*name="propertyCategoryId"/);
+  assert.match(
+    html,
+    /id="profilePropertyCategory"[^>]*name="propertyCategoryId"/,
+  );
   assert.match(html, /id="profilePropertyType"[^>]*name="propertyTypeId"/);
   assert.match(html, /id="propertyCategoryCreateForm"/);
   assert.match(html, /id="propertyTypeCreateForm"/);

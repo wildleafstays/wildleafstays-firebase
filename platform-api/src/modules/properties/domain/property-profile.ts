@@ -38,4 +38,10 @@ export interface SavePropertyProfileInput {
   contactEmail: string | null;
   checkInTime: string | null;
   checkOutTime: string | null;
+  servicesDescription?: string | null;
+  spacesDescription?: string | null;
+  publicAddress?: string | null;
+  locationDescription?: string | null;
+  mapUrl?: string | null;
+  nearbyAttractions?: string | null;
 }

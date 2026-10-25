@@ -70,6 +70,12 @@ export interface PublicPropertyRecord {
   country_code: string;
   check_in_time: string | null;
   check_out_time: string | null;
+  services_description: string | null;
+  spaces_description: string | null;
+  public_address: string | null;
+  location_description: string | null;
+  map_url: string | null;
+  nearby_attractions: string | null;
   cover_media_id: string | null;
   starting_room_rate_minor: number | null;
   currency_code: string | null;
@@ -141,6 +147,20 @@ export interface PublicMediaStorageRecord {
   storage_key: string;
 }
 
+export interface PublicCancellationRecord {
+  name: string;
+  policy_text: string | null;
+}
+
+export interface PublicGuestReviewRecord {
+  id: string;
+  rating: number;
+  title: string | null;
+  review_text: string;
+  reviewer_display_name: string;
+  published_at: Date;
+}
+
 export class PublicCatalogRepository {
   async listDestinations(db: DbExecutor): Promise<PublicDestinationRecord[]> {
     return db
@@ -204,6 +224,12 @@ export class PublicCatalogRepository {
         "p.country_code as country_code",
         "p.check_in_time as check_in_time",
         "p.check_out_time as check_out_time",
+        "p.services_description as services_description",
+        "p.spaces_description as spaces_description",
+        "p.public_address as public_address",
+        "p.location_description as location_description",
+        "p.map_url as map_url",
+        "p.nearby_attractions as nearby_attractions",
         "cover.id as cover_media_id",
         startingRoomRateMinor.as("starting_room_rate_minor"),
         startingRoomCurrencyCode.as("currency_code")
@@ -277,6 +303,12 @@ export class PublicCatalogRepository {
         "p.country_code as country_code",
         "p.check_in_time as check_in_time",
         "p.check_out_time as check_out_time",
+        "p.services_description as services_description",
+        "p.spaces_description as spaces_description",
+        "p.public_address as public_address",
+        "p.location_description as location_description",
+        "p.map_url as map_url",
+        "p.nearby_attractions as nearby_attractions",
         "cover.id as cover_media_id",
         startingRoomRateMinor.as("starting_room_rate_minor"),
         startingRoomCurrencyCode.as("currency_code")
@@ -476,5 +508,51 @@ export class PublicCatalogRepository {
       .orderBy("sort_order")
       .orderBy("created_at")
       .execute();
+  }
+
+  async getCancellation(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string
+  ): Promise<PublicCancellationRecord | undefined> {
+    return db
+      .selectFrom("rate_plan_cancellation_assignments as assignment")
+      .innerJoin(
+        "cancellation_policies as policy",
+        "policy.id",
+        "assignment.cancellation_policy_id"
+      )
+      .innerJoin(
+        "cancellation_policy_versions as version",
+        "version.cancellation_policy_id",
+        "policy.id"
+      )
+      .select(["policy.name as name", "version.policy_text as policy_text"])
+      .where("policy.organization_id", "=", organizationId)
+      .where("policy.property_id", "=", propertyId)
+      .where("policy.status", "=", "ACTIVE")
+      .where("assignment.effective_from", "<=", sql<string>`current_date`)
+      .where("version.effective_from", "<=", sql<string>`current_date`)
+      .orderBy("assignment.effective_from", "desc")
+      .orderBy("version.effective_from", "desc")
+      .orderBy("version.version_number", "desc")
+      .executeTakeFirst();
+  }
+
+  async listGuestReviews(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string
+  ): Promise<PublicGuestReviewRecord[]> {
+    return db
+      .selectFrom("property_guest_reviews")
+      .select(["id", "rating", "title", "review_text", "reviewer_display_name", "published_at"])
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("status", "=", "PUBLISHED")
+      .where("published_at", "is not", null)
+      .orderBy("published_at", "desc")
+      .limit(100)
+      .execute() as Promise<PublicGuestReviewRecord[]>;
   }
 }

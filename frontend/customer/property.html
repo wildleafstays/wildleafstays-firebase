@@ -19,21 +19,40 @@
     <link rel="stylesheet" href="/customer/booking-discovery.css" />
   </head>
   <body class="property-body">
-    <div role="status" style="background:#fff3cd;color:#523900;text-align:center;padding:12px 18px;font:600 14px/1.5 system-ui,sans-serif;border-bottom:2px solid #d6a12c">
-      SMARTSTAY PUBLIC TEST: Online payments and reservations are for testing only. No real booking or payment is confirmed through this test checkout. Contact Wildleaf directly to arrange a real stay.
+    <div
+      role="status"
+      style="
+        background: #fff3cd;
+        color: #523900;
+        text-align: center;
+        padding: 12px 18px;
+        font:
+          600 14px/1.5 system-ui,
+          sans-serif;
+        border-bottom: 2px solid #d6a12c;
+      "
+    >
+      SMARTSTAY PUBLIC TEST: Online payments and reservations are for testing
+      only. No real booking or payment is confirmed through this test checkout.
+      Contact Wildleaf directly to arrange a real stay.
     </div>
     <header class="site-header property-header">
       <a class="brand" href="/customer/" aria-label="Wildleaf Stays home">
         <span class="brand-mark" aria-hidden="true">W</span>
         <span><strong>Wildleaf</strong><small>STAYS</small></span>
       </a>
-      <a id="backToResults" class="back-link" href="/customer/">← Back to results</a>
+      <a id="backToResults" class="back-link" href="/customer/"
+        >← Back to results</a
+      >
     </header>
 
     <main class="property-page">
       <div id="pageError" class="page-message hidden" role="alert"></div>
 
-      <section id="propertyContent" class="property-layout property-shopping-shell hidden">
+      <section
+        id="propertyContent"
+        class="property-layout property-shopping-shell hidden"
+      >
         <section
           id="propertyGallery"
           class="property-gallery hidden"
@@ -43,21 +62,31 @@
         <section class="property-identity" aria-labelledby="propertyName">
           <div class="property-identity-copy">
             <div class="property-identity-meta">
-              <span id="bookingModeBadge" class="booking-mode-badge">Flexible stay</span>
-              <p id="propertyLocation" class="property-location-line">Loading property…</p>
+              <span id="bookingModeBadge" class="booking-mode-badge"
+                >Flexible stay</span
+              >
+              <p id="propertyLocation" class="property-location-line">
+                Loading property…
+              </p>
             </div>
-            <h1 id="propertyName">Your Wildleaf stay</h1>
+            <div class="property-title-facts">
+              <h1 id="propertyName">Your Wildleaf stay</h1>
+              <div id="propertyFacts" class="property-quick-facts"></div>
+            </div>
             <p id="propertySummary" class="property-summary">
               Checking the latest property information.
             </p>
           </div>
-          <div id="propertyFacts" class="property-quick-facts"></div>
-          <div id="amenities" class="amenity-list property-key-amenities"></div>
-        </section>
-
-        <div class="property-main">
-          <section id="availabilitySection" class="booking-section room-shopping-section">
-            <form id="availabilityForm" class="availability-form compact-search-form property-search-rail" aria-label="Edit stay details">
+          <aside class="plan-your-stay" aria-labelledby="planYourStayTitle">
+            <div class="plan-your-stay-heading">
+              <h2 id="planYourStayTitle">Plan Your Stay</h2>
+              <span id="plannerNightCount">1 night</span>
+            </div>
+            <form
+              id="availabilityForm"
+              class="availability-form property-planner-form"
+              aria-label="Edit stay details"
+            >
               <div class="date-grid">
                 <label>
                   <span>Check-in</span>
@@ -68,32 +97,93 @@
                   <input name="departureDate" type="date" required />
                 </label>
               </div>
-              <label class="property-party-field">
-                <span>Rooms</span>
-                <input name="unitCount" type="number" min="1" max="20" value="1" required />
-              </label>
-              <label class="property-party-field">
-                <span>Adults</span>
-                <input name="adults" type="number" min="1" max="20" value="2" required />
-              </label>
-              <label class="property-party-field">
-                <span>Children</span>
-                <input name="children" type="number" min="0" max="20" value="0" required />
-              </label>
-              <div id="occupancyUnits" class="property-child-age-fields" aria-live="polite"></div>
+              <div class="planner-party-grid">
+                <label class="property-party-field">
+                  <span>Rooms</span>
+                  <input
+                    name="unitCount"
+                    type="number"
+                    min="1"
+                    max="20"
+                    value="1"
+                    required
+                  />
+                </label>
+                <label class="property-party-field">
+                  <span>Adults</span>
+                  <input
+                    name="adults"
+                    type="number"
+                    min="1"
+                    max="20"
+                    value="2"
+                    required
+                  />
+                </label>
+                <label class="property-party-field">
+                  <span>Children</span>
+                  <input
+                    name="children"
+                    type="number"
+                    min="0"
+                    max="20"
+                    value="0"
+                    required
+                  />
+                </label>
+              </div>
+              <div
+                id="occupancyUnits"
+                class="property-child-age-fields"
+                aria-live="polite"
+              ></div>
               <input name="promotionCode" type="hidden" value="" />
+              <button
+                class="button button-primary planner-update-button"
+                type="submit"
+              >
+                Update Stay Details <span aria-hidden="true">→</span>
+              </button>
             </form>
+          </aside>
+        </section>
 
+        <section class="property-information" aria-label="Property information">
+          <nav
+            id="propertyTabs"
+            class="property-tabs"
+            aria-label="Property details"
+            role="tablist"
+          ></nav>
+          <div
+            id="propertyTabPanel"
+            class="property-tab-panel"
+            role="tabpanel"
+            tabindex="0"
+          ></div>
+        </section>
+
+        <div class="property-main">
+          <section
+            id="availabilitySection"
+            class="booking-section room-shopping-section"
+          >
             <div
               id="availabilityMessage"
               class="inline-message hidden"
               role="status"
             ></div>
-            <div id="entirePropertyOffer" class="entire-property-offer hidden"></div>
+            <div
+              id="entirePropertyOffer"
+              class="entire-property-offer hidden"
+            ></div>
             <div id="roomChoiceDivider" class="room-choice-divider hidden">
               <span>Or choose individual rooms</span>
             </div>
-            <div id="availabilityResults" class="availability-results room-category-rail"></div>
+            <div
+              id="availabilityResults"
+              class="availability-results room-category-rail"
+            ></div>
           </section>
 
           <details
@@ -114,41 +204,40 @@
                 class="inline-message hidden"
                 role="status"
               ></div>
-              <div id="smartRecommendations" class="smart-recommendations"></div>
+              <div
+                id="smartRecommendations"
+                class="smart-recommendations"
+              ></div>
             </div>
           </details>
 
           <section id="checkoutIntro" class="checkout-intro hidden">
             <p class="eyebrow">Secure checkout</p>
             <h1>Complete your stay</h1>
-            <p>Review the exact price, add the lead guest and continue to secure payment.</p>
+            <p>
+              Review the exact price, add the lead guest and continue to secure
+              payment.
+            </p>
           </section>
-          <section id="quoteSection" class="panel-section hidden" aria-live="polite"></section>
+          <section
+            id="quoteSection"
+            class="panel-section hidden"
+            aria-live="polite"
+          ></section>
           <section id="guestSection" class="panel-section hidden"></section>
-          <section id="statusSection" class="panel-section status-section hidden" aria-live="polite"></section>
-
-          <section class="property-overview panel-section">
-            <div class="section-heading compact-heading">
-              <div>
-                <p class="eyebrow">About the stay</p>
-                <h2 id="propertyOverviewHeading">About this hotel</h2>
-              </div>
-            </div>
-            <p id="propertyDescription" class="long-copy"></p>
-            <div id="stayConfiguration" class="stay-configuration"></div>
-          </section>
-
-          <section class="panel-section policies-section">
-            <div>
-              <p class="eyebrow">Before you arrive</p>
-              <h2>Property policies</h2>
-            </div>
-            <div id="policies" class="policy-grid"></div>
-          </section>
+          <section
+            id="statusSection"
+            class="panel-section status-section hidden"
+            aria-live="polite"
+          ></section>
         </div>
       </section>
 
-      <div id="selectionRibbon" class="selection-ribbon hidden" aria-live="polite">
+      <div
+        id="selectionRibbon"
+        class="selection-ribbon hidden"
+        aria-live="polite"
+      >
         <div class="selection-ribbon-inner">
           <div class="selection-ribbon-copy">
             <span id="selectionSummary">No stay selected</span>
@@ -161,24 +250,55 @@
           <div class="selection-ribbon-price">
             <small>Estimated stay total</small>
             <strong id="selectionTotal">—</strong>
-            <span>Exact GST, fees and guest pricing confirmed before payment</span>
+            <span
+              >Exact GST, fees and guest pricing confirmed before payment</span
+            >
           </div>
-          <button id="selectionContinue" class="button button-primary selection-continue" type="button">
+          <button
+            id="selectionContinue"
+            class="button button-primary selection-continue"
+            type="button"
+          >
             Continue
           </button>
         </div>
       </div>
 
-      <dialog id="propertyPhotoDialog" class="property-photo-dialog" aria-label="Property photo viewer">
+      <dialog
+        id="propertyPhotoDialog"
+        class="property-photo-dialog"
+        aria-label="Property photo viewer"
+      >
         <div class="photo-dialog-shell">
           <div class="photo-dialog-toolbar">
             <span id="photoDialogCounter" class="photo-dialog-counter"></span>
-            <button id="photoDialogClose" class="photo-dialog-close" type="button" aria-label="Close photo viewer">×</button>
+            <button
+              id="photoDialogClose"
+              class="photo-dialog-close"
+              type="button"
+              aria-label="Close photo viewer"
+            >
+              ×
+            </button>
           </div>
           <div class="photo-dialog-stage">
-            <button id="photoDialogPrev" class="photo-dialog-nav photo-dialog-prev" type="button" aria-label="Previous photo">‹</button>
+            <button
+              id="photoDialogPrev"
+              class="photo-dialog-nav photo-dialog-prev"
+              type="button"
+              aria-label="Previous photo"
+            >
+              ‹
+            </button>
             <img id="photoDialogImage" alt="" />
-            <button id="photoDialogNext" class="photo-dialog-nav photo-dialog-next" type="button" aria-label="Next photo">›</button>
+            <button
+              id="photoDialogNext"
+              class="photo-dialog-nav photo-dialog-next"
+              type="button"
+              aria-label="Next photo"
+            >
+              ›
+            </button>
           </div>
           <div class="photo-dialog-footer">
             <p id="photoDialogCaption" class="photo-dialog-caption"></p>

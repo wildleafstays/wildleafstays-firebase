@@ -39,6 +39,12 @@ function auditSnapshot(property: PropertyRecord): JsonObject {
     contactEmail: property.contact_email,
     checkInTime: property.check_in_time,
     checkOutTime: property.check_out_time,
+    servicesDescription: property.services_description,
+    spacesDescription: property.spaces_description,
+    publicAddress: property.public_address,
+    locationDescription: property.location_description,
+    mapUrl: property.map_url,
+    nearbyAttractions: property.nearby_attractions,
     status: property.status,
     version: property.version
   };

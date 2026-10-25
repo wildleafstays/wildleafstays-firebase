@@ -27,6 +27,12 @@ export interface PropertyView extends JsonObject {
   contactEmail: string | null;
   checkInTime: string | null;
   checkOutTime: string | null;
+  servicesDescription: string | null;
+  spacesDescription: string | null;
+  publicAddress: string | null;
+  locationDescription: string | null;
+  mapUrl: string | null;
+  nearbyAttractions: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,6 +64,12 @@ export function presentProperty(row: PropertyRecord): PropertyView {
     contactEmail: row.contact_email,
     checkInTime: row.check_in_time,
     checkOutTime: row.check_out_time,
+    servicesDescription: row.services_description,
+    spacesDescription: row.spaces_description,
+    publicAddress: row.public_address,
+    locationDescription: row.location_description,
+    mapUrl: row.map_url,
+    nearbyAttractions: row.nearby_attractions,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString()
   };

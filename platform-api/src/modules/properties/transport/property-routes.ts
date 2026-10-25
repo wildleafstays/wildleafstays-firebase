@@ -59,6 +59,12 @@ interface SavePropertyProfileBody extends JsonObject {
   contactEmail?: string;
   checkInTime?: string;
   checkOutTime?: string;
+  servicesDescription?: string;
+  spacesDescription?: string;
+  publicAddress?: string;
+  locationDescription?: string;
+  mapUrl?: string;
+  nearbyAttractions?: string;
 }
 
 interface OwnerResponsibilityBody extends JsonObject {
@@ -135,6 +141,12 @@ const propertySchema = {
     "contactEmail",
     "checkInTime",
     "checkOutTime",
+    "servicesDescription",
+    "spacesDescription",
+    "publicAddress",
+    "locationDescription",
+    "mapUrl",
+    "nearbyAttractions",
     "createdAt",
     "updatedAt"
   ],
@@ -164,6 +176,12 @@ const propertySchema = {
     contactEmail: nullableString,
     checkInTime: nullableString,
     checkOutTime: nullableString,
+    servicesDescription: nullableString,
+    spacesDescription: nullableString,
+    publicAddress: nullableString,
+    locationDescription: nullableString,
+    mapUrl: nullableString,
+    nearbyAttractions: nullableString,
     createdAt: { type: "string" },
     updatedAt: { type: "string" }
   }
@@ -224,7 +242,13 @@ const saveProfileBodySchema = {
     checkOutTime: {
       type: "string",
       pattern: "^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$"
-    }
+    },
+    servicesDescription: { type: "string", maxLength: 5000 },
+    spacesDescription: { type: "string", maxLength: 5000 },
+    publicAddress: { type: "string", maxLength: 500 },
+    locationDescription: { type: "string", maxLength: 5000 },
+    mapUrl: { type: "string", format: "uri", maxLength: 2000 },
+    nearbyAttractions: { type: "string", maxLength: 5000 }
   }
 } as const;
 
@@ -485,7 +509,13 @@ export async function registerPropertyRoutes(
               contactPhone: body.contactPhone?.trim() || null,
               contactEmail: body.contactEmail?.trim().toLowerCase() || null,
               checkInTime: body.checkInTime ?? null,
-              checkOutTime: body.checkOutTime ?? null
+              checkOutTime: body.checkOutTime ?? null,
+              servicesDescription: body.servicesDescription?.trim() || null,
+              spacesDescription: body.spacesDescription?.trim() || null,
+              publicAddress: body.publicAddress?.trim() || null,
+              locationDescription: body.locationDescription?.trim() || null,
+              mapUrl: body.mapUrl?.trim() || null,
+              nearbyAttractions: body.nearbyAttractions?.trim() || null
             },
             requestMetadata(request, "partner-api")
           )

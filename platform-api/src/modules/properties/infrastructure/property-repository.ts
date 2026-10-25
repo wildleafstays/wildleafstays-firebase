@@ -42,7 +42,13 @@ export class PropertyRepository {
         contact_phone: null,
         contact_email: null,
         check_in_time: null,
-        check_out_time: null
+        check_out_time: null,
+        services_description: null,
+        spaces_description: null,
+        public_address: null,
+        location_description: null,
+        map_url: null,
+        nearby_attractions: null
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -100,6 +106,12 @@ export class PropertyRepository {
         contact_email: input.contactEmail,
         check_in_time: input.checkInTime,
         check_out_time: input.checkOutTime,
+        services_description: input.servicesDescription ?? null,
+        spaces_description: input.spacesDescription ?? null,
+        public_address: input.publicAddress ?? null,
+        location_description: input.locationDescription ?? null,
+        map_url: input.mapUrl ?? null,
+        nearby_attractions: input.nearbyAttractions ?? null,
         version: sql<number>`version + 1`,
         updated_at: sql<Date>`now()`
       })

@@ -226,11 +226,49 @@ export interface PropertiesTable {
   contact_email: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   check_in_time: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   check_out_time: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  services_description: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null | undefined
+  >;
+  spaces_description: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null | undefined
+  >;
+  public_address: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  location_description: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null | undefined
+  >;
+  map_url: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  nearby_attractions: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null | undefined
+  >;
   submission_sequence: Generated<number>;
   submitted_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;
   approved_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;
   live_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;
   version: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface PropertyGuestReviewsTable {
+  id: Generated<string>;
+  organization_id: string;
+  property_id: string;
+  reservation_id: string;
+  rating: number;
+  title: string | null;
+  review_text: string;
+  reviewer_display_name: string;
+  status: Generated<string>;
+  submitted_at: Generated<Date>;
+  published_at: ColumnType<Date | null, Date | null | undefined, Date | null | undefined>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
@@ -589,6 +627,7 @@ export interface Database {
   property_categories: PropertyCategoriesTable;
   property_types: PropertyTypesTable;
   properties: PropertiesTable;
+  property_guest_reviews: PropertyGuestReviewsTable;
   property_access_grants: PropertyAccessGrantsTable;
   platform_staff_roles: PlatformStaffRolesTable;
   property_structures: PropertyStructuresTable;

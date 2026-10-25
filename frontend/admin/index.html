@@ -543,16 +543,29 @@
             <div>
               <p class="eyebrow">Portfolio directory</p>
               <h2>All Hotels</h2>
-              <p class="muted">Super Admin only · hotel contacts, owners, rooms and amenities</p>
+              <p class="muted">
+                Super Admin only · hotel contacts, owners, rooms and amenities
+              </p>
             </div>
           </div>
           <div class="card">
-            <label>Find hotel, business or city
-              <input id="hotelDirectorySearch" type="search" placeholder="Search all loaded hotels" />
+            <label
+              >Find hotel, business or city
+              <input
+                id="hotelDirectorySearch"
+                type="search"
+                placeholder="Search all loaded hotels"
+              />
             </label>
           </div>
           <div id="hotelDirectoryList" class="command-directory"></div>
-          <button id="loadMoreHotels" type="button" class="button-secondary hidden">Load more hotels</button>
+          <button
+            id="loadMoreHotels"
+            type="button"
+            class="button-secondary hidden"
+          >
+            Load more hotels
+          </button>
         </section>
 
         <section id="businessScreen" class="screen hidden">
@@ -562,8 +575,8 @@
               <h2>Tell us about your business</h2>
             </div>
             <p>
-              One business account can manage multiple properties. You will be its
-              first owner.
+              One business account can manage multiple properties. You will be
+              its first owner.
             </p>
           </div>
           <form id="businessForm" class="card form-grid two-column">
@@ -631,13 +644,22 @@
             /></label>
             <label>
               Property Category
-              <select id="createPropertyCategory" name="propertyCategoryId" required>
+              <select
+                id="createPropertyCategory"
+                name="propertyCategoryId"
+                required
+              >
                 <option value="">Select category</option>
               </select>
             </label>
             <label>
               Property Type
-              <select id="createPropertyType" name="propertyTypeId" required disabled>
+              <select
+                id="createPropertyType"
+                name="propertyTypeId"
+                required
+                disabled
+              >
                 <option value="">Select category first</option>
               </select>
             </label>
@@ -700,13 +722,22 @@
               /></label>
               <label>
                 Property Category
-                <select id="profilePropertyCategory" name="propertyCategoryId" required>
+                <select
+                  id="profilePropertyCategory"
+                  name="propertyCategoryId"
+                  required
+                >
                   <option value="">Select category</option>
                 </select>
               </label>
               <label>
                 Property Type
-                <select id="profilePropertyType" name="propertyTypeId" required disabled>
+                <select
+                  id="profilePropertyType"
+                  name="propertyTypeId"
+                  required
+                  disabled
+                >
                   <option value="">Select category first</option>
                 </select>
               </label>
@@ -730,8 +761,33 @@
                   maxlength="10000"
                 ></textarea>
               </label>
+              <div class="span-two form-section-heading">
+                <h4>Guest-facing property tabs</h4>
+                <p class="field-help">
+                  These details appear on the public property page. Leave a
+                  field empty when the information is not available.
+                </p>
+              </div>
+              <label class="span-two"
+                >Services description<textarea
+                  name="servicesDescription"
+                  maxlength="5000"
+                  placeholder="Describe property-specific services such as housekeeping, transfers, meals or concierge support."
+                ></textarea>
+              </label>
+              <label class="span-two"
+                >Spaces and shared areas<textarea
+                  name="spacesDescription"
+                  maxlength="5000"
+                  placeholder="Describe lounges, gardens, dining areas, terraces and other shared spaces."
+                ></textarea>
+              </label>
               <label class="span-two"
                 >Address<input name="addressLine1" maxlength="250"
+              /></label>
+              <label class="span-two"
+                >Address line 2 <span class="optional">optional</span
+                ><input name="addressLine2" maxlength="250"
               /></label>
               <label>Locality<input name="locality" maxlength="150" /></label
               ><label>City<input name="city" maxlength="150" /></label>
@@ -742,6 +798,49 @@
               ><label
                 >Postal code<input name="postalCode" maxlength="20"
               /></label>
+              <label
+                >Latitude<input
+                  name="latitude"
+                  type="number"
+                  min="-90"
+                  max="90"
+                  step="0.000001"
+              /></label>
+              <label
+                >Longitude<input
+                  name="longitude"
+                  type="number"
+                  min="-180"
+                  max="180"
+                  step="0.000001"
+              /></label>
+              <label class="span-two"
+                >Public location / address<input
+                  name="publicAddress"
+                  maxlength="500"
+                  placeholder="Only this guest-facing address is published"
+              /></label>
+              <label class="span-two"
+                >Location description<textarea
+                  name="locationDescription"
+                  maxlength="5000"
+                  placeholder="Arrival guidance and a concise description of the neighbourhood."
+                ></textarea>
+              </label>
+              <label class="span-two"
+                >Map link<input
+                  name="mapUrl"
+                  type="url"
+                  maxlength="2000"
+                  placeholder="https://maps.google.com/..."
+              /></label>
+              <label class="span-two"
+                >Nearby attractions<textarea
+                  name="nearbyAttractions"
+                  maxlength="5000"
+                  placeholder="One attraction per line, optionally followed by distance or travel time."
+                ></textarea>
+              </label>
               <label
                 >Country code<input
                   name="countryCode"
@@ -1388,12 +1487,23 @@
 
               <fieldset class="commercial-rule-group span-two">
                 <legend>Cancellation and no-show</legend>
-                <div id="cancellationPolicyList" class="cancellation-policy-list span-two"></div>
+                <div
+                  id="cancellationPolicyList"
+                  class="cancellation-policy-list span-two"
+                ></div>
                 <div class="span-two cancellation-rule-actions">
-                  <button id="addCancellationRuleButton" type="button" class="button-secondary">
+                  <button
+                    id="addCancellationRuleButton"
+                    type="button"
+                    class="button-secondary"
+                  >
                     Add another rule
                   </button>
-                  <button id="deleteCancellationRuleButton" type="button" class="danger-button hidden">
+                  <button
+                    id="deleteCancellationRuleButton"
+                    type="button"
+                    class="danger-button hidden"
+                  >
                     Delete selected rule
                   </button>
                 </div>
@@ -1605,8 +1715,8 @@
               <h2>Homepage content manager</h2>
             </div>
             <p>
-              Control hero campaigns and destination photography without changing
-              booking, pricing or inventory logic.
+              Control hero campaigns and destination photography without
+              changing booking, pricing or inventory logic.
             </p>
           </div>
 
@@ -1623,7 +1733,10 @@
                 </div>
               </div>
 
-              <form id="homepageHeroCreateForm" class="form-grid two-column homepage-content-form">
+              <form
+                id="homepageHeroCreateForm"
+                class="form-grid two-column homepage-content-form"
+              >
                 <label class="span-two">
                   Headline <span class="optional">optional</span>
                   <input
@@ -1650,15 +1763,29 @@
                 </label>
                 <label>
                   Display order <span class="optional">optional</span>
-                  <input name="sortOrder" type="number" min="0" max="10000" value="0" />
+                  <input
+                    name="sortOrder"
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value="0"
+                  />
                 </label>
                 <label>
                   CTA button text <span class="optional">optional</span>
-                  <input name="ctaLabel" maxlength="60" placeholder="Explore stays" />
+                  <input
+                    name="ctaLabel"
+                    maxlength="60"
+                    placeholder="Explore stays"
+                  />
                 </label>
                 <label>
                   CTA link <span class="optional">optional</span>
-                  <input name="ctaHref" maxlength="500" placeholder="/customer/#stays" />
+                  <input
+                    name="ctaHref"
+                    maxlength="500"
+                    placeholder="/customer/#stays"
+                  />
                 </label>
                 <label>
                   Starts at <span class="optional">optional</span>
@@ -1669,12 +1796,26 @@
                   <input name="endsAt" type="datetime-local" />
                 </label>
                 <label>
-                  Horizontal focal point (%) <span class="optional">optional</span>
-                  <input name="focalXPercent" type="number" min="0" max="100" value="50" />
+                  Horizontal focal point (%)
+                  <span class="optional">optional</span>
+                  <input
+                    name="focalXPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value="50"
+                  />
                 </label>
                 <label>
-                  Vertical focal point (%) <span class="optional">optional</span>
-                  <input name="focalYPercent" type="number" min="0" max="100" value="50" />
+                  Vertical focal point (%)
+                  <span class="optional">optional</span>
+                  <input
+                    name="focalYPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value="50"
+                  />
                 </label>
                 <label class="span-two">
                   Hero image
@@ -1688,7 +1829,11 @@
                 </label>
                 <label class="span-two">
                   Image description <span class="optional">optional</span>
-                  <input name="altText" maxlength="500" placeholder="Guests relaxing beside a pool" />
+                  <input
+                    name="altText"
+                    maxlength="500"
+                    placeholder="Guests relaxing beside a pool"
+                  />
                 </label>
                 <label class="check-control span-two">
                   <input name="enabled" type="checkbox" checked />
@@ -1706,14 +1851,18 @@
                   <p class="eyebrow">Entire Property marketing</p>
                   <h3>Entire Property hero campaigns</h3>
                   <p class="muted">
-                    Use this page as a dedicated marketing surface for private-use stays.
-                    Headline, subtitle, offer and CTA are optional. When no campaign is
-                    published, guests go straight to search and live properties.
+                    Use this page as a dedicated marketing surface for
+                    private-use stays. Headline, subtitle, offer and CTA are
+                    optional. When no campaign is published, guests go straight
+                    to search and live properties.
                   </p>
                 </div>
               </div>
 
-              <form id="entirePropertyHeroCreateForm" class="form-grid two-column homepage-content-form">
+              <form
+                id="entirePropertyHeroCreateForm"
+                class="form-grid two-column homepage-content-form"
+              >
                 <label class="span-two">
                   Headline <span class="optional">optional</span>
                   <input
@@ -1740,11 +1889,21 @@
                 </label>
                 <label>
                   Display order <span class="optional">optional</span>
-                  <input name="sortOrder" type="number" min="0" max="10000" value="0" />
+                  <input
+                    name="sortOrder"
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value="0"
+                  />
                 </label>
                 <label>
                   CTA button text <span class="optional">optional</span>
-                  <input name="ctaLabel" maxlength="60" placeholder="Explore entire stays" />
+                  <input
+                    name="ctaLabel"
+                    maxlength="60"
+                    placeholder="Explore entire stays"
+                  />
                 </label>
                 <label>
                   CTA link <span class="optional">optional</span>
@@ -1763,12 +1922,26 @@
                   <input name="endsAt" type="datetime-local" />
                 </label>
                 <label>
-                  Horizontal focal point (%) <span class="optional">optional</span>
-                  <input name="focalXPercent" type="number" min="0" max="100" value="50" />
+                  Horizontal focal point (%)
+                  <span class="optional">optional</span>
+                  <input
+                    name="focalXPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value="50"
+                  />
                 </label>
                 <label>
-                  Vertical focal point (%) <span class="optional">optional</span>
-                  <input name="focalYPercent" type="number" min="0" max="100" value="50" />
+                  Vertical focal point (%)
+                  <span class="optional">optional</span>
+                  <input
+                    name="focalYPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value="50"
+                  />
                 </label>
                 <label class="span-two">
                   Hero image
@@ -1782,16 +1955,25 @@
                 </label>
                 <label class="span-two">
                   Image description <span class="optional">optional</span>
-                  <input name="altText" maxlength="500" placeholder="Private villa in the hills" />
+                  <input
+                    name="altText"
+                    maxlength="500"
+                    placeholder="Private villa in the hills"
+                  />
                 </label>
                 <label class="check-control span-two">
                   <input name="enabled" type="checkbox" checked />
                   Publish this campaign when its schedule allows
                 </label>
-                <button class="span-two" type="submit">Add Entire Property campaign</button>
+                <button class="span-two" type="submit">
+                  Add Entire Property campaign
+                </button>
               </form>
 
-              <div id="entirePropertyHeroList" class="homepage-content-list"></div>
+              <div
+                id="entirePropertyHeroList"
+                class="homepage-content-list"
+              ></div>
             </section>
 
             <section class="card homepage-manager-card taxonomy-manager-card">
@@ -1800,29 +1982,49 @@
                   <p class="eyebrow">Property discovery</p>
                   <h3>Property Categories &amp; Types</h3>
                   <p class="muted">
-                    These database records control owner property setup, public filters,
-                    homepage category headings, order and visibility. The frontend does not
-                    define category or type names.
+                    These database records control owner property setup, public
+                    filters, homepage category headings, order and visibility.
+                    The frontend does not define category or type names.
                   </p>
                 </div>
               </div>
 
               <div class="taxonomy-admin-grid">
-                <form id="propertyCategoryCreateForm" class="form-grid two-column homepage-content-form">
+                <form
+                  id="propertyCategoryCreateForm"
+                  class="form-grid two-column homepage-content-form"
+                >
                   <div class="span-two">
                     <h4>Add Property Category</h4>
                   </div>
                   <label>
                     Category name
-                    <input name="name" maxlength="120" required placeholder="Enter category name" />
+                    <input
+                      name="name"
+                      maxlength="120"
+                      required
+                      placeholder="Enter category name"
+                    />
                   </label>
                   <label>
                     Homepage heading
-                    <input name="homepageHeading" maxlength="160" required placeholder="Wellness Retreats" />
+                    <input
+                      name="homepageHeading"
+                      maxlength="160"
+                      required
+                      placeholder="Wellness Retreats"
+                    />
                   </label>
                   <label>
                     Display order
-                    <input name="sortOrder" type="number" min="0" max="10000" value="0" required />
+                    <input
+                      name="sortOrder"
+                      type="number"
+                      min="0"
+                      max="10000"
+                      value="0"
+                      required
+                    />
                   </label>
                   <label class="check-control">
                     <input name="homepageVisible" type="checkbox" checked />
@@ -1835,38 +2037,65 @@
                   <button class="span-two" type="submit">Add category</button>
                 </form>
 
-                <form id="propertyTypeCreateForm" class="form-grid two-column homepage-content-form">
+                <form
+                  id="propertyTypeCreateForm"
+                  class="form-grid two-column homepage-content-form"
+                >
                   <div class="span-two">
                     <h4>Add Property Type</h4>
                   </div>
                   <label class="span-two">
                     Parent Property Category
-                    <select id="taxonomyTypeCategory" name="categoryId" required></select>
+                    <select
+                      id="taxonomyTypeCategory"
+                      name="categoryId"
+                      required
+                    ></select>
                   </label>
                   <label>
                     Property Type name
-                    <input name="name" maxlength="120" required placeholder="Enter property type name" />
+                    <input
+                      name="name"
+                      maxlength="120"
+                      required
+                      placeholder="Enter property type name"
+                    />
                   </label>
                   <label>
                     Display order
-                    <input name="sortOrder" type="number" min="0" max="10000" value="0" required />
+                    <input
+                      name="sortOrder"
+                      type="number"
+                      min="0"
+                      max="10000"
+                      value="0"
+                      required
+                    />
                   </label>
                   <label class="check-control span-two">
                     <input name="enabled" type="checkbox" checked />
                     Available for property setup and search
                   </label>
-                  <button class="span-two" type="submit">Add property type</button>
+                  <button class="span-two" type="submit">
+                    Add property type
+                  </button>
                 </form>
               </div>
 
               <div class="taxonomy-admin-columns">
                 <div>
                   <h4>Property Categories</h4>
-                  <div id="propertyCategoryAdminList" class="homepage-content-list"></div>
+                  <div
+                    id="propertyCategoryAdminList"
+                    class="homepage-content-list"
+                  ></div>
                 </div>
                 <div>
                   <h4>Property Types</h4>
-                  <div id="propertyTypeAdminList" class="homepage-content-list"></div>
+                  <div
+                    id="propertyTypeAdminList"
+                    class="homepage-content-list"
+                  ></div>
                 </div>
               </div>
             </section>
@@ -1877,20 +2106,35 @@
                   <p class="eyebrow">Destinations</p>
                   <h3>Destination image cards</h3>
                   <p class="muted">
-                    Choose a live Wildleaf destination and give it the photograph
-                    shown on the booking homepage. Property counts remain live.
+                    Choose a live Wildleaf destination and give it the
+                    photograph shown on the booking homepage. Property counts
+                    remain live.
                   </p>
                 </div>
               </div>
 
-              <form id="homepageDestinationForm" class="form-grid two-column homepage-content-form">
+              <form
+                id="homepageDestinationForm"
+                class="form-grid two-column homepage-content-form"
+              >
                 <label class="span-two">
                   Live destination
-                  <select id="homepageDestinationSelect" name="destinationKey" required></select>
+                  <select
+                    id="homepageDestinationSelect"
+                    name="destinationKey"
+                    required
+                  ></select>
                 </label>
                 <label>
                   Display order
-                  <input name="sortOrder" type="number" min="0" max="10000" value="0" required />
+                  <input
+                    name="sortOrder"
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value="0"
+                    required
+                  />
                 </label>
                 <label class="check-control">
                   <input name="enabled" type="checkbox" checked />
@@ -1908,12 +2152,21 @@
                 </label>
                 <label class="span-two">
                   Image description
-                  <input name="altText" maxlength="500" placeholder="Kasauli hills at sunrise" />
+                  <input
+                    name="altText"
+                    maxlength="500"
+                    placeholder="Kasauli hills at sunrise"
+                  />
                 </label>
-                <button class="span-two" type="submit">Save destination image</button>
+                <button class="span-two" type="submit">
+                  Save destination image
+                </button>
               </form>
 
-              <div id="homepageDestinationList" class="homepage-content-list"></div>
+              <div
+                id="homepageDestinationList"
+                class="homepage-content-list"
+              ></div>
             </section>
           </div>
         </section>

@@ -119,6 +119,29 @@ test("property editor uses one-at-a-time sections without replacing existing for
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.editor-progress-card/);
 });
 
+test("property owners manage every public property-tab detail in the profile workflow", () => {
+  const profile = html.match(/<form id="profileForm"[\s\S]*?<\/form>/);
+  assert.ok(profile, "property profile form must exist");
+  for (const name of [
+    "shortDescription",
+    "description",
+    "servicesDescription",
+    "spacesDescription",
+    "publicAddress",
+    "locationDescription",
+    "mapUrl",
+    "nearbyAttractions",
+    "latitude",
+    "longitude",
+  ]) {
+    assert.match(profile[0], new RegExp(`name="${name}"`));
+  }
+  assert.match(html, /id="policiesForm"/);
+  assert.match(html, /id="amenitiesForm"/);
+  assert.match(html, /id="imageUploadForm"/);
+  assert.match(html, /id="commercialRulesForm"/);
+});
+
 test("a new property draft opens before its sale mode and rates are configured", () => {
   const openProperty = js.match(
     /async function openProperty\(organizationId, propertyId\) \{[\s\S]*?\n\}/,
@@ -131,8 +154,14 @@ test("a new property draft opens before its sale mode and rates are configured",
   const ratePlansRead = loader.indexOf("api(`${base}/rates/plans`)");
 
   assert.ok(profileRead >= 0, "the draft profile must be loaded first");
-  assert.ok(saleModeGuard > profileRead, "rate loading must inspect the profile");
-  assert.ok(ratePlansRead > saleModeGuard, "rates must load only after the guard");
+  assert.ok(
+    saleModeGuard > profileRead,
+    "rate loading must inspect the profile",
+  );
+  assert.ok(
+    ratePlansRead > saleModeGuard,
+    "rates must load only after the guard",
+  );
   assert.match(loader, /Promise\.resolve\(\{ ratePlans: \[\] \}\)/);
 });
 
@@ -606,7 +635,6 @@ test("Step 4B2 owner can create or synchronize one simple category base rate", (
 
   assert.match(js, /expectedVersion/);
 });
-
 
 test("partner portal loads the premium owner experience layer without replacing operational forms", () => {
   assert.match(html, /\/admin\/experience\.css/);

@@ -78,12 +78,34 @@ export interface PublicMediaView {
   sortOrder: number;
 }
 
+export interface PublicCancellationView {
+  name: string;
+  policyText: string | null;
+}
+
+export interface PublicGuestReviewView {
+  id: string;
+  rating: number;
+  title: string | null;
+  reviewText: string;
+  reviewerDisplayName: string;
+  publishedAt: string;
+}
+
 export interface PublicPropertyDetailView extends PublicPropertySummaryView {
   description: string | null;
   checkInTime: string | null;
   checkOutTime: string | null;
+  servicesDescription?: string | null;
+  spacesDescription?: string | null;
+  publicAddress?: string | null;
+  locationDescription?: string | null;
+  mapUrl?: string | null;
+  nearbyAttractions?: string | null;
   roomCategories: PublicRoomCategoryView[];
   amenities: PublicAmenityView[];
   policies: PublicPoliciesView | null;
   media: PublicMediaView[];
+  cancellation?: PublicCancellationView | null;
+  reviews?: PublicGuestReviewView[];
 }

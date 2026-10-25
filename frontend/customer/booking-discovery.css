@@ -1280,3 +1280,415 @@
     transition: none;
   }
 }
+
+/* Approved property detail composition: compact identity, one planner and tabbed content. */
+.property-page .property-shopping-shell {
+  width: min(1280px, calc(100vw - 56px));
+}
+
+.property-page .property-identity {
+  grid-template-columns: minmax(0, 1fr) minmax(330px, 370px);
+  align-items: start;
+  gap: 28px;
+  padding: 20px 2px 18px;
+  border-bottom: 0;
+}
+
+.property-title-facts {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.property-page .property-title-facts h1 {
+  flex: 0 1 auto;
+  font-size: clamp(1.8rem, 3vw, 2.55rem);
+  white-space: nowrap;
+}
+
+.property-page .property-quick-facts {
+  display: grid;
+  flex: 1 1 420px;
+  grid-template-columns: repeat(3, minmax(118px, 1fr));
+  gap: 7px;
+}
+
+.property-page .property-quick-facts .fact-card {
+  min-height: 48px;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.property-page .property-summary {
+  max-width: 860px;
+  margin-top: 13px;
+  color: #626a66;
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+
+.plan-your-stay {
+  padding: 16px;
+  border: 1px solid #e3e6df;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 14px 36px rgba(22, 49, 38, 0.09);
+}
+
+.plan-your-stay-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.plan-your-stay-heading h2 {
+  margin: 0;
+  color: #19251f;
+  font-family: "Playfair Display", serif;
+  font-size: 1.38rem;
+}
+
+.plan-your-stay-heading span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #205641;
+  background: #edf7f0;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.property-planner-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.property-planner-form .date-grid,
+.planner-party-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.planner-party-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.property-planner-form label {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid #e6e8e2;
+  border-radius: 9px;
+  background: #fbfcfa;
+}
+
+.property-planner-form label > span {
+  color: #7a827e;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.property-planner-form input:not([type="hidden"]),
+.property-planner-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: #1b2d25;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.property-planner-form .property-child-age-fields:empty {
+  display: none;
+}
+
+.property-planner-form .total-party-ages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.property-planner-form .total-party-ages > p {
+  grid-column: 1 / -1;
+  margin: 1px 0 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.planner-update-button {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 1px;
+  border-radius: 9px;
+  font-size: 0.76rem;
+}
+
+.property-information {
+  position: relative;
+  margin-top: 0;
+}
+
+.property-tabs {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  overflow: hidden;
+  border-radius: 10px;
+  background: #151817;
+}
+
+.property-tab {
+  min-height: 49px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: #f7f7f3;
+  background: transparent;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.property-tab:hover,
+.property-tab:focus-visible {
+  color: #f5c66a;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.property-tab.active {
+  border-bottom-color: #d5a34b;
+  color: #efbe61;
+}
+
+.property-tab-panel {
+  margin-top: 10px;
+  padding: 20px 22px;
+  border: 1px solid #e6e7e1;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(24, 40, 33, 0.06);
+}
+
+.property-tab-panel[hidden] {
+  display: none;
+}
+
+.property-tab-content h2 {
+  margin: 0 0 8px;
+  color: #17251f;
+  font-family: "DM Sans", sans-serif;
+  font-size: 1.18rem;
+}
+
+.property-tab-content h3 {
+  margin: 14px 0 7px;
+  font-size: 0.9rem;
+}
+
+.property-tab-copy,
+.property-tab-empty {
+  max-width: 920px;
+  margin: 0;
+  color: #5f6863;
+  font-size: 0.86rem;
+  line-height: 1.65;
+  white-space: pre-line;
+}
+
+.property-tab-empty {
+  color: #7b827e;
+}
+
+.tab-detail-grid,
+.tab-card-grid,
+.tab-amenity-grid,
+.review-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.tab-amenity-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.property-info-card {
+  padding: 13px 14px;
+  border: 1px solid #e8eae5;
+  border-radius: 10px;
+  background: #fafbf8;
+}
+
+.property-info-card h3,
+.property-info-card p {
+  margin: 0;
+}
+
+.property-info-card p {
+  margin-top: 5px;
+  color: #636b67;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.amenity-detail-card {
+  display: grid;
+  gap: 3px;
+  font-size: 0.8rem;
+}
+
+.amenity-detail-card small,
+.review-card small {
+  color: #777f7a;
+  font-size: 0.7rem;
+}
+
+.review-summary,
+.review-rating,
+.property-public-address {
+  color: #154c38;
+  font-weight: 750;
+}
+
+.nearby-attraction-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  color: #59635e;
+  font-size: 0.84rem;
+}
+
+.map-link {
+  display: inline-flex;
+  width: auto;
+  margin-top: 15px;
+}
+
+.property-page .property-main {
+  gap: 16px;
+  padding-top: 20px;
+}
+
+.checkout-view .property-information,
+.checkout-view .plan-your-stay {
+  display: none;
+}
+
+@media (max-width: 1050px) {
+  .property-page .property-shopping-shell {
+    width: min(100% - 32px, 1280px);
+  }
+
+  .property-page .property-identity {
+    grid-template-columns: 1fr;
+  }
+
+  .property-title-facts {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .property-page .property-quick-facts {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .plan-your-stay {
+    max-width: none;
+  }
+
+  .property-tabs {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .property-tab {
+    flex: 0 0 auto;
+    min-width: 124px;
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .property-page .property-shopping-shell {
+    width: calc(100% - 20px);
+  }
+
+  .property-page .property-identity {
+    gap: 16px;
+    padding-top: 15px;
+  }
+
+  .property-page .property-title-facts h1 {
+    white-space: normal;
+  }
+
+  .property-page .property-quick-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .property-page .property-quick-facts .fact-card {
+    min-height: 42px;
+  }
+
+  .plan-your-stay {
+    padding: 13px;
+    border-radius: 14px;
+  }
+
+  .property-planner-form .date-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .planner-party-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .property-tab {
+    min-width: 108px;
+    min-height: 46px;
+    font-size: 0.71rem;
+  }
+
+  .property-tab-panel {
+    padding: 16px;
+  }
+
+  .tab-detail-grid,
+  .tab-card-grid,
+  .tab-amenity-grid,
+  .review-list {
+    grid-template-columns: 1fr;
+  }
+
+  .property-page .property-main {
+    padding-top: 16px;
+  }
+}
