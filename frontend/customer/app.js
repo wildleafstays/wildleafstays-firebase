@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from "./api-client.js";
+import { mountMobileSearch } from "./mobile-search.js";
 
 const form = document.querySelector("#searchForm");
 const results = document.querySelector("#results");
@@ -49,6 +50,24 @@ const state = {
 setDefaultDates();
 restoreSearchFromUrl(initialSearch);
 configureChildAgeFields();
+mountMobileSearch({
+  form,
+  locationInput: form.destination,
+  arrivalInput: form.arrivalDate,
+  departureInput: form.departureDate,
+  adultsInput: form.adults,
+  kidsInput: form.children,
+  roomsInput: form.rooms,
+  childAgeSelector: "#smartstayChildAgeFields select",
+  sourceElements: [
+    form.querySelector(".search-destination"),
+    form.arrivalDate.closest("label"),
+    form.departureDate.closest("label"),
+    form.querySelector(".search-guest-group"),
+    document.querySelector("#smartstayChildAges"),
+    form.querySelector(".search-button"),
+  ],
+});
 form.children.addEventListener("change", configureChildAgeFields);
 stayModeSelect?.addEventListener("change", () => {
   form.elements.namedItem("privateStay").checked = stayModeSelect.value === "entire";

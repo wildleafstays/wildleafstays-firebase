@@ -1,0 +1,364 @@
+.mobile-compact-search,
+.mobile-search-popover,
+.property-mobile-type {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .destination-page,
+  .property-body {
+    min-width: 0;
+  }
+
+  .mobile-search-enhanced {
+    position: relative;
+  }
+
+  .mobile-search-enhanced > .mobile-search-source {
+    display: none !important;
+  }
+
+  .mobile-compact-search {
+    display: grid;
+    box-sizing: border-box;
+    width: 100%;
+    height: 56px;
+    grid-template-columns:
+      minmax(52px, 0.9fr) minmax(92px, 1.65fr) minmax(38px, 0.48fr)
+      minmax(38px, 0.48fr) 48px;
+    align-items: stretch;
+    overflow: hidden;
+    border: 1px solid rgba(31, 61, 49, 0.13);
+    border-radius: 17px;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 12px 28px rgba(7, 31, 22, 0.16);
+  }
+
+  .mobile-compact-search-property {
+    grid-template-columns: minmax(118px, 1fr) 48px 48px 48px;
+    box-shadow: none;
+  }
+
+  .mobile-search-segment,
+  .mobile-compact-submit {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 0;
+    padding: 0 7px;
+    border: 0;
+    border-right: 1px solid #dfe5e1;
+    border-radius: 0;
+    color: #17261f;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .mobile-search-location {
+    justify-content: flex-start;
+    gap: 4px;
+    padding-inline: 5px;
+  }
+
+  .mobile-search-dates {
+    justify-content: flex-start;
+  }
+
+  .mobile-search-guests {
+    gap: 4px;
+    padding-inline: 5px;
+  }
+
+  .mobile-search-icon {
+    display: inline-flex;
+    flex: 0 0 19px;
+    width: 19px;
+    height: 19px;
+  }
+
+  .mobile-search-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.9;
+  }
+
+  .mobile-segment-value {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.69rem;
+    font-weight: 750;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-search-dates .mobile-segment-value {
+    font-size: 0.65rem;
+    letter-spacing: -0.015em;
+  }
+
+  .mobile-compact-submit {
+    width: 42px;
+    height: 44px;
+    align-self: center;
+    justify-self: center;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    color: #fff;
+    background: #0c513c;
+    box-shadow: 0 8px 18px rgba(12, 81, 60, 0.22);
+  }
+
+  .mobile-compact-submit .mobile-search-icon {
+    width: 21px;
+    height: 21px;
+    flex-basis: 21px;
+  }
+
+  .mobile-search-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    left: 0;
+    z-index: 80;
+    display: grid;
+    box-sizing: border-box;
+    gap: 12px;
+    width: 100%;
+    padding: 14px;
+    border: 1px solid #dfe5e1;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 20px 46px rgba(7, 31, 22, 0.22);
+  }
+
+  .mobile-search-popover[hidden] {
+    display: none !important;
+  }
+
+  .mobile-popover-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .mobile-popover-head h3 {
+    margin: 0;
+    color: #17261f;
+    font-family: "DM Sans", sans-serif;
+    font-size: 0.92rem;
+  }
+
+  .mobile-popover-close {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: #29483c;
+    background: #edf3ef;
+    font-size: 1.18rem;
+    line-height: 1;
+  }
+
+  .mobile-search-popover > input,
+  .mobile-search-popover label input,
+  .mobile-search-popover label select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 8px 9px;
+    border: 1px solid #dce3de;
+    border-radius: 9px;
+    color: #17261f;
+    background: #fbfcfa;
+    font: 700 0.76rem/1.2 "DM Sans", sans-serif;
+  }
+
+  .mobile-range-fields,
+  .mobile-guest-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .mobile-guest-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .mobile-range-fields label,
+  .mobile-guest-fields > label,
+  .mobile-child-age-fields label {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .mobile-range-fields label > span,
+  .mobile-guest-fields label > span,
+  .mobile-child-age-fields label > span {
+    color: #68736d;
+    font-size: 0.59rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .mobile-child-age-fields {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .mobile-child-age-fields:empty {
+    display: none;
+  }
+
+  .mobile-child-age-fields p {
+    grid-column: 1 / -1;
+    margin: 3px 0 0;
+    color: #53615a;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+
+  .mobile-popover-apply {
+    min-height: 42px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 10px;
+    color: #fff;
+    background: #0c513c;
+    font: 750 0.76rem/1 "DM Sans", sans-serif;
+  }
+
+  /* Homepage: preserve the campaign and replace only the mobile form surface. */
+  .home-page .search-card.mobile-search-enhanced,
+  .home-page .search-card.mobile-search-enhanced.villa-search {
+    display: block !important;
+    box-sizing: border-box;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 0 !important;
+    overflow: visible;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .home-page .mobile-search-popover {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+
+  /* Destination: keep the result heading and edit the search in the same slim rail. */
+  .destination-page .destination-search-form.mobile-search-enhanced {
+    position: relative;
+    inset: auto;
+    display: block;
+    width: 100%;
+    max-height: none;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+  }
+
+  .destination-page .destination-search-shell {
+    padding: 6px 10px 9px;
+  }
+
+  /* Property: title/type and planner become one compact mobile composition. */
+  .property-page .property-title-facts {
+    flex-direction: row;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .property-page .property-title-facts h1 {
+    min-width: 0;
+    margin: 0;
+    font-size: clamp(1.72rem, 8.5vw, 2.15rem);
+  }
+
+  .property-mobile-type {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 5px 9px;
+    border: 1px solid #dfe6e1;
+    border-radius: 999px;
+    color: #285342;
+    background: #f1f6f2;
+    font-size: 0.61rem;
+    font-weight: 800;
+  }
+
+  .property-page .property-quick-facts {
+    display: none !important;
+  }
+
+  .property-page .property-summary {
+    margin-top: 10px;
+  }
+
+  .property-page .plan-your-stay {
+    position: relative;
+    z-index: 15;
+  }
+
+  .property-page .property-planner-form.mobile-search-enhanced {
+    display: block;
+  }
+}
+
+@media (max-width: 350px) {
+  .mobile-compact-search {
+    grid-template-columns:
+      minmax(45px, 0.76fr) minmax(82px, 1.5fr) 36px 36px 44px;
+    height: 52px;
+  }
+
+  .mobile-compact-search-property {
+    grid-template-columns: minmax(108px, 1fr) 42px 42px 44px;
+  }
+
+  .mobile-search-segment {
+    gap: 3px;
+    padding-inline: 4px;
+  }
+
+  .mobile-search-icon {
+    width: 17px;
+    height: 17px;
+    flex-basis: 17px;
+  }
+
+  .mobile-segment-value,
+  .mobile-search-dates .mobile-segment-value {
+    font-size: 0.6rem;
+  }
+
+  .mobile-compact-submit {
+    width: 38px;
+    height: 40px;
+  }
+}

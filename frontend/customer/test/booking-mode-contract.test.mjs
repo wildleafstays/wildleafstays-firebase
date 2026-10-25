@@ -52,6 +52,14 @@ const propertySource = await readFile(
   new URL("../property.js", import.meta.url),
   "utf8",
 );
+const mobileSearchSource = await readFile(
+  new URL("../mobile-search.js", import.meta.url),
+  "utf8",
+);
+const mobileSearchStyles = await readFile(
+  new URL("../mobile-search.css", import.meta.url),
+  "utf8",
+);
 test("homepage search opens a dedicated destination experience", () => {
   assert.doesNotMatch(homeHtml, /id="modeAll"|id="modeHotel"|id="modeVilla"/);
   assert.doesNotMatch(homeHtml, /id="entirePropertyEntry"/);
@@ -1030,4 +1038,27 @@ test("homepage supports managed hero campaigns and destination photography witho
   assert.doesNotMatch(homeSource, /function updateHero\(/);
   assert.match(homeSource, /hero\.classList\.remove\("hero-search-only"\)/);
   assert.match(homeSource, /loadDestinations\(\)/);
+});
+
+test("customer booking pages use one compact, functional mobile search interface", () => {
+  for (const html of [homeHtml, destinationHtml, propertyHtml]) {
+    assert.match(html, /mobile-search\.css/);
+  }
+  for (const source of [homeSource, destinationSource, propertySource]) {
+    assert.match(source, /mountMobileSearch/);
+  }
+  assert.match(mobileSearchSource, /openDatePanel/);
+  assert.match(mobileSearchSource, /Check-in/);
+  assert.match(mobileSearchSource, /Check-out/);
+  assert.match(mobileSearchSource, /Kids/);
+  assert.match(mobileSearchSource, /dispatchEvent\(new Event\(type, \{ bubbles: true \}\)\)/);
+  assert.match(mobileSearchStyles, /@media \(max-width: 760px\)/);
+  assert.match(
+    mobileSearchStyles,
+    /@media \(max-width: 760px\)[\s\S]*\.mobile-search-source\s*\{[\s\S]*display:\s*none\s*!important/,
+  );
+  assert.match(mobileSearchStyles, /\.property-quick-facts\s*\{[\s\S]*display:\s*none/);
+  assert.match(propertyHtml, /id="propertyMobileType"/);
+  assert.match(propertySource, /propertyMobileType/);
+  assert.match(destinationSource, /destinationMobileSearch\.refresh\(\)/);
 });

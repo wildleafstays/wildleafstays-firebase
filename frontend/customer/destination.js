@@ -1,4 +1,5 @@
 import { apiRequest } from "./api-client.js";
+import { mountMobileSearch } from "./mobile-search.js";
 
 const params = new URLSearchParams(location.search);
 const form = document.querySelector("#destinationSearchForm");
@@ -22,6 +23,23 @@ const state = {
 };
 
 configureSearch();
+const destinationMobileSearch = mountMobileSearch({
+  form,
+  locationInput: form.destination,
+  arrivalInput: form.arrivalDate,
+  departureInput: form.departureDate,
+  adultsInput: form.adults,
+  kidsInput: form.children,
+  roomsInput: form.rooms,
+  childAgeSelector: "#childAgeFields select",
+  sourceElements: [
+    form.querySelector(".destination-field-location"),
+    form.querySelector(".destination-date-group"),
+    form.querySelector(".destination-party-group"),
+    childAgeFields,
+    form.querySelector(".destination-search-submit"),
+  ],
+});
 wireEvents();
 void initialize();
 
@@ -66,6 +84,7 @@ async function initialize() {
   document.title = `${destination} stays | Wildleaf Stays`;
   resultsHeading.textContent = destination;
   form.destination.value = destination;
+  destinationMobileSearch.refresh();
   syncModeTabs();
   await loadProperties();
 }

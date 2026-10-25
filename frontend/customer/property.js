@@ -5,6 +5,7 @@ import {
   operationKey,
   saveBookingSession,
 } from "./api-client.js";
+import { mountMobileSearch } from "./mobile-search.js";
 
 const query = new URLSearchParams(location.search);
 const pathSegments = location.pathname.split("/").filter(Boolean);
@@ -80,6 +81,22 @@ if (!publicSlug) {
 } else {
   configureInitialSearch();
   wireEvents();
+  mountMobileSearch({
+    form,
+    arrivalInput: form.arrivalDate,
+    departureInput: form.departureDate,
+    adultsInput: form.adults,
+    kidsInput: form.children,
+    roomsInput: form.unitCount,
+    childAgeSelector: "#occupancyUnits select",
+    sourceElements: [
+      form.querySelector(".date-grid"),
+      form.querySelector(".planner-party-grid"),
+      occupancyUnits,
+      form.querySelector(".planner-update-button"),
+    ],
+    variant: "property",
+  });
   void loadProperty();
 }
 
@@ -251,6 +268,8 @@ async function loadProperty() {
 function renderProperty(property) {
   document.title = `${property.name} | Wildleaf Stays`;
   document.querySelector("#propertyName").textContent = property.name;
+  document.querySelector("#propertyMobileType").textContent =
+    property.propertyTypeName || "Stay";
   document.querySelector("#propertyLocation").textContent = [
     property.locality,
     property.city,
