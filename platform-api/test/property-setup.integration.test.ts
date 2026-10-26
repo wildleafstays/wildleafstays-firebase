@@ -358,7 +358,7 @@ describe("physical property structure foundation", () => {
           requestMetadata()
         )
       )
-    ).rejects.toMatchObject({ code: "VALIDATION_FAILED", statusCode: 400 });
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
   });
 
   it("locks physical setup after property submission", async () => {
