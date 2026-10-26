@@ -6,10 +6,15 @@ const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 test("categories and types display one click-to-open editor at a time", () => {
   assert.match(script, /function taxonomyEditorDisclosure/);
   assert.match(script, /if \(other !== details\) other\.open = false/);
-  assert.match(script, /taxonomyEditorDisclosure\(`Category/);
-  assert.match(script, /taxonomyEditorDisclosure\(`Type/);
+  assert.match(script, /taxonomyEditorDisclosure\(\s*`Category/);
+  assert.match(script, /taxonomyEditorDisclosure\(\s*`Type/);
   assert.match(script, /setupTaxonomyCreateDisclosures\(\)/);
-  for (const id of ["propertyCategoryAdminList", "propertyTypeAdminList", "propertyCategoryCreateForm", "propertyTypeCreateForm"]) {
+  for (const id of [
+    "propertyCategoryAdminList",
+    "propertyTypeAdminList",
+    "propertyCategoryCreateForm",
+    "propertyTypeCreateForm",
+  ]) {
     assert.ok(html.includes(`id="${id}"`));
   }
   assert.match(script, /property-category-update/);

@@ -42,6 +42,23 @@ test("room category setup uses owner language and hides internal category code",
   assert.doesNotMatch(form, /name="code"/);
 });
 
+test("category-first inventory supports editing counts and optional channel identities", () => {
+  assert.match(html, /name="roomCount"/);
+  assert.match(html, /id="roomIdentityList"/);
+  assert.match(js, /function editRoomCategory\(categoryId\)/);
+  assert.match(js, /room-category-update/);
+  assert.match(js, /externalChannel/);
+  assert.match(js, /externalReference/);
+  assert.match(js, /editingId \? "updated" : "added"/);
+});
+
+test("base pricing includes default extra adult and kid controls", () => {
+  assert.match(js, /dataOwnerExtraAdult|ownerExtraAdult/);
+  assert.match(js, /dataOwnerExtraChild|ownerExtraChild/);
+  assert.match(js, /extraAdultMinor,/);
+  assert.match(js, /extraChildMinor,/);
+});
+
 test("room category creation persists selected checkbox amenities", () => {
   assert.match(js, /from "\.\/amenity-catalog\.js"/);
   assert.match(js, /PROPERTY_AMENITY_GROUPS/);

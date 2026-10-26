@@ -53,6 +53,8 @@ interface ConfigureProductBody extends JsonObject {
 
 interface ConfigureOwnerBaseRateBody extends JsonObject {
   baseRateMinor: number;
+  extraAdultMinor?: number;
+  extraChildMinor?: number;
   expectedVersion?: number | null;
 }
 
@@ -277,6 +279,16 @@ export async function registerRateRoutes(
               minimum: 0,
               maximum: 100000000
             },
+            extraAdultMinor: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100000000
+            },
+            extraChildMinor: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100000000
+            },
             expectedVersion: nullableVersion
           }
         }
@@ -304,6 +316,8 @@ export async function registerRateRoutes(
               propertyId: request.params.propertyId,
               roomCategoryId: request.params.roomCategoryId,
               baseRateMinor: request.body.baseRateMinor,
+              extraAdultMinor: request.body.extraAdultMinor ?? null,
+              extraChildMinor: request.body.extraChildMinor ?? null,
               expectedVersion: request.body.expectedVersion ?? null
             },
             requestMetadata(request, "partner-api")

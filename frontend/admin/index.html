@@ -631,7 +631,10 @@
         </section>
 
         <section id="propertiesScreen" class="screen hidden">
-          <section class="owner-portfolio-intro" aria-labelledby="portfolioTitle">
+          <section
+            class="owner-portfolio-intro"
+            aria-labelledby="portfolioTitle"
+          >
             <div>
               <p class="eyebrow">Your collection</p>
               <h2 id="portfolioTitle">Manage every stay from one place</h2>
@@ -1306,6 +1309,8 @@
               </div>
               <div class="setup-grid">
                 <form id="roomCategoryForm" class="form-grid two-column">
+                  <input name="roomCategoryId" type="hidden" />
+                  <input name="expectedVersion" type="hidden" />
                   <div class="span-two">
                     <p class="step-kicker">Step 2</p>
                     <h3>Add a room category</h3>
@@ -1324,6 +1329,23 @@
                       autocomplete="off"
                       required
                     />
+                  </label>
+
+                  <label class="span-two category-count-field">
+                    Number of rooms in this category
+                    <input
+                      name="roomCount"
+                      type="number"
+                      min="1"
+                      max="1000"
+                      step="1"
+                      value="1"
+                      required
+                    />
+                    <small>
+                      This number controls the sellable inventory. Increase or
+                      reduce it whenever your room count changes.
+                    </small>
                   </label>
 
                   <label>
@@ -1488,8 +1510,29 @@
                     ></div>
                   </div>
 
-                  <button class="span-two" type="submit">
+                  <details class="span-two room-identity-panel">
+                    <summary>Optional room names &amp; channel mapping</summary>
+                    <p class="field-help">
+                      Add physical names such as M 101. Channel and remote ID
+                      are optional and reserved for future Airbnb or channel
+                      manager synchronization.
+                    </p>
+                    <div id="roomIdentityList" class="room-identity-list"></div>
+                  </details>
+
+                  <button
+                    id="roomCategorySaveButton"
+                    class="span-two"
+                    type="submit"
+                  >
                     Add room category
+                  </button>
+                  <button
+                    id="roomCategoryCancelButton"
+                    class="span-two button-secondary hidden"
+                    type="button"
+                  >
+                    Cancel editing
                   </button>
                 </form>
 
@@ -1516,14 +1559,18 @@
                   </label>
 
                   <label class="span-two">
-                    Choose photo
+                    Choose photos
                     <input
                       name="file"
                       type="file"
                       accept="image/jpeg,image/png,image/webp,image/avif"
+                      multiple
                       required
                     />
-                    <small>JPEG, PNG, WebP or AVIF. Maximum 8 MB.</small>
+                    <small
+                      >Images are resized and converted to storage-efficient
+                      WebP before upload.</small
+                    >
                   </label>
 
                   <label>

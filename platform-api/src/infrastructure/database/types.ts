@@ -383,6 +383,12 @@ export interface PhysicalUnitsTable {
   lift_accessible: Generated<boolean>;
   smoking_policy: Generated<string>;
   internal_notes: string | null;
+  external_channel: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  external_reference: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null | undefined
+  >;
   sort_order: Generated<number>;
   status: Generated<string>;
   version: Generated<number>;

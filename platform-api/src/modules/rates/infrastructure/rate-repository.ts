@@ -58,6 +58,29 @@ export class RateRepository {
       .executeTakeFirst();
   }
 
+  async updateRoomCategoryPricingDefaults(
+    trx: Transaction<Database>,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string,
+    extraAdultMinor: number,
+    extraChildMinor: number
+  ): Promise<void> {
+    await trx
+      .updateTable("room_categories")
+      .set({
+        default_extra_adult_minor: extraAdultMinor,
+        default_extra_child_minor: extraChildMinor,
+        version: (eb) => eb("version", "+", 1),
+        updated_at: new Date()
+      })
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("id", "=", roomCategoryId)
+      .where("status", "=", "ACTIVE")
+      .executeTakeFirst();
+  }
+
   async createPlan(
     trx: Transaction<Database>,
     input: {

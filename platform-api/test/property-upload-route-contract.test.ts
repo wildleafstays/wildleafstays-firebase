@@ -63,12 +63,18 @@ describe("managed property upload route contract", () => {
       "/v1/partner/organizations/{organizationId}/properties/{propertyId}/onboarding/documents";
     const physicalRoomImagePath =
       "/v1/partner/organizations/{organizationId}/properties/{propertyId}/units/{physicalUnitId}/uploads/images";
+    const roomCategoryImagePath =
+      "/v1/partner/organizations/{organizationId}/properties/{propertyId}/room-categories/{roomCategoryId}/uploads/images";
+    const roomCategoryPreviewPath =
+      "/v1/partner/organizations/{organizationId}/properties/{propertyId}/room-categories/{roomCategoryId}/media/{mediaId}/read-url";
 
     expect(document.paths[imagePath]?.["post"]).toBeDefined();
     expect(document.paths[documentPath]?.["post"]).toBeDefined();
     expect(document.paths[legacyMediaPath]?.["post"]).toBeUndefined();
     expect(document.paths[legacyDocumentPath]?.["post"]).toBeUndefined();
     expect(document.paths[physicalRoomImagePath]?.["post"]).toBeDefined();
+    expect(document.paths[roomCategoryImagePath]?.["post"]).toBeDefined();
+    expect(document.paths[roomCategoryPreviewPath]?.["get"]).toBeDefined();
   });
 
   it("requires the file digest and idempotency key before upload handling", async () => {

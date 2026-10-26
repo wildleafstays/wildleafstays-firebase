@@ -68,6 +68,19 @@ export interface CreateRoomCategoryInput {
   extraBedAllowed: boolean;
   defaultViewLabel: string | null;
   sortOrder: number;
+  roomCount?: number;
+  units?: RoomCategoryUnitInput[];
+}
+
+export interface RoomCategoryUnitInput {
+  displayName: string | null;
+  externalChannel: "AIRBNB" | "BOOKING_COM" | "OTHER" | null;
+  externalReference: string | null;
+}
+
+export interface UpdateRoomCategoryInput extends CreateRoomCategoryInput {
+  roomCategoryId: string;
+  expectedVersion: number;
 }
 
 export interface CreatePhysicalUnitInput {
@@ -85,5 +98,7 @@ export interface CreatePhysicalUnitInput {
   liftAccessible: boolean;
   smokingPolicy: SmokingPolicy;
   internalNotes: string | null;
+  externalChannel?: "AIRBNB" | "BOOKING_COM" | "OTHER" | null;
+  externalReference?: string | null;
   sortOrder: number;
 }

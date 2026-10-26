@@ -1,17 +1,20 @@
+import { randomUUID } from "node:crypto";
 import type { Kysely, Transaction } from "kysely";
 import type { Database, JsonObject } from "../../../infrastructure/database/types.js";
 import type { ActorContext } from "../../access/domain/actor-context.js";
 import { AuthorizationService } from "../../access/domain/authorization-service.js";
 import { Permissions } from "../../access/domain/permissions.js";
 import { AuditService } from "../../../shared/audit/audit-service.js";
-import { NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../shared/errors/app-error.js";
 import type { RequestMetadata } from "../../../shared/http/request-metadata.js";
 import { OutboxService } from "../../../shared/outbox/outbox-service.js";
 import type {
   CreateFloorInput,
   CreatePhysicalUnitInput,
   CreateRoomCategoryInput,
-  CreateStructureInput
+  CreateStructureInput,
+  RoomCategoryUnitInput,
+  UpdateRoomCategoryInput
 } from "../domain/property-setup.js";
 import {
   PropertySetupRepository,
@@ -262,10 +265,137 @@ export class PropertySetupService {
     actor: ActorContext,
     input: CreateRoomCategoryInput,
     request: RequestMetadata
-  ): Promise<{ roomCategory: RoomCategoryView }> {
+  ): Promise<{ roomCategory: RoomCategoryView; physicalUnits?: PhysicalUnitView[] }> {
     this.assertManage(actor, input.organizationId, input.propertyId);
     await this.assertEditable(trx, input.organizationId, input.propertyId);
+    this.validateRoomCategory(input);
 
+    const roomCategory = await this.repository.createRoomCategory(trx, input);
+    const view = presentRoomCategory(roomCategory);
+    const physicalUnits =
+      input.roomCount === undefined
+        ? undefined
+        : await this.reconcileRoomCategoryUnits(
+            trx,
+            input,
+            roomCategory.id,
+            input.roomCount,
+            input.units ?? []
+          );
+
+    await new AuditService(trx).record({
+      actor,
+      organizationId: input.organizationId,
+      propertyId: input.propertyId,
+      action: "property.room_category.created",
+      entityType: "room_category",
+      entityId: roomCategory.id,
+      before: null,
+      after: view,
+      request
+    });
+
+    await new OutboxService(trx).enqueue({
+      aggregateType: "property",
+      aggregateId: input.propertyId,
+      eventType: "property.room_category.created.v1",
+      payload: {
+        propertyId: input.propertyId,
+        roomCategoryId: roomCategory.id
+      }
+    });
+
+    return { roomCategory: view, ...(physicalUnits ? { physicalUnits } : {}) };
+  }
+
+  async updateRoomCategory(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    input: UpdateRoomCategoryInput,
+    request: RequestMetadata
+  ): Promise<{ roomCategory: RoomCategoryView; physicalUnits: PhysicalUnitView[] }> {
+    this.assertManage(actor, input.organizationId, input.propertyId);
+    await this.assertEditable(trx, input.organizationId, input.propertyId);
+    this.validateRoomCategory(input);
+
+    const before = await this.repository.findRoomCategory(
+      trx,
+      input.organizationId,
+      input.propertyId,
+      input.roomCategoryId
+    );
+    if (!before) throw new NotFoundError("Room category not found");
+    const updated = await this.repository.updateRoomCategory(trx, input);
+    if (!updated) {
+      throw new ConflictError("Room category has changed; refresh before updating", {
+        currentVersion: before.version
+      });
+    }
+    const physicalUnits = await this.reconcileRoomCategoryUnits(
+      trx,
+      input,
+      input.roomCategoryId,
+      input.roomCount ?? 1,
+      input.units ?? []
+    );
+    const view = presentRoomCategory(updated);
+    await new AuditService(trx).record({
+      actor,
+      organizationId: input.organizationId,
+      propertyId: input.propertyId,
+      action: "property.room_category.updated",
+      entityType: "room_category",
+      entityId: updated.id,
+      before: presentRoomCategory(before),
+      after: { ...view, roomCount: physicalUnits.length },
+      request
+    });
+    return { roomCategory: view, physicalUnits };
+  }
+
+  async archiveRoomCategory(
+    trx: Transaction<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string,
+    request: RequestMetadata
+  ): Promise<{ roomCategory: RoomCategoryView }> {
+    this.assertManage(actor, organizationId, propertyId);
+    await this.assertEditable(trx, organizationId, propertyId);
+    const before = await this.repository.findRoomCategory(
+      trx,
+      organizationId,
+      propertyId,
+      roomCategoryId
+    );
+    if (!before) throw new NotFoundError("Room category not found");
+    if (await this.repository.hasConfirmedFutureAllocation(trx, propertyId, roomCategoryId)) {
+      throw new ConflictError("This category has a confirmed future booking and cannot be deleted");
+    }
+    const archived = await this.repository.retireRoomCategory(
+      trx,
+      organizationId,
+      propertyId,
+      roomCategoryId
+    );
+    if (!archived) throw new NotFoundError("Room category not found");
+    const view = presentRoomCategory(archived);
+    await new AuditService(trx).record({
+      actor,
+      organizationId,
+      propertyId,
+      action: "property.room_category.archived",
+      entityType: "room_category",
+      entityId: roomCategoryId,
+      before: presentRoomCategory(before),
+      after: view,
+      request
+    });
+    return { roomCategory: view };
+  }
+
+  private validateRoomCategory(input: CreateRoomCategoryInput): void {
     if (input.baseOccupancy > input.maxOccupancy) {
       throw new ValidationError("Base occupancy cannot exceed maximum occupancy");
     }
@@ -292,33 +422,82 @@ export class PropertySetupService {
     ) {
       throw new ValidationError("Base children cannot exceed maximum children");
     }
-
-    const roomCategory = await this.repository.createRoomCategory(trx, input);
-    const view = presentRoomCategory(roomCategory);
-
-    await new AuditService(trx).record({
-      actor,
-      organizationId: input.organizationId,
-      propertyId: input.propertyId,
-      action: "property.room_category.created",
-      entityType: "room_category",
-      entityId: roomCategory.id,
-      before: null,
-      after: view,
-      request
-    });
-
-    await new OutboxService(trx).enqueue({
-      aggregateType: "property",
-      aggregateId: input.propertyId,
-      eventType: "property.room_category.created.v1",
-      payload: {
-        propertyId: input.propertyId,
-        roomCategoryId: roomCategory.id
+    if (
+      input.roomCount !== undefined &&
+      (!Number.isInteger(input.roomCount) || input.roomCount < 1 || input.roomCount > 1000)
+    ) {
+      throw new ValidationError("Room count must be between 1 and 1000");
+    }
+    if ((input.units?.length ?? 0) > (input.roomCount ?? 0)) {
+      throw new ValidationError("Room identity rows cannot exceed the room count");
+    }
+    for (const unit of input.units ?? []) {
+      if (Boolean(unit.externalChannel) !== Boolean(unit.externalReference)) {
+        throw new ValidationError("A channel and remote reference must be supplied together");
       }
-    });
+    }
+  }
 
-    return { roomCategory: view };
+  private async reconcileRoomCategoryUnits(
+    trx: Transaction<Database>,
+    input: Pick<
+      CreateRoomCategoryInput,
+      "organizationId" | "propertyId" | "code" | "defaultViewLabel"
+    >,
+    roomCategoryId: string,
+    roomCount: number,
+    identities: RoomCategoryUnitInput[]
+  ): Promise<PhysicalUnitView[]> {
+    const existing = await this.repository.listActivePhysicalUnitsForCategory(
+      trx,
+      input.organizationId,
+      input.propertyId,
+      roomCategoryId
+    );
+    const reconciled: PhysicalUnitView[] = [];
+    if (
+      roomCount < existing.length &&
+      (await this.repository.hasConfirmedFutureAllocation(trx, input.propertyId, roomCategoryId))
+    ) {
+      throw new ConflictError(
+        "Room count cannot be reduced while this category has a confirmed future booking"
+      );
+    }
+    for (let index = 0; index < roomCount; index += 1) {
+      const identity = identities[index];
+      const current = existing[index];
+      if (current) {
+        const updated = identity
+          ? await this.repository.updatePhysicalUnitIdentity(trx, current.id, identity)
+          : current;
+        reconciled.push(presentPhysicalUnit(updated));
+        continue;
+      }
+      const created = await this.repository.createPhysicalUnit(trx, {
+        organizationId: input.organizationId,
+        propertyId: input.propertyId,
+        roomCategoryId,
+        structureId: null,
+        floorId: null,
+        unitCode: `${input.code}-${randomUUID().slice(0, 8)}`.toUpperCase(),
+        displayName: identity?.displayName ?? null,
+        hasView: Boolean(input.defaultViewLabel),
+        viewLabel: input.defaultViewLabel,
+        wheelchairAccessible: false,
+        stepFreeAccessible: false,
+        liftAccessible: false,
+        smokingPolicy: "NON_SMOKING",
+        internalNotes: null,
+        externalChannel: identity?.externalChannel ?? null,
+        externalReference: identity?.externalReference ?? null,
+        sortOrder: index
+      });
+      reconciled.push(presentPhysicalUnit(created));
+    }
+    for (const unit of existing.slice(roomCount)) {
+      await this.repository.retirePhysicalUnit(trx, unit.id);
+    }
+    return reconciled;
   }
 
   async createPhysicalUnit(
@@ -335,6 +514,9 @@ export class PropertySetupService {
     }
     if (!input.hasView && input.viewLabel) {
       throw new ValidationError("View label requires hasView=true");
+    }
+    if (Boolean(input.externalChannel) !== Boolean(input.externalReference)) {
+      throw new ValidationError("A channel and remote reference must be supplied together");
     }
 
     const category = await this.repository.findRoomCategory(
@@ -623,6 +805,35 @@ export class PropertySetupService {
     });
 
     return { media: afterView };
+  }
+
+  async getRoomCategoryMediaStorageKey(
+    db: Kysely<Database>,
+    actor: ActorContext,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string,
+    mediaId: string
+  ): Promise<string> {
+    this.authorization.assert(actor, Permissions.PROPERTY_READ, {
+      kind: "property",
+      organizationId,
+      propertyId
+    });
+
+    const media = await this.repository.findRoomCategoryMedia(
+      db,
+      organizationId,
+      propertyId,
+      roomCategoryId,
+      mediaId
+    );
+
+    if (!media) {
+      throw new NotFoundError("Room category image not found");
+    }
+
+    return media.storage_key;
   }
 
   async replaceRoomCategoryAmenities(

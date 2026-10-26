@@ -454,6 +454,8 @@ export class RateService {
       propertyId: string;
       roomCategoryId: string;
       baseRateMinor: number;
+      extraAdultMinor?: number | null;
+      extraChildMinor?: number | null;
       expectedVersion: number | null;
     },
     request: RequestMetadata
@@ -467,10 +469,14 @@ export class RateService {
     );
 
     money(input.baseRateMinor, "baseRateMinor");
+    const requestedExtraAdultMinor = input.extraAdultMinor ?? null;
+    const requestedExtraChildMinor = input.extraChildMinor ?? null;
+    if (requestedExtraAdultMinor !== null) money(requestedExtraAdultMinor, "extraAdultMinor");
+    if (requestedExtraChildMinor !== null) money(requestedExtraChildMinor, "extraChildMinor");
 
     await this.rates.lockOwnerRateSetup(trx, input.propertyId);
 
-    const category = await this.rates.findRoomCategory(
+    let category = await this.rates.findRoomCategory(
       trx,
       input.organizationId,
       input.propertyId,
@@ -479,6 +485,24 @@ export class RateService {
 
     if (!category || category.status !== "ACTIVE") {
       throw new NotFoundError("Active room category not found");
+    }
+
+    if (requestedExtraAdultMinor !== null || requestedExtraChildMinor !== null) {
+      await this.rates.updateRoomCategoryPricingDefaults(
+        trx,
+        input.organizationId,
+        input.propertyId,
+        input.roomCategoryId,
+        requestedExtraAdultMinor ?? category.default_extra_adult_minor ?? 0,
+        requestedExtraChildMinor ?? category.default_extra_child_minor ?? 0
+      );
+      category = await this.rates.findRoomCategory(
+        trx,
+        input.organizationId,
+        input.propertyId,
+        input.roomCategoryId
+      );
+      if (!category) throw new NotFoundError("Active room category not found");
     }
 
     if (

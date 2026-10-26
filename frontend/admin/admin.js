@@ -79,6 +79,7 @@ const authView = byId("authView");
 const portal = byId("portal");
 const portalMessage = byId("portalMessage");
 const sessionLoading = byId("sessionLoading");
+let portalMessageTimer = null;
 
 class StaleSessionError extends Error {
   constructor() {
@@ -460,8 +461,10 @@ async function managedUpload(path, file, operation) {
 }
 
 async function optimizeRoomPhoto(file) {
-  if (!["image/jpeg", "image/png"].includes(file.type)) {
-    throw new Error(`"${file.name}" must be a JPG or PNG image.`);
+  if (
+    !["image/jpeg", "image/png", "image/webp", "image/avif"].includes(file.type)
+  ) {
+    throw new Error(`"${file.name}" must be a JPG, PNG, WebP or AVIF image.`);
   }
 
   const bitmap = await createImageBitmap(file);
@@ -672,7 +675,7 @@ function setupPropertyEditorWorkspace() {
     textElement(
       "p",
       "muted",
-      "Review the room types already available to guests, or add another category.",
+      "Create each sellable category once, set its room count, shared facilities and optional channel identities.",
     ),
   );
   categories.content.append(
@@ -736,7 +739,6 @@ function setupPropertyEditorWorkspace() {
   accordion.append(
     profile.details,
     categories.details,
-    rooms.details,
     policies.details,
     commercial.details,
     amenities.details,
@@ -1058,12 +1060,19 @@ function updateEditorWorkspaceProgress(onboarding) {
 }
 
 function showMessage(message, error = false) {
+  if (portalMessageTimer) window.clearTimeout(portalMessageTimer);
   portalMessage.textContent = message;
   portalMessage.classList.remove("hidden");
   portalMessage.classList.toggle("error", error);
+  portalMessage.setAttribute("aria-live", error ? "assertive" : "polite");
+  if (!error) {
+    portalMessageTimer = window.setTimeout(() => clearMessage(), 6000);
+  }
 }
 
 function clearMessage() {
+  if (portalMessageTimer) window.clearTimeout(portalMessageTimer);
+  portalMessageTimer = null;
   portalMessage.textContent = "";
   portalMessage.classList.add("hidden");
   portalMessage.classList.remove("error");
@@ -1156,7 +1165,8 @@ auth.onAuthStateChanged(async (user) => {
     await loadSession();
     assertCurrentAuthContext({ user, uid: user.uid, generation });
     const firstScreen = availableScreens(state.session)[0];
-    if (!firstScreen) throw new Error("No portal workspace is available for this account.");
+    if (!firstScreen)
+      throw new Error("No portal workspace is available for this account.");
     await showScreen(firstScreen);
     assertCurrentAuthContext({ user, uid: user.uid, generation });
     sessionLoading.classList.add("hidden");
@@ -1246,7 +1256,9 @@ async function showScreen(name) {
     back?.setAttribute("aria-label", "Back to Wildleaf Command Center");
   }
   document.querySelectorAll("[data-command-target]").forEach((button) => {
-    button.hidden = !availableScreens(state.session).includes(button.dataset.commandTarget);
+    button.hidden = !availableScreens(state.session).includes(
+      button.dataset.commandTarget,
+    );
   });
 
   if (name === "dashboard") await loadDashboard();
@@ -1505,7 +1517,8 @@ function renderPropertyPortfolioSummary() {
     review: state.properties.filter((property) =>
       ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(property.status),
     ).length,
-    live: state.properties.filter((property) => property.status === "LIVE").length,
+    live: state.properties.filter((property) => property.status === "LIVE")
+      .length,
   };
   summary.replaceChildren();
   for (const [key, label] of [
@@ -2678,12 +2691,12 @@ function physicalUnitPhotoManager(unit, editable) {
     form.className = "physical-room-photo-form";
     form.innerHTML = `
       <label>Add photos
-        <input name="photos" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple required />
+        <input name="photos" type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple required />
       </label>
       <label>Description <input name="altText" maxlength="500" placeholder="Optional" /></label>
       <label>Caption <input name="caption" maxlength="1000" placeholder="Optional" /></label>
       <button type="submit">Upload selected photos</button>
-      <small>JPG/PNG images are optimized before upload.</small>
+      <small>JPG, PNG, WebP and AVIF images are resized and optimized before upload.</small>
     `;
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -2847,11 +2860,36 @@ function renderAccommodation(editable) {
 
   for (const category of categories) {
     const categoryUnits = units.filter(
-      (unit) => unit.roomCategoryId === category.id,
+      (unit) => unit.roomCategoryId === category.id && unit.status === "ACTIVE",
     );
+    const amenityCount = (state.layout?.roomCategoryAmenities || []).filter(
+      (item) => item.roomCategoryId === category.id,
+    ).length;
+    const categoryPhotos = (state.layout?.roomCategoryMedia || []).filter(
+      (item) => item.roomCategoryId === category.id,
+    );
+    const photoCount = categoryPhotos.length;
 
     const row = document.createElement("div");
     row.className = "category-summary-card";
+
+    const visual = document.createElement("div");
+    visual.className = "category-summary-visual";
+    visual.append(
+      textElement(
+        "span",
+        "category-summary-initial",
+        category.name.slice(0, 1).toUpperCase(),
+      ),
+      textElement(
+        "small",
+        "",
+        `${photoCount} photo${photoCount === 1 ? "" : "s"}`,
+      ),
+    );
+    if (categoryPhotos[0]) {
+      void loadRoomCategoryCardPhoto(visual, category.id, categoryPhotos[0].id);
+    }
 
     const copy = document.createElement("div");
     copy.className = "category-summary-copy";
@@ -2869,13 +2907,6 @@ function renderAccommodation(editable) {
 
     const metrics = document.createElement("div");
     metrics.className = "category-summary-metrics";
-    const amenityCount = (state.layout?.roomCategoryAmenities || []).filter(
-      (item) => item.roomCategoryId === category.id,
-    ).length;
-    const photoCount = (state.layout?.roomCategoryMedia || []).filter(
-      (item) => item.roomCategoryId === category.id,
-    ).length;
-
     for (const metric of [
       `Up to ${category.maxOccupancy} guests`,
       `${categoryUnits.length} room${categoryUnits.length === 1 ? "" : "s"}`,
@@ -2891,6 +2922,7 @@ function renderAccommodation(editable) {
     actions.className = "category-summary-actions";
     if (editable) {
       actions.append(
+        button("Edit", () => editRoomCategory(category.id), "button-secondary"),
         button(
           "Manage photos",
           () => {
@@ -2901,10 +2933,15 @@ function renderAccommodation(editable) {
           },
           "button-secondary",
         ),
+        button(
+          "Delete",
+          () => archiveRoomCategory(category.id, category.name),
+          "danger-button",
+        ),
       );
     }
 
-    row.append(copy, actions);
+    row.append(visual, copy, actions);
     list.append(row);
   }
 
@@ -2960,6 +2997,19 @@ function renderAccommodation(editable) {
       physicalUnitPhotoManager(unit, editable),
     );
     physicalRoomList.append(roomCard);
+  }
+}
+
+async function loadRoomCategoryCardPhoto(visual, roomCategoryId, mediaId) {
+  try {
+    const preview = await api(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories/${roomCategoryId}/media/${mediaId}/read-url`,
+    );
+    if (!preview?.url || !visual.isConnected) return;
+    visual.classList.add("has-photo");
+    visual.style.backgroundImage = `linear-gradient(180deg, rgba(7, 34, 28, 0.02), rgba(7, 34, 28, 0.72)), url(${JSON.stringify(preview.url)})`;
+  } catch {
+    // The branded placeholder remains if a private preview cannot be loaded.
   }
 }
 
@@ -3474,6 +3524,158 @@ byId("amenitiesForm").addEventListener("submit", (event) => {
   });
 });
 
+function renderRoomIdentityRows(units = []) {
+  const form = byId("roomCategoryForm");
+  const count = Math.max(
+    1,
+    Math.min(1000, Number(form.elements.roomCount.value) || 1),
+  );
+  const list = byId("roomIdentityList");
+  const current = Array.from(list.querySelectorAll(".room-identity-row")).map(
+    (row) => ({
+      displayName: row.querySelector('[data-room-field="name"]')?.value || "",
+      externalChannel:
+        row.querySelector('[data-room-field="channel"]')?.value || "",
+      externalReference:
+        row.querySelector('[data-room-field="reference"]')?.value || "",
+    }),
+  );
+  const source = units.length ? units : current;
+  list.replaceChildren();
+  for (let index = 0; index < count; index += 1) {
+    const identity = source[index] || {};
+    const row = document.createElement("div");
+    row.className = "room-identity-row";
+    row.innerHTML = `
+      <span class="room-identity-number">${index + 1}</span>
+      <label>Room name / number<input data-room-field="name" maxlength="150" placeholder="Optional · M ${String(index + 101)}" /></label>
+      <label>Channel<select data-room-field="channel"><option value="">Not connected</option><option value="AIRBNB">Airbnb</option><option value="BOOKING_COM">Booking.com</option><option value="OTHER">Other</option></select></label>
+      <label>Remote ID / address<input data-room-field="reference" maxlength="500" placeholder="Optional channel identifier" /></label>
+    `;
+    row.querySelector('[data-room-field="name"]').value =
+      identity.displayName || "";
+    row.querySelector('[data-room-field="channel"]').value =
+      identity.externalChannel || "";
+    row.querySelector('[data-room-field="reference"]').value =
+      identity.externalReference || "";
+    list.append(row);
+  }
+}
+
+function roomCategoryUnitPayload() {
+  return Array.from(
+    byId("roomIdentityList").querySelectorAll(".room-identity-row"),
+  ).map((row) => {
+    const displayName = row
+      .querySelector('[data-room-field="name"]')
+      .value.trim();
+    const externalChannel = row.querySelector(
+      '[data-room-field="channel"]',
+    ).value;
+    const externalReference = row
+      .querySelector('[data-room-field="reference"]')
+      .value.trim();
+    if (Boolean(externalChannel) !== Boolean(externalReference)) {
+      throw new Error(
+        "Choose both a channel and its remote ID/address, or leave both empty.",
+      );
+    }
+    return {
+      ...(displayName ? { displayName } : {}),
+      ...(externalChannel ? { externalChannel, externalReference } : {}),
+    };
+  });
+}
+
+function resetRoomCategoryEditor() {
+  const form = byId("roomCategoryForm");
+  form.reset();
+  form.elements.roomCategoryId.value = "";
+  form.elements.expectedVersion.value = "";
+  form.elements.roomCount.value = "1";
+  byId("roomCategorySaveButton").textContent = "Add room category";
+  byId("roomCategoryCancelButton").classList.add("hidden");
+  form.querySelectorAll('input[name="roomAmenity"]').forEach((input) => {
+    input.checked = false;
+  });
+  renderRoomIdentityRows();
+}
+
+function editRoomCategory(categoryId) {
+  const category = (state.layout?.roomCategories || []).find(
+    (item) => item.id === categoryId,
+  );
+  if (!category) throw new Error("Room category is no longer available.");
+  const form = byId("roomCategoryForm");
+  const units = (state.layout?.physicalUnits || []).filter(
+    (unit) => unit.roomCategoryId === categoryId && unit.status === "ACTIVE",
+  );
+  form.elements.roomCategoryId.value = category.id;
+  form.elements.expectedVersion.value = String(category.version);
+  form.elements.name.value = category.name;
+  form.elements.accommodationType.value = category.accommodationType;
+  form.elements.roomCount.value = String(Math.max(1, units.length));
+  form.elements.sizeSqm.value = category.sizeSqm ?? "";
+  form.elements.description.value = category.description || "";
+  form.elements.baseAdults.value =
+    category.baseAdults ?? category.baseOccupancy;
+  form.elements.baseChildren.value = category.baseChildren ?? 0;
+  form.elements.defaultExtraAdult.value = (
+    (category.defaultExtraAdultMinor ?? 0) / 100
+  ).toFixed(2);
+  form.elements.defaultExtraChild.value = (
+    (category.defaultExtraChildMinor ?? 0) / 100
+  ).toFixed(2);
+  form.elements.maxAdults.value = category.maxAdults;
+  form.elements.maxChildren.value = category.maxChildren;
+  form.elements.maxOccupancy.value = category.maxOccupancy;
+  form.elements.bedConfiguration.value = category.bedConfiguration || "";
+  form.elements.defaultViewLabel.value = category.defaultViewLabel || "";
+  form.elements.extraBedAllowed.checked = category.extraBedAllowed;
+  const amenityCodes = new Set(
+    (state.layout?.roomCategoryAmenities || [])
+      .filter((item) => item.roomCategoryId === categoryId)
+      .map((item) => item.amenityCode),
+  );
+  form.querySelectorAll('input[name="roomAmenity"]').forEach((input) => {
+    input.checked = amenityCodes.has(input.value);
+  });
+  renderRoomIdentityRows(units);
+  byId("roomCategorySaveButton").textContent = "Save category changes";
+  byId("roomCategoryCancelButton").classList.remove("hidden");
+  const panel = byId("roomCategoryCreatePanel");
+  panel.open = true;
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function archiveRoomCategory(categoryId, categoryName) {
+  if (
+    !window.confirm(
+      `Remove "${categoryName}" from future sale? Existing booking history is preserved.`,
+    )
+  )
+    return;
+  await api(
+    `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories/${categoryId}`,
+    {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey("room-category-archive"),
+    },
+  );
+  await refreshEditorData();
+  resetRoomCategoryEditor();
+  showMessage(`Room category "${categoryName}" removed from future inventory.`);
+}
+
+byId("roomCategoryForm").elements.roomCount.addEventListener("input", () =>
+  renderRoomIdentityRows(),
+);
+byId("roomCategoryCancelButton").addEventListener(
+  "click",
+  resetRoomCategoryEditor,
+);
+renderRoomIdentityRows();
+
 byId("roomCategoryForm").addEventListener("submit", (event) => {
   event.preventDefault();
   run(async () => {
@@ -3494,6 +3696,8 @@ byId("roomCategoryForm").addEventListener("submit", (event) => {
     const maxAdults = Number(values.maxAdults);
     const maxChildren = Number(values.maxChildren);
     const maxOccupancy = Number(values.maxOccupancy);
+    const roomCount = Number(values.roomCount);
+    const editingId = values.roomCategoryId;
 
     const defaultExtraAdultMinor = rupeesToMinor(values.defaultExtraAdult);
     const defaultExtraChildMinor = rupeesToMinor(values.defaultExtraChild);
@@ -3547,35 +3751,46 @@ byId("roomCategoryForm").addEventListener("submit", (event) => {
     const selectedAmenityCodes = Array.from(
       form.querySelectorAll('input[name="roomAmenity"]:checked'),
     ).map((input) => input.value);
+    if (!Number.isInteger(roomCount) || roomCount < 1 || roomCount > 1000) {
+      throw new Error(
+        "Number of rooms must be a whole number between 1 and 1000.",
+      );
+    }
+    const units = roomCategoryUnitPayload();
+
+    const payload = {
+      code,
+      name,
+      accommodationType: values.accommodationType,
+      ...(values.description.trim()
+        ? { description: values.description.trim() }
+        : {}),
+      baseOccupancy: baseAdults + baseChildren,
+      baseAdults,
+      baseChildren,
+      maxAdults,
+      maxChildren,
+      maxOccupancy,
+      defaultExtraAdultMinor,
+      defaultExtraChildMinor,
+      ...(values.sizeSqm ? { sizeSqm: Number(values.sizeSqm) } : {}),
+      ...(values.bedConfiguration.trim()
+        ? { bedConfiguration: values.bedConfiguration.trim() }
+        : {}),
+      extraBedAllowed: values.extraBedAllowed === "on",
+      ...(values.defaultViewLabel
+        ? { defaultViewLabel: values.defaultViewLabel }
+        : {}),
+      roomCount,
+      units,
+      ...(editingId ? { expectedVersion: Number(values.expectedVersion) } : {}),
+    };
 
     const result = await idempotent(
-      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories`,
-      "POST",
-      "room-category-create",
-      {
-        code,
-        name,
-        accommodationType: values.accommodationType,
-        ...(values.description.trim()
-          ? { description: values.description.trim() }
-          : {}),
-        baseOccupancy: baseAdults + baseChildren,
-        baseAdults,
-        baseChildren,
-        maxAdults,
-        maxChildren,
-        maxOccupancy,
-        defaultExtraAdultMinor,
-        defaultExtraChildMinor,
-        ...(values.sizeSqm ? { sizeSqm: Number(values.sizeSqm) } : {}),
-        ...(values.bedConfiguration.trim()
-          ? { bedConfiguration: values.bedConfiguration.trim() }
-          : {}),
-        extraBedAllowed: values.extraBedAllowed === "on",
-        ...(values.defaultViewLabel
-          ? { defaultViewLabel: values.defaultViewLabel }
-          : {}),
-      },
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories${editingId ? `/${editingId}` : ""}`,
+      editingId ? "PUT" : "POST",
+      editingId ? "room-category-update" : "room-category-create",
+      payload,
     );
 
     const roomCategoryId = result?.roomCategory?.id;
@@ -3586,22 +3801,19 @@ byId("roomCategoryForm").addEventListener("submit", (event) => {
       );
     }
 
-    if (selectedAmenityCodes.length) {
-      await idempotent(
-        `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories/${roomCategoryId}/amenities`,
-        "PUT",
-        "room-category-amenities-save",
-        { amenityCodes: selectedAmenityCodes },
-      );
-    }
-
-    form.reset();
+    await idempotent(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories/${roomCategoryId}/amenities`,
+      "PUT",
+      "room-category-amenities-save",
+      { amenityCodes: selectedAmenityCodes },
+    );
 
     await refreshEditorData();
-
+    resetRoomCategoryEditor();
     byId("roomCategoryImageCategory").value = roomCategoryId;
-
-    showMessage(`Room category "${name}" added.`);
+    showMessage(
+      `Room category "${name}" ${editingId ? "updated" : "added"} with ${roomCount} room${roomCount === 1 ? "" : "s"}.`,
+    );
   });
 });
 
@@ -3615,18 +3827,14 @@ byId("roomCategoryImageUploadForm").addEventListener("submit", (event) => {
 
     const roomCategoryId = values.roomCategoryId;
 
-    const file = form.elements.file.files[0];
+    const files = Array.from(form.elements.file.files || []);
 
     if (!roomCategoryId) {
       throw new Error("Choose a room category first.");
     }
 
-    if (!file) {
-      throw new Error("Choose a room category photo.");
-    }
-
-    if (file.size > 8 * 1024 * 1024) {
-      throw new Error("Room category photos must be 8 MB or smaller.");
+    if (!files.length) {
+      throw new Error("Choose one or more room category photos.");
     }
 
     const category = (state.layout?.roomCategories || []).find(
@@ -3651,11 +3859,21 @@ byId("roomCategoryImageUploadForm").addEventListener("submit", (event) => {
 
     const queryString = query.toString();
 
-    await managedUpload(
-      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories/${roomCategoryId}/uploads/images${queryString ? `?${queryString}` : ""}`,
-      file,
-      "room-category-image-upload",
-    );
+    for (const [index, original] of files.entries()) {
+      const file = await optimizeRoomPhoto(original);
+      if (file.size > 8 * 1024 * 1024) {
+        throw new Error(
+          `"${original.name}" remains larger than 8 MB after optimization.`,
+        );
+      }
+      const perPhotoQuery = new URLSearchParams(query);
+      perPhotoQuery.set("sortOrder", String(index));
+      await managedUpload(
+        `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/room-categories/${roomCategoryId}/uploads/images?${perPhotoQuery.toString() || queryString}`,
+        file,
+        `room-category-image-upload-${index}`,
+      );
+    }
 
     form.reset();
 
@@ -3663,7 +3881,9 @@ byId("roomCategoryImageUploadForm").addEventListener("submit", (event) => {
 
     byId("roomCategoryImageCategory").value = roomCategoryId;
 
-    showMessage(`Photo uploaded for "${category?.name || "room category"}".`);
+    showMessage(
+      `${files.length} optimized photo${files.length === 1 ? "" : "s"} uploaded for "${category?.name || "room category"}".`,
+    );
   });
 });
 
@@ -4704,6 +4924,12 @@ async function configureOwnerCategoryBaseRate(categoryId, explicitRate = null) {
   const input = byId("calendarGrid").querySelector(
     `input[data-owner-base-rate="${categoryId}"]`,
   );
+  const extraAdultInput = byId("calendarGrid").querySelector(
+    `input[data-owner-extra-adult="${categoryId}"]`,
+  );
+  const extraChildInput = byId("calendarGrid").querySelector(
+    `input[data-owner-extra-child="${categoryId}"]`,
+  );
   const rateValue = explicitRate ?? input?.value;
 
   if (rateValue === undefined || rateValue === null) {
@@ -4717,9 +4943,17 @@ async function configureOwnerCategoryBaseRate(categoryId, explicitRate = null) {
   }
 
   const baseRateMinor = rupeesToMinor(rateValue);
+  const extraAdultMinor = rupeesToMinor(extraAdultInput?.value ?? "0");
+  const extraChildMinor = rupeesToMinor(extraChildInput?.value ?? "0");
 
-  if (!Number.isSafeInteger(baseRateMinor) || baseRateMinor < 0) {
-    throw new Error("Base rate must be a valid non-negative amount.");
+  if (
+    [baseRateMinor, extraAdultMinor, extraChildMinor].some(
+      (amount) => !Number.isSafeInteger(amount) || amount < 0,
+    )
+  ) {
+    throw new Error(
+      "Base, extra adult and extra kid rates must be valid non-negative amounts.",
+    );
   }
 
   const calendar = state.ownerRateCalendars[categoryId]?.calendar || null;
@@ -4732,6 +4966,8 @@ async function configureOwnerCategoryBaseRate(categoryId, explicitRate = null) {
     propertyId,
     categoryId,
     baseRateMinor,
+    extraAdultMinor,
+    extraChildMinor,
     expectedVersion ?? "new",
   ].join(":");
 
@@ -4747,6 +4983,8 @@ async function configureOwnerCategoryBaseRate(categoryId, explicitRate = null) {
       method: "PUT",
       body: {
         baseRateMinor,
+        extraAdultMinor,
+        extraChildMinor,
         expectedVersion,
       },
       idempotencyKey: key,
@@ -5192,15 +5430,11 @@ function renderOperationsCalendar() {
   syncOwnerRateBulkForm(categories, dates);
 
   const missingRateCount = categories.filter(
-    (category) =>
-      state.ownerRateCalendars[category.id]?.status === "MISSING",
+    (category) => state.ownerRateCalendars[category.id]?.status === "MISSING",
   ).length;
   const calendarContext = byId("calendarContext");
 
-  calendarContext.classList.toggle(
-    "owner-rate-warning",
-    missingRateCount > 0,
-  );
+  calendarContext.classList.toggle("owner-rate-warning", missingRateCount > 0);
   calendarContext.textContent = missingRateCount
     ? `Action required: Set a base EP rate for ${missingRateCount} room ${
         missingRateCount === 1 ? "category" : "categories"
@@ -5297,6 +5531,40 @@ function renderOperationsCalendar() {
         rateInput.value = (calendar.rateProduct.baseRateMinor / 100).toFixed(2);
       }
 
+      const extraAdultInput = document.createElement("input");
+      extraAdultInput.type = "number";
+      extraAdultInput.min = "0";
+      extraAdultInput.step = "0.01";
+      extraAdultInput.placeholder = "Extra adult";
+      extraAdultInput.title = "Default extra adult rate";
+      extraAdultInput.dataset.ownerExtraAdult = category.id;
+      extraAdultInput.value = (
+        (category.defaultExtraAdultMinor ?? 0) / 100
+      ).toFixed(2);
+
+      const extraChildInput = document.createElement("input");
+      extraChildInput.type = "number";
+      extraChildInput.min = "0";
+      extraChildInput.step = "0.01";
+      extraChildInput.placeholder = "Extra kid";
+      extraChildInput.title = "Default extra kid rate";
+      extraChildInput.dataset.ownerExtraChild = category.id;
+      extraChildInput.value = (
+        (category.defaultExtraChildMinor ?? 0) / 100
+      ).toFixed(2);
+
+      const rateFields = document.createElement("div");
+      rateFields.className = "owner-base-rate-fields";
+      for (const [label, control] of [
+        ["Room base", rateInput],
+        ["Extra adult", extraAdultInput],
+        ["Extra kid", extraChildInput],
+      ]) {
+        const wrapper = document.createElement("label");
+        wrapper.append(textElement("span", "", label), control);
+        rateFields.append(wrapper);
+      }
+
       const setupButton = textElement(
         "button",
         "button-secondary owner-base-rate-button",
@@ -5312,7 +5580,7 @@ function renderOperationsCalendar() {
         run(() => configureOwnerCategoryBaseRate(category.id)),
       );
 
-      setupBox.append(rateInput, setupButton);
+      setupBox.append(rateFields, setupButton);
 
       categoryCell.append(setupBox);
     }
@@ -5534,10 +5802,7 @@ function renderOperationsCalendar() {
         display.type = "button";
         display.className = "owner-rate-display";
         display.textContent = input.value;
-        display.classList.toggle(
-          "owner-rate-inherited",
-          day.source === "BASE",
-        );
+        display.classList.toggle("owner-rate-inherited", day.source === "BASE");
         display.title =
           day.source === "BASE"
             ? "Using the base rate. Click to override this date only."
@@ -6644,7 +6909,12 @@ function renderPropertyTaxonomyManager() {
     });
 
     card.append(status, form);
-    taxonomyEditorDisclosure(`Category ${index + 1}: ${category.name}`, category.enabled ? "Active" : "Disabled", card, categoryList);
+    taxonomyEditorDisclosure(
+      `Category ${index + 1}: ${category.name}`,
+      category.enabled ? "Active" : "Disabled",
+      card,
+      categoryList,
+    );
   }
 
   const typeList = byId("propertyTypeAdminList");
@@ -6695,7 +6965,12 @@ function renderPropertyTaxonomyManager() {
     });
 
     card.append(heading, form);
-    taxonomyEditorDisclosure(`Type ${index + 1}: ${propertyType.name}`, `Under ${parent?.name || "Unknown category"} · ${propertyType.enabled ? "Active" : "Disabled"}`, card, typeList);
+    taxonomyEditorDisclosure(
+      `Type ${index + 1}: ${propertyType.name}`,
+      `Under ${parent?.name || "Unknown category"} · ${propertyType.enabled ? "Active" : "Disabled"}`,
+      card,
+      typeList,
+    );
   }
 }
 

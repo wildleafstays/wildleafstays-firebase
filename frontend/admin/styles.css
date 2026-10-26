@@ -727,12 +727,48 @@ button:disabled {
   min-width: 0;
   padding: 1rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
   gap: 1rem;
   align-items: center;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 0.65rem;
+}
+.category-summary-visual {
+  min-height: 96px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #fff;
+  background:
+    radial-gradient(
+      circle at 80% 15%,
+      rgba(240, 180, 84, 0.75),
+      transparent 38%
+    ),
+    linear-gradient(145deg, #0c5d49, #10372e);
+  border-radius: 0.55rem;
+  background-position: center;
+  background-size: cover;
+}
+.category-summary-visual.has-photo .category-summary-initial {
+  opacity: 0;
+}
+.category-summary-visual.has-photo small {
+  width: fit-content;
+  padding: 0.2rem 0.38rem;
+  background: rgba(7, 34, 28, 0.72);
+  border-radius: 999px;
+}
+.category-summary-initial {
+  font-family: Georgia, serif;
+  font-size: 2rem;
+  line-height: 1;
+}
+.category-summary-visual small {
+  color: rgba(255, 255, 255, 0.84);
+  font-weight: 700;
 }
 .category-summary-copy {
   min-width: 0;
@@ -774,6 +810,78 @@ button:disabled {
   min-height: 2.45rem;
   padding: 0.55rem 0.75rem;
   white-space: nowrap;
+}
+.category-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+.room-identity-panel {
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: #fff;
+}
+.room-identity-panel > summary {
+  color: var(--forest);
+  cursor: pointer;
+  font-weight: 800;
+}
+.room-identity-list {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+}
+.room-identity-row {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(150px, 1fr) minmax(125px, 0.65fr) minmax(
+      180px,
+      1fr
+    );
+  gap: 0.55rem;
+  align-items: end;
+}
+.room-identity-number {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  color: var(--forest);
+  background: var(--sage);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+.owner-base-rate-setup {
+  display: grid;
+  gap: 0.5rem;
+}
+.owner-base-rate-fields {
+  display: grid;
+  gap: 0.35rem;
+}
+.owner-base-rate-fields label {
+  display: grid;
+  gap: 0.15rem;
+  color: var(--muted);
+  font-size: 0.63rem;
+}
+.owner-base-rate-fields input {
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.35rem 0.45rem;
+}
+#portalMessage:not(.hidden) {
+  position: fixed;
+  z-index: 1000;
+  top: 1rem;
+  right: 1rem;
+  width: min(420px, calc(100vw - 2rem));
+  margin: 0;
+  box-shadow: 0 14px 36px rgba(10, 50, 39, 0.18);
+  border: 1px solid rgba(29, 105, 75, 0.18);
 }
 #accommodationList {
   margin: 0;
@@ -1234,6 +1342,15 @@ button:disabled {
   }
   .category-summary-card {
     grid-template-columns: 1fr;
+  }
+  .category-summary-visual {
+    min-height: 84px;
+  }
+  .room-identity-row {
+    grid-template-columns: 2.2rem 1fr;
+  }
+  .room-identity-row label {
+    grid-column: 2;
   }
   .category-summary-actions button {
     width: 100%;

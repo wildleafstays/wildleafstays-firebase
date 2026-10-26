@@ -15,6 +15,7 @@ import type {
   CreateRoomCategoryInput,
   CreateStructureInput
 } from "../domain/property-setup.js";
+import type { UpdateRoomCategoryInput } from "../domain/property-setup.js";
 
 type DbExecutor = Kysely<Database> | Transaction<Database>;
 
@@ -112,6 +113,42 @@ export class PropertySetupRepository {
       .executeTakeFirstOrThrow();
   }
 
+  async updateRoomCategory(
+    db: DbExecutor,
+    input: UpdateRoomCategoryInput
+  ): Promise<RoomCategoryRecord | undefined> {
+    return db
+      .updateTable("room_categories")
+      .set({
+        code: input.code,
+        name: input.name,
+        accommodation_type: input.accommodationType,
+        description: input.description,
+        base_occupancy: input.baseOccupancy,
+        base_adults: input.baseAdults ?? null,
+        base_children: input.baseChildren ?? null,
+        default_extra_adult_minor: input.defaultExtraAdultMinor ?? null,
+        default_extra_child_minor: input.defaultExtraChildMinor ?? null,
+        max_adults: input.maxAdults,
+        max_children: input.maxChildren,
+        max_occupancy: input.maxOccupancy,
+        size_sqm: input.sizeSqm === null ? null : input.sizeSqm.toFixed(2),
+        bed_configuration: input.bedConfiguration,
+        extra_bed_allowed: input.extraBedAllowed,
+        default_view_label: input.defaultViewLabel,
+        sort_order: input.sortOrder,
+        version: (eb) => eb("version", "+", 1),
+        updated_at: new Date()
+      })
+      .where("organization_id", "=", input.organizationId)
+      .where("property_id", "=", input.propertyId)
+      .where("id", "=", input.roomCategoryId)
+      .where("version", "=", input.expectedVersion)
+      .where("status", "=", "ACTIVE")
+      .returningAll()
+      .executeTakeFirst();
+  }
+
   async createPhysicalUnit(
     db: DbExecutor,
     input: CreatePhysicalUnitInput
@@ -134,11 +171,87 @@ export class PropertySetupRepository {
         lift_accessible: input.liftAccessible,
         smoking_policy: input.smokingPolicy,
         internal_notes: input.internalNotes,
+        external_channel: input.externalChannel ?? null,
+        external_reference: input.externalReference ?? null,
         sort_order: input.sortOrder,
         status: "ACTIVE"
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+  }
+
+  async updatePhysicalUnitIdentity(
+    db: DbExecutor,
+    physicalUnitId: string,
+    input: {
+      displayName: string | null;
+      externalChannel: string | null;
+      externalReference: string | null;
+    }
+  ): Promise<PhysicalUnitRecord> {
+    return db
+      .updateTable("physical_units")
+      .set({
+        display_name: input.displayName,
+        external_channel: input.externalChannel,
+        external_reference: input.externalReference,
+        version: (eb) => eb("version", "+", 1),
+        updated_at: new Date()
+      })
+      .where("id", "=", physicalUnitId)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  }
+
+  async retirePhysicalUnit(db: DbExecutor, physicalUnitId: string): Promise<void> {
+    await db
+      .updateTable("physical_units")
+      .set({ status: "RETIRED", version: (eb) => eb("version", "+", 1), updated_at: new Date() })
+      .where("id", "=", physicalUnitId)
+      .executeTakeFirst();
+  }
+
+  async retireRoomCategory(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string
+  ): Promise<RoomCategoryRecord | undefined> {
+    await db
+      .updateTable("physical_units")
+      .set({ status: "RETIRED", version: (eb) => eb("version", "+", 1), updated_at: new Date() })
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("room_category_id", "=", roomCategoryId)
+      .where("status", "<>", "RETIRED")
+      .execute();
+    return db
+      .updateTable("room_categories")
+      .set({ status: "RETIRED", version: (eb) => eb("version", "+", 1), updated_at: new Date() })
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("id", "=", roomCategoryId)
+      .where("status", "=", "ACTIVE")
+      .returningAll()
+      .executeTakeFirst();
+  }
+
+  async hasConfirmedFutureAllocation(
+    db: DbExecutor,
+    propertyId: string,
+    roomCategoryId: string
+  ): Promise<boolean> {
+    const row = await db
+      .selectFrom("inventory_allocation_items as item")
+      .innerJoin("inventory_allocations as allocation", "allocation.id", "item.allocation_id")
+      .select("item.id")
+      .where("item.property_id", "=", propertyId)
+      .where("item.room_category_id", "=", roomCategoryId)
+      .where("allocation.status", "=", "CONFIRMED")
+      .where("allocation.end_date", ">", new Date().toISOString().slice(0, 10))
+      .limit(1)
+      .executeTakeFirst();
+    return Boolean(row);
   }
 
   async findStructure(
@@ -250,6 +363,24 @@ export class PropertySetupRepository {
       .where("organization_id", "=", organizationId)
       .where("property_id", "=", propertyId)
       .where("status", "<>", "RETIRED")
+      .orderBy("sort_order")
+      .orderBy("unit_code")
+      .execute();
+  }
+
+  async listActivePhysicalUnitsForCategory(
+    db: DbExecutor,
+    organizationId: string,
+    propertyId: string,
+    roomCategoryId: string
+  ): Promise<PhysicalUnitRecord[]> {
+    return db
+      .selectFrom("physical_units")
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("property_id", "=", propertyId)
+      .where("room_category_id", "=", roomCategoryId)
+      .where("status", "=", "ACTIVE")
       .orderBy("sort_order")
       .orderBy("unit_code")
       .execute();

@@ -267,6 +267,93 @@ describe("physical property structure foundation", () => {
     expect(unit.physicalUnit.displayName).toBe("Ellie's Nest");
   });
 
+  it("creates and resizes a category as one inventory unit with optional channel identities", async () => {
+    const fixture = await createPropertyFixture();
+    const service = new PropertySetupService();
+    const created = await db.transaction().execute((trx) =>
+      service.createRoomCategory(
+        trx,
+        fixture.actor,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          code: "DELUXE",
+          name: "Deluxe Room",
+          accommodationType: "ROOM",
+          description: "Shared category details",
+          baseOccupancy: 2,
+          baseAdults: 2,
+          baseChildren: 0,
+          defaultExtraAdultMinor: 100_000,
+          defaultExtraChildMinor: 80_000,
+          maxAdults: 3,
+          maxChildren: 1,
+          maxOccupancy: 3,
+          sizeSqm: 28,
+          bedConfiguration: "1 King Bed",
+          extraBedAllowed: true,
+          defaultViewLabel: "Mountain view",
+          sortOrder: 0,
+          roomCount: 3,
+          units: [
+            { displayName: "M 101", externalChannel: "AIRBNB", externalReference: "airbnb-m101" },
+            { displayName: "M 102", externalChannel: null, externalReference: null },
+            { displayName: "M 103", externalChannel: null, externalReference: null }
+          ]
+        },
+        requestMetadata()
+      )
+    );
+
+    expect(created.physicalUnits).toHaveLength(3);
+    expect(created.physicalUnits?.[0]).toMatchObject({
+      displayName: "M 101",
+      externalChannel: "AIRBNB",
+      externalReference: "airbnb-m101"
+    });
+
+    const updated = await db.transaction().execute((trx) =>
+      service.updateRoomCategory(
+        trx,
+        fixture.actor,
+        {
+          organizationId: fixture.organizationId,
+          propertyId: fixture.propertyId,
+          roomCategoryId: created.roomCategory.id,
+          code: "DELUXE",
+          name: "Deluxe Room",
+          accommodationType: "ROOM",
+          description: "Shared category details",
+          baseOccupancy: 2,
+          baseAdults: 2,
+          baseChildren: 0,
+          defaultExtraAdultMinor: 100_000,
+          defaultExtraChildMinor: 80_000,
+          maxAdults: 3,
+          maxChildren: 1,
+          maxOccupancy: 3,
+          sizeSqm: 28,
+          bedConfiguration: "1 King Bed",
+          extraBedAllowed: true,
+          defaultViewLabel: "Mountain view",
+          sortOrder: 0,
+          roomCount: 4,
+          units: [
+            { displayName: "M 101", externalChannel: "AIRBNB", externalReference: "airbnb-m101" },
+            { displayName: "M 102", externalChannel: null, externalReference: null },
+            { displayName: "M 103", externalChannel: null, externalReference: null },
+            { displayName: "M 104", externalChannel: null, externalReference: null }
+          ],
+          expectedVersion: created.roomCategory.version
+        },
+        requestMetadata()
+      )
+    );
+
+    expect(updated.physicalUnits).toHaveLength(4);
+    expect(updated.physicalUnits[3]?.displayName).toBe("M 104");
+  });
+
   it("prevents a room category from another property being attached", async () => {
     const fixtureA = await createPropertyFixture();
     const fixtureB = await createPropertyFixture();

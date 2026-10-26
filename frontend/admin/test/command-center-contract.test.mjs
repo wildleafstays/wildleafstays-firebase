@@ -8,10 +8,20 @@ test("Command Center preserves all operational controls and role boundaries", ()
   assert.match(js, /workspace\(\s*"All reservations"/);
   assert.match(js, /workspace\(\s*"Platform GST & statutory settings"/);
   assert.match(js, /if \(other !== details\) other\.open = false/);
-  assert.match(js, /availableScreens\(state\.session\)\.includes\(button\.dataset\.commandTarget\)/);
+  assert.match(
+    js,
+    /availableScreens\(state\.session\)\.includes\(\s*button\.dataset\.commandTarget/,
+  );
   assert.match(js, /platformReservationListPath\(/);
   assert.match(js, /\/v1\/platform\/reservations\/operations-summary/);
-  for (const id of ["controlCenterMetrics","controlCenterFilters","controlCenterReservationList","loadMoreControlCenterReservations","platformGstRulesCard","platformGstRuleForm"]) {
+  for (const id of [
+    "controlCenterMetrics",
+    "controlCenterFilters",
+    "controlCenterReservationList",
+    "loadMoreControlCenterReservations",
+    "platformGstRulesCard",
+    "platformGstRuleForm",
+  ]) {
     assert.ok(html.includes(`id="${id}"`), id);
   }
 });

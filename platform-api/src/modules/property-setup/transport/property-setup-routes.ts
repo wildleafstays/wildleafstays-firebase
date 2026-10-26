@@ -98,6 +98,36 @@ interface CreateRoomCategoryBody extends JsonObject {
   extraBedAllowed?: boolean;
   defaultViewLabel?: string;
   sortOrder?: number;
+  roomCount?: number;
+  units?: RoomCategoryUnitBody[];
+}
+
+interface RoomCategoryUnitBody extends JsonObject {
+  displayName?: string;
+  externalChannel?: "AIRBNB" | "BOOKING_COM" | "OTHER";
+  externalReference?: string;
+}
+
+interface UpdateRoomCategoryBody extends JsonObject {
+  code: string;
+  name: string;
+  accommodationType: AccommodationType;
+  description?: string;
+  baseAdults: number;
+  baseChildren: number;
+  defaultExtraAdultMinor: number;
+  defaultExtraChildMinor: number;
+  maxAdults: number;
+  maxChildren: number;
+  maxOccupancy: number;
+  sizeSqm?: number;
+  bedConfiguration?: string;
+  extraBedAllowed?: boolean;
+  defaultViewLabel?: string;
+  sortOrder?: number;
+  expectedVersion: number;
+  roomCount: number;
+  units?: RoomCategoryUnitBody[];
 }
 
 interface ReplaceRoomCategoryAmenitiesBody extends JsonObject {
@@ -117,6 +147,8 @@ interface CreatePhysicalUnitBody extends JsonObject {
   liftAccessible?: boolean;
   smokingPolicy?: "NON_SMOKING" | "SMOKING";
   internalNotes?: string;
+  externalChannel?: "AIRBNB" | "BOOKING_COM" | "OTHER";
+  externalReference?: string;
   sortOrder?: number;
 }
 
@@ -446,7 +478,21 @@ export async function registerPropertySetupRoutes(
             bedConfiguration: { type: "string", maxLength: 500 },
             extraBedAllowed: { type: "boolean", default: false },
             defaultViewLabel: { type: "string", maxLength: 150 },
-            sortOrder: { type: "integer", minimum: 0, default: 0 }
+            sortOrder: { type: "integer", minimum: 0, default: 0 },
+            roomCount: { type: "integer", minimum: 1, maximum: 1000 },
+            units: {
+              type: "array",
+              maxItems: 1000,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  displayName: { type: "string", maxLength: 150 },
+                  externalChannel: { type: "string", enum: ["AIRBNB", "BOOKING_COM", "OTHER"] },
+                  externalReference: { type: "string", maxLength: 500 }
+                }
+              }
+            }
           }
         }
       }
@@ -490,7 +536,17 @@ export async function registerPropertySetupRoutes(
               bedConfiguration: request.body.bedConfiguration?.trim() || null,
               extraBedAllowed: request.body.extraBedAllowed ?? false,
               defaultViewLabel: request.body.defaultViewLabel?.trim() || null,
-              sortOrder: request.body.sortOrder ?? 0
+              sortOrder: request.body.sortOrder ?? 0,
+              ...(request.body.roomCount !== undefined
+                ? {
+                    roomCount: request.body.roomCount,
+                    units: (request.body.units ?? []).map((unit) => ({
+                      displayName: unit.displayName?.trim() || null,
+                      externalChannel: unit.externalChannel ?? null,
+                      externalReference: unit.externalReference?.trim() || null
+                    }))
+                  }
+                : {})
             },
             requestMetadata(request, "partner-api")
           )
@@ -499,6 +555,175 @@ export async function registerPropertySetupRoutes(
       if (result.replayed) {
         void reply.header("idempotency-replayed", "true");
       }
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.put<{ Params: RoomCategoryParams; Body: UpdateRoomCategoryBody }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/room-categories/:roomCategoryId",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Property Setup"],
+        summary: "Update a room category and reconcile its physical room count",
+        security: [{ bearerAuth: [] }],
+        params: roomCategoryParamsSchema,
+        headers: idempotencyHeaders,
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "code",
+            "name",
+            "accommodationType",
+            "baseAdults",
+            "baseChildren",
+            "defaultExtraAdultMinor",
+            "defaultExtraChildMinor",
+            "maxAdults",
+            "maxChildren",
+            "maxOccupancy",
+            "roomCount",
+            "expectedVersion"
+          ],
+          properties: {
+            code: { type: "string", minLength: 1, maxLength: 50 },
+            name: { type: "string", minLength: 1, maxLength: 150 },
+            accommodationType: {
+              type: "string",
+              enum: [
+                "ROOM",
+                "SUITE",
+                "COTTAGE",
+                "HUT",
+                "VILLA",
+                "APARTMENT",
+                "DORM",
+                "TENT",
+                "OTHER"
+              ]
+            },
+            description: { type: "string", maxLength: 3000 },
+            baseOccupancy: { type: "integer", minimum: 1, maximum: 100 },
+            baseAdults: { type: "integer", minimum: 1, maximum: 100 },
+            baseChildren: { type: "integer", minimum: 0, maximum: 100 },
+            defaultExtraAdultMinor: { type: "integer", minimum: 0, maximum: 100000000 },
+            defaultExtraChildMinor: { type: "integer", minimum: 0, maximum: 100000000 },
+            maxAdults: { type: "integer", minimum: 1, maximum: 50 },
+            maxChildren: { type: "integer", minimum: 0, maximum: 50 },
+            maxOccupancy: { type: "integer", minimum: 1, maximum: 100 },
+            sizeSqm: { type: "number", exclusiveMinimum: 0, maximum: 10000 },
+            bedConfiguration: { type: "string", maxLength: 500 },
+            extraBedAllowed: { type: "boolean" },
+            defaultViewLabel: { type: "string", maxLength: 150 },
+            sortOrder: { type: "integer", minimum: 0 },
+            roomCount: { type: "integer", minimum: 1, maximum: 1000 },
+            expectedVersion: { type: "integer", minimum: 1 },
+            units: {
+              type: "array",
+              maxItems: 1000,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  displayName: { type: "string", maxLength: 150 },
+                  externalChannel: { type: "string", enum: ["AIRBNB", "BOOKING_COM", "OTHER"] },
+                  externalReference: { type: "string", maxLength: 500 }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      const key = requireIdempotencyKey(request.headers);
+      const result = await idempotency.execute(
+        {
+          scopeKey: `property.room-category.update:${request.params.roomCategoryId}:user:${actor.userId}`,
+          key,
+          requestBody: request.body
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await service.updateRoomCategory(
+            trx,
+            actor,
+            {
+              organizationId: request.params.organizationId,
+              propertyId: request.params.propertyId,
+              roomCategoryId: request.params.roomCategoryId,
+              code: request.body.code.trim().toUpperCase(),
+              name: request.body.name.trim(),
+              accommodationType: request.body.accommodationType,
+              description: request.body.description?.trim() || null,
+              baseOccupancy: request.body.baseAdults + request.body.baseChildren,
+              baseAdults: request.body.baseAdults,
+              baseChildren: request.body.baseChildren,
+              defaultExtraAdultMinor: request.body.defaultExtraAdultMinor,
+              defaultExtraChildMinor: request.body.defaultExtraChildMinor,
+              maxAdults: request.body.maxAdults,
+              maxChildren: request.body.maxChildren,
+              maxOccupancy: request.body.maxOccupancy,
+              sizeSqm: request.body.sizeSqm ?? null,
+              bedConfiguration: request.body.bedConfiguration?.trim() || null,
+              extraBedAllowed: request.body.extraBedAllowed ?? false,
+              defaultViewLabel: request.body.defaultViewLabel?.trim() || null,
+              sortOrder: request.body.sortOrder ?? 0,
+              roomCount: request.body.roomCount,
+              expectedVersion: request.body.expectedVersion,
+              units: (request.body.units ?? []).map((unit) => ({
+                displayName: unit.displayName?.trim() || null,
+                externalChannel: unit.externalChannel ?? null,
+                externalReference: unit.externalReference?.trim() || null
+              }))
+            },
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.delete<{ Params: RoomCategoryParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/room-categories/:roomCategoryId",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Property Setup"],
+        summary: "Archive a room category and remove it from future inventory",
+        security: [{ bearerAuth: [] }],
+        params: roomCategoryParamsSchema,
+        headers: idempotencyHeaders
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+      const key = requireIdempotencyKey(request.headers);
+      const result = await idempotency.execute(
+        {
+          scopeKey: `property.room-category.archive:${request.params.roomCategoryId}:user:${actor.userId}`,
+          key,
+          requestBody: {}
+        },
+        async (trx) => ({
+          statusCode: 200,
+          body: await service.archiveRoomCategory(
+            trx,
+            actor,
+            request.params.organizationId,
+            request.params.propertyId,
+            request.params.roomCategoryId,
+            requestMetadata(request, "partner-api")
+          )
+        })
+      );
+      if (result.replayed) void reply.header("idempotency-replayed", "true");
       return reply.status(result.statusCode).send(result.body);
     }
   );
@@ -617,6 +842,36 @@ export async function registerPropertySetupRoutes(
       void reply.header("cache-control", "no-store");
 
       return reply.status(result.statusCode).send(result.body);
+    }
+  );
+
+  app.get<{ Params: RoomCategoryMediaParams }>(
+    "/v1/partner/organizations/:organizationId/properties/:propertyId/room-categories/:roomCategoryId/media/:mediaId/read-url",
+    {
+      preHandler: authenticate,
+      schema: {
+        tags: ["Property Setup"],
+        summary: "Create a short-lived preview URL for a room category image",
+        security: [{ bearerAuth: [] }],
+        params: roomCategoryMediaParamsSchema
+      }
+    },
+    async (request, reply) => {
+      const actor = request.actor;
+      if (!actor) throw new AuthenticationError();
+
+      const storageKey = await service.getRoomCategoryMediaStorageKey(
+        deps.db,
+        actor,
+        request.params.organizationId,
+        request.params.propertyId,
+        request.params.roomCategoryId,
+        request.params.mediaId
+      );
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+      const url = await deps.propertyAssetStorage.createReadUrl(storageKey, expiresAt);
+      void reply.header("cache-control", "no-store");
+      return { url, expiresAt: expiresAt.toISOString() };
     }
   );
 
@@ -912,6 +1167,11 @@ export async function registerPropertySetupRoutes(
               default: "NON_SMOKING"
             },
             internalNotes: { type: "string", maxLength: 2000 },
+            externalChannel: {
+              type: "string",
+              enum: ["AIRBNB", "BOOKING_COM", "OTHER"]
+            },
+            externalReference: { type: "string", maxLength: 500 },
             sortOrder: { type: "integer", minimum: 0, default: 0 }
           }
         }
@@ -949,6 +1209,8 @@ export async function registerPropertySetupRoutes(
               liftAccessible: request.body.liftAccessible ?? false,
               smokingPolicy: request.body.smokingPolicy ?? "NON_SMOKING",
               internalNotes: request.body.internalNotes?.trim() || null,
+              externalChannel: request.body.externalChannel ?? null,
+              externalReference: request.body.externalReference?.trim() || null,
               sortOrder: request.body.sortOrder ?? 0
             },
             requestMetadata(request, "partner-api")

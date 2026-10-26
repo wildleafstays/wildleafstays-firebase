@@ -68,6 +68,8 @@ export interface PhysicalUnitView extends JsonObject {
   liftAccessible: boolean;
   smokingPolicy: string;
   internalNotes: string | null;
+  externalChannel: string | null;
+  externalReference: string | null;
   sortOrder: number;
   status: string;
   version: number;
@@ -142,6 +144,8 @@ export function presentPhysicalUnit(row: PhysicalUnitRecord): PhysicalUnitView {
     liftAccessible: row.lift_accessible,
     smokingPolicy: row.smoking_policy,
     internalNotes: row.internal_notes,
+    externalChannel: row.external_channel,
+    externalReference: row.external_reference,
     sortOrder: row.sort_order,
     status: row.status,
     version: row.version
