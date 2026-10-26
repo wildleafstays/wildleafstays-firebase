@@ -98,4 +98,61 @@ describe("owner operations route contract", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
   });
+
+  it("publishes the property review queue fields returned by the application service", async () => {
+    const response = await app.inject({ method: "GET", url: "/openapi.json" });
+    expect(response.statusCode).toBe(200);
+
+    const document = response.json() as {
+      paths: Record<
+        string,
+        {
+          get?: {
+            responses?: Record<
+              string,
+              {
+                content?: Record<
+                  string,
+                  {
+                    schema?: {
+                      properties?: {
+                        items?: {
+                          items?: {
+                            required?: string[];
+                            properties?: Record<string, unknown>;
+                          };
+                        };
+                      };
+                    };
+                  }
+                >;
+              }
+            >;
+          };
+        }
+      >;
+    };
+    const itemSchema =
+      document.paths["/v1/platform/property-reviews"]?.get?.responses?.["200"]?.content?.[
+        "application/json"
+      ]?.schema?.properties?.items?.items;
+
+    expect(itemSchema?.required).toEqual(
+      expect.arrayContaining([
+        "propertyCategoryId",
+        "propertyCategoryName",
+        "propertyTypeId",
+        "propertyTypeName"
+      ])
+    );
+    expect(itemSchema?.required).not.toContain("propertyType");
+    expect(itemSchema?.properties).toEqual(
+      expect.objectContaining({
+        propertyCategoryId: expect.any(Object),
+        propertyCategoryName: expect.any(Object),
+        propertyTypeId: expect.any(Object),
+        propertyTypeName: expect.any(Object)
+      })
+    );
+  });
 });

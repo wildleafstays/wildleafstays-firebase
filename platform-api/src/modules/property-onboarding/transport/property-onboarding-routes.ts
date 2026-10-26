@@ -271,7 +271,10 @@ export async function registerPropertyOnboardingRoutes(
                     "propertyName",
                     "status",
                     "version",
-                    "propertyType",
+                    "propertyCategoryId",
+                    "propertyCategoryName",
+                    "propertyTypeId",
+                    "propertyTypeName",
                     "saleMode",
                     "city",
                     "stateRegion",
@@ -292,7 +295,16 @@ export async function registerPropertyOnboardingRoutes(
                       enum: ["SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUIRED", "APPROVED"]
                     },
                     version: { type: "integer", minimum: 1 },
-                    propertyType: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    propertyCategoryId: {
+                      anyOf: [{ type: "string", format: "uuid" }, { type: "null" }]
+                    },
+                    propertyCategoryName: {
+                      anyOf: [{ type: "string" }, { type: "null" }]
+                    },
+                    propertyTypeId: {
+                      anyOf: [{ type: "string", format: "uuid" }, { type: "null" }]
+                    },
+                    propertyTypeName: { anyOf: [{ type: "string" }, { type: "null" }] },
                     saleMode: { anyOf: [{ type: "string" }, { type: "null" }] },
                     city: { anyOf: [{ type: "string" }, { type: "null" }] },
                     stateRegion: { anyOf: [{ type: "string" }, { type: "null" }] },
