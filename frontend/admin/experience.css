@@ -55,12 +55,12 @@ button,
   font-weight: 700;
 }
 
-button:not(.nav):not(.auth-tab):not(.button-secondary):not(.button-quiet):not(.text-button):not(.danger-button) {
+button:not(.nav):not(.auth-tab):not(.button-secondary):not(.button-quiet):not(.text-button):not(.danger-button):not(.owner-rate-display):not(.owner-inventory-display) {
   border-color: var(--wo-forest);
   background: var(--wo-forest);
 }
 
-button:not(.nav):not(.auth-tab):not(.button-secondary):not(.button-quiet):not(.text-button):not(.danger-button):hover {
+button:not(.nav):not(.auth-tab):not(.button-secondary):not(.button-quiet):not(.text-button):not(.danger-button):not(.owner-rate-display):not(.owner-inventory-display):hover {
   background: var(--wo-forest-hover);
 }
 
@@ -482,6 +482,37 @@ input[type="file"] {
 
 .owner-rate-filters {
   box-shadow: 0 8px 30px rgba(29, 38, 33, 0.04);
+}
+
+.owner-rate-warning {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #e8cc8a;
+  border-radius: 10px;
+  color: #684a0b !important;
+  background: #fff8e8;
+  font-weight: 700;
+}
+
+.owner-rate-grid .owner-inventory-display,
+.owner-rate-grid .owner-rate-display {
+  border-color: rgba(11, 81, 60, 0.16);
+  color: #153f32;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.owner-rate-grid .owner-rate-setup-display {
+  border-color: #e4c77d;
+  color: #684a0b;
+  background: #fff8e8;
+}
+
+.owner-rate-grid .owner-inventory-display:hover,
+.owner-rate-grid .owner-inventory-display:focus-visible,
+.owner-rate-grid .owner-rate-display:hover,
+.owner-rate-grid .owner-rate-display:focus-visible {
+  border-color: var(--wo-forest);
+  color: var(--wo-forest);
+  background: #fff;
 }
 
 .owner-calendar-view-button.active {

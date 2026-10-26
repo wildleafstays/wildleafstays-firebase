@@ -693,6 +693,20 @@ test("Step 4B2 owner can create or synchronize one simple category base rate", (
   assert.match(js, /expectedVersion/);
 });
 
+test("rates workspace clearly exposes missing setup and keeps editable cells readable", () => {
+  assert.match(js, /const missingRateCount = categories\.filter/);
+  assert.match(js, /Action required: Set a base EP rate/);
+  assert.match(experienceCss, /\.owner-rate-warning/);
+  assert.match(
+    experienceCss,
+    /:not\(\.owner-rate-display\):not\(\.owner-inventory-display\)/,
+  );
+  assert.match(
+    experienceCss,
+    /\.owner-rate-grid \.owner-inventory-display,[\s\S]*?background: rgba\(255, 255, 255, 0\.82\)/,
+  );
+});
+
 test("partner portal loads the premium owner experience layer without replacing operational forms", () => {
   assert.match(html, /\/admin\/experience\.css/);
   assert.match(experienceCss, /\.sidebar/);

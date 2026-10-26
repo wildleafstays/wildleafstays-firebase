@@ -894,7 +894,12 @@ describe("Phase 6A public property catalog", () => {
     };
     expect(body.scanned).toBe(1);
     expect(body.nextOffset).toBeNull();
-    expect(body.properties.length).toBeLessThanOrEqual(1);
+    expect(body.properties).toHaveLength(1);
+    expect(body.properties[0]).toMatchObject({
+      publicSlug: fixture.publicSlug,
+      startingRoomRateMinor: null,
+      smartstayCheckUnavailable: true
+    });
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain(fixture.privateEmail);
     expect(serialized).not.toContain(fixture.privatePhone);

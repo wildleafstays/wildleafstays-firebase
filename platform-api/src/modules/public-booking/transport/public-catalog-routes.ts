@@ -1422,6 +1422,13 @@ export async function registerPublicCatalogRoutes(
           if (!entire && input.requestedRooms > 6) {
             return { ...property, smartstayCheckUnavailable: true };
           }
+          // A LIVE property remains discoverable while its owner finishes rate
+          // setup. It must not be represented as a date-checked offer until an
+          // active room rate product exists, but silently dropping it makes a
+          // successfully activated property appear unpublished.
+          if (property.startingRoomRateMinor === null) {
+            return { ...property, smartstayCheckUnavailable: true };
+          }
           const cheapest = <T extends { estimatedTotalMinor: number; currencyCode: string }>(
             offers: T[]
           ): T | undefined =>

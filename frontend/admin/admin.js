@@ -5177,8 +5177,21 @@ function renderOperationsCalendar() {
 
   syncOwnerRateBulkForm(categories, dates);
 
-  byId("calendarContext").textContent =
-    "Click any inventory or price cell to edit it. Use Earlier and Later to move through dates without a fixed limit.";
+  const missingRateCount = categories.filter(
+    (category) =>
+      state.ownerRateCalendars[category.id]?.status === "MISSING",
+  ).length;
+  const calendarContext = byId("calendarContext");
+
+  calendarContext.classList.toggle(
+    "owner-rate-warning",
+    missingRateCount > 0,
+  );
+  calendarContext.textContent = missingRateCount
+    ? `Action required: Set a base EP rate for ${missingRateCount} room ${
+        missingRateCount === 1 ? "category" : "categories"
+      }. Guest search cannot provide a bookable price until rate setup is complete.`
+    : "Click any inventory or price cell to edit it. Use Earlier and Later to move through dates without a fixed limit.";
 
   const table = document.createElement("table");
   table.className = "operations-table owner-rate-grid";

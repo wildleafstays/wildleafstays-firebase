@@ -32,4 +32,5 @@ jobs:
         run: |
           node --test \
             frontend/admin/test/portal-contract.test.mjs \
+            frontend/admin/test/owner-experience-contract.test.mjs \
             frontend/customer/test/booking-mode-contract.test.mjs
