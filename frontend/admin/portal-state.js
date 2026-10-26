@@ -53,6 +53,15 @@ export function availableScreens(session) {
   return screens;
 }
 
+export function sessionOrganizationId(session, currentOrganizationId = null) {
+  const organizationIds = (session?.organizations || [])
+    .map((membership) => membership?.organizationId)
+    .filter(Boolean);
+  return organizationIds.includes(currentOrganizationId)
+    ? currentOrganizationId
+    : organizationIds[0] || null;
+}
+
 export function platformReservationListPath({
   status = "",
   startDate = "",

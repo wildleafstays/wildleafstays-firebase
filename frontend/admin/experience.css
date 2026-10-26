@@ -1487,3 +1487,449 @@ input[type="file"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Secure session hand-off: never reveal the previous tenant while Firebase
+   resolves a different authenticated account. */
+.session-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  padding: 24px;
+  color: var(--wo-ink);
+  background:
+    radial-gradient(circle at 20% 20%, var(--wo-sage), transparent 34%),
+    radial-gradient(circle at 80% 75%, var(--wo-sand), transparent 32%),
+    var(--wo-bg);
+}
+
+.session-loading .brand-mark {
+  width: 52px;
+  height: 52px;
+  animation: session-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.session-loading div {
+  display: grid;
+  gap: 3px;
+}
+
+.session-loading strong {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.15rem;
+}
+
+.session-loading small {
+  color: var(--wo-muted);
+}
+
+@keyframes session-pulse {
+  to {
+    transform: scale(1.04);
+    box-shadow: 0 10px 28px rgba(11, 81, 60, 0.14);
+  }
+}
+
+/* Hotel partner experience */
+.portal.hotel-partner-mode {
+  --owner-sidebar: #0b4435;
+  --owner-sidebar-deep: #07362a;
+  background:
+    linear-gradient(135deg, rgba(237, 247, 240, 0.74), transparent 34%),
+    var(--wo-bg);
+}
+
+.portal.hotel-partner-mode .sidebar {
+  border-right: 0;
+  color: #fff;
+  background:
+    radial-gradient(circle at 16% 10%, rgba(237, 191, 109, 0.18), transparent 25%),
+    linear-gradient(180deg, var(--owner-sidebar), var(--owner-sidebar-deep));
+  box-shadow: 12px 0 34px rgba(7, 54, 42, 0.08);
+}
+
+.portal.hotel-partner-mode .sidebar .brand,
+.portal.hotel-partner-mode .sidebar .brand span,
+.portal.hotel-partner-mode .sidebar-foot,
+.portal.hotel-partner-mode .sidebar-foot a {
+  color: #fff;
+}
+
+.portal.hotel-partner-mode .sidebar .brand-mark {
+  color: var(--wo-forest);
+  border-color: rgba(255, 255, 255, 0.72);
+  background: #fff;
+}
+
+.portal.hotel-partner-mode .role-label {
+  color: rgba(255, 255, 255, 0.78);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.portal.hotel-partner-mode .nav {
+  position: relative;
+  display: flex;
+  min-height: 49px;
+  align-items: center;
+  gap: 11px;
+  color: rgba(255, 255, 255, 0.77);
+}
+
+.portal.hotel-partner-mode .nav::before {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  flex: 0 0 25px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.portal.hotel-partner-mode .nav[data-screen="dashboard"]::before { content: "01"; }
+.portal.hotel-partner-mode .nav[data-screen="properties"]::before { content: "02"; }
+.portal.hotel-partner-mode .nav[data-screen="reservations"]::before { content: "03"; }
+.portal.hotel-partner-mode .nav[data-screen="calendar"]::before { content: "04"; }
+.portal.hotel-partner-mode .nav[data-screen="business"]::before { content: "01"; }
+
+.portal.hotel-partner-mode .nav:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.portal.hotel-partner-mode .nav.active {
+  color: var(--wo-forest);
+  background: linear-gradient(100deg, #fff, var(--wo-sand));
+  box-shadow: 0 10px 25px rgba(2, 28, 21, 0.16);
+}
+
+.portal.hotel-partner-mode .nav.active::before {
+  color: #fff;
+  border-color: var(--wo-forest);
+  background: var(--wo-forest);
+}
+
+.portal.hotel-partner-mode .sidebar-foot {
+  border-top-color: rgba(255, 255, 255, 0.13);
+}
+
+.portal.hotel-partner-mode .sidebar-foot span {
+  color: rgba(255, 255, 255, 0.63);
+}
+
+.portal.hotel-partner-mode .sidebar-foot .button-quiet {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.portal.hotel-partner-mode .workspace-head {
+  background: rgba(250, 251, 248, 0.9);
+}
+
+.portal.hotel-partner-mode .workspace-head h1 {
+  font-family: "Playfair Display", Georgia, serif;
+}
+
+.portal.hotel-partner-mode #portalMessage {
+  width: min(1280px, calc(100% - 48px));
+  margin: 18px auto 0;
+  border: 1px solid rgba(39, 98, 71, 0.15);
+  background: linear-gradient(90deg, var(--wo-sage), #fff);
+}
+
+.portal.hotel-partner-mode #portalMessage.error {
+  border-color: rgba(164, 71, 60, 0.15);
+  background: linear-gradient(90deg, var(--wo-blush), #fff);
+}
+
+.portal.hotel-partner-mode #dashboardScreen .section-intro,
+.portal.hotel-partner-mode #reservationsScreen .section-intro,
+.portal.hotel-partner-mode #businessScreen .section-intro {
+  padding: 24px;
+  border: 1px solid var(--wo-line);
+  border-radius: var(--wo-radius-lg);
+}
+
+.portal.hotel-partner-mode #dashboardScreen .section-intro {
+  background: linear-gradient(115deg, var(--wo-sky), #fff 72%);
+}
+
+.portal.hotel-partner-mode #reservationsScreen .section-intro {
+  background: linear-gradient(115deg, var(--wo-blush), #fff 72%);
+}
+
+.portal.hotel-partner-mode #businessScreen .section-intro {
+  background: linear-gradient(115deg, var(--wo-sage), #fff 72%);
+}
+
+.portal.hotel-partner-mode .metric-card:nth-child(5n + 1) { background: var(--wo-sage); }
+.portal.hotel-partner-mode .metric-card:nth-child(5n + 2) { background: var(--wo-sky); }
+.portal.hotel-partner-mode .metric-card:nth-child(5n + 3) { background: var(--wo-sand); }
+.portal.hotel-partner-mode .metric-card:nth-child(5n + 4) { background: var(--wo-blush); }
+.portal.hotel-partner-mode .metric-card:nth-child(5n + 5) { background: var(--wo-lilac); }
+
+.portal.hotel-partner-mode .metric-card {
+  border-color: rgba(29, 38, 33, 0.08);
+  box-shadow: 0 10px 26px rgba(29, 38, 33, 0.045);
+}
+
+.owner-portfolio-intro {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(420px, 1.1fr);
+  gap: 30px;
+  align-items: end;
+  margin-bottom: 18px;
+  padding: clamp(24px, 4vw, 38px);
+  border-radius: 26px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(240, 175, 79, 0.28), transparent 26%),
+    linear-gradient(125deg, #083f31, #11604c);
+  box-shadow: 0 20px 46px rgba(8, 63, 49, 0.16);
+}
+
+.owner-portfolio-intro::after {
+  content: "";
+  position: absolute;
+  right: -70px;
+  bottom: -90px;
+  width: 230px;
+  height: 230px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+}
+
+.owner-portfolio-intro h2,
+.owner-portfolio-intro p {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: #fff;
+}
+
+.owner-portfolio-intro h2 {
+  max-width: 520px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.9rem, 3vw, 3rem);
+  line-height: 1.08;
+}
+
+.owner-portfolio-intro p:not(.eyebrow) {
+  max-width: 530px;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.owner-portfolio-intro .eyebrow {
+  margin-bottom: 8px;
+  color: #f0bf6d;
+}
+
+.owner-property-summary {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.owner-property-stat {
+  min-height: 82px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 15px;
+  color: var(--wo-ink);
+  background: rgba(255, 255, 255, 0.93);
+  backdrop-filter: blur(8px);
+}
+
+.owner-property-stat strong {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.5rem;
+}
+
+.owner-property-stat span {
+  color: var(--wo-muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.owner-property-stat.tone-setup { background: var(--wo-sand); }
+.owner-property-stat.tone-review { background: var(--wo-sky); }
+.owner-property-stat.tone-live { background: var(--wo-sage); }
+
+.portal.hotel-partner-mode #propertiesScreen .toolbar {
+  border: 0;
+  background: linear-gradient(110deg, var(--wo-cream), #fff 68%);
+  box-shadow: 0 10px 30px rgba(29, 38, 33, 0.055);
+}
+
+.portal.hotel-partner-mode .property-card {
+  position: relative;
+  overflow: hidden;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  min-height: 126px;
+  padding: 20px;
+  border-radius: 19px;
+  background: linear-gradient(105deg, #fff, #fffdf9);
+  box-shadow: 0 10px 30px rgba(29, 38, 33, 0.045);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.portal.hotel-partner-mode .property-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--wo-gold, #c6954f);
+}
+
+.portal.hotel-partner-mode .property-card[data-status="LIVE"]::before { background: #3d9b6a; }
+.portal.hotel-partner-mode .property-card[data-status="SUBMITTED"]::before,
+.portal.hotel-partner-mode .property-card[data-status="UNDER_REVIEW"]::before { background: #3d84b5; }
+.portal.hotel-partner-mode .property-card[data-status="CHANGES_REQUIRED"]::before { background: #d16d51; }
+
+.portal.hotel-partner-mode .property-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(11, 81, 60, 0.2);
+  box-shadow: 0 16px 38px rgba(29, 38, 33, 0.08);
+}
+
+.property-card-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  color: var(--wo-forest);
+  background: var(--wo-sage);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.property-card-copy {
+  min-width: 0;
+}
+
+.portal.hotel-partner-mode .property-card h3 {
+  color: var(--wo-ink);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.34rem;
+}
+
+.portal.hotel-partner-mode .property-card .status-pill {
+  margin-top: 8px;
+}
+
+.status-submitted,
+.status-under-review {
+  color: #235f82;
+  background: var(--wo-sky);
+}
+
+.status-changes-required {
+  color: #9a4938;
+  background: var(--wo-blush);
+}
+
+.status-draft {
+  color: #8a652d;
+  background: var(--wo-sand);
+}
+
+.status-live,
+.status-approved {
+  color: #276247;
+  background: var(--wo-sage);
+}
+
+.property-card-action {
+  min-width: 170px;
+}
+
+.owner-property-empty {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  background: linear-gradient(115deg, var(--wo-lilac), #fff);
+}
+
+/* Review queue clarity */
+.review-queue-context {
+  margin: -12px 0 20px;
+  padding: 11px 14px;
+  border: 1px solid rgba(61, 132, 181, 0.14);
+  border-radius: 12px;
+  color: #496771;
+  background: var(--wo-sky);
+  font-size: 0.82rem;
+}
+
+#reviewsScreen .review-card {
+  border-radius: 17px;
+  background: linear-gradient(115deg, #fff, var(--wo-sky));
+}
+
+#reviewsScreen .review-detail {
+  background: linear-gradient(145deg, #fff, var(--wo-cream));
+}
+
+@media (max-width: 1050px) {
+  .owner-portfolio-intro {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .portal.hotel-partner-mode .sidebar {
+    background: linear-gradient(100deg, var(--owner-sidebar), var(--owner-sidebar-deep));
+  }
+
+  .portal.hotel-partner-mode .sidebar nav {
+    padding-bottom: 4px;
+  }
+
+  .portal.hotel-partner-mode .nav::before {
+    display: none;
+  }
+
+  .portal.hotel-partner-mode #portalMessage {
+    width: calc(100% - 24px);
+  }
+
+  .owner-portfolio-intro {
+    padding: 22px;
+    border-radius: 20px;
+  }
+
+  .owner-property-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .portal.hotel-partner-mode .property-card {
+    grid-template-columns: 46px minmax(0, 1fr);
+  }
+
+  .property-card-mark {
+    width: 42px;
+    height: 42px;
+  }
+
+  .property-card-action {
+    width: 100%;
+    grid-column: 1 / -1;
+  }
+}

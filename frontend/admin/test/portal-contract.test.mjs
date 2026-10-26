@@ -12,6 +12,7 @@ import {
   profilePayload,
   reservationListPath,
   reviewQueuePath,
+  sessionOrganizationId,
 } from "../portal-state.js";
 
 const source = await readFile(new URL("../admin.js", import.meta.url), "utf8");
@@ -117,6 +118,38 @@ test("review queue filters and cursors are encoded as query parameters", () => {
   assert.equal(
     reviewQueuePath("SUBMITTED", "cursor_value"),
     "/v1/platform/property-reviews?limit=30&status=SUBMITTED&cursor=cursor_value",
+  );
+});
+
+test("account changes cannot retain an organization from another owner", () => {
+  const firstSession = {
+    organizations: [{ organizationId: "org-first", role: "OWNER" }],
+  };
+  const secondSession = {
+    organizations: [{ organizationId: "org-second", role: "OWNER" }],
+  };
+
+  assert.equal(sessionOrganizationId(firstSession), "org-first");
+  assert.equal(
+    sessionOrganizationId(secondSession, "org-first"),
+    "org-second",
+  );
+  assert.equal(sessionOrganizationId({ organizations: [] }, "org-first"), null);
+  assert.match(source, /class StaleSessionError extends Error/);
+  assert.match(source, /function resetPortalSessionState\(\)/);
+  assert.match(source, /assertCurrentAuthContext\(context\)/);
+  assert.match(
+    source,
+    /portal\.classList\.add\("hidden"\)[\s\S]*?await loadSession\(\)[\s\S]*?portal\.classList\.remove\("hidden"\)/,
+  );
+});
+
+test("review queue opens on every active submission instead of a restored browser filter", () => {
+  assert.match(html, /id="reviewStatus" autocomplete="off"/);
+  assert.match(source, /reviewFilterTouched: false/);
+  assert.match(
+    source,
+    /if \(!state\.reviewFilterTouched\) byId\("reviewStatus"\)\.value = ""/,
   );
 });
 

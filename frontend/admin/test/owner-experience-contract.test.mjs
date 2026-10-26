@@ -187,6 +187,18 @@ test("admin loads the shared Wildleaf colour system", () => {
   assert.match(sharedTheme, /\.tone-overview/);
 });
 
+test("hotel owners receive a modern status-led property workspace", () => {
+  assert.match(html, /id="propertyPortfolioSummary"/);
+  assert.match(html, /Manage every stay from one place/);
+  assert.match(js, /function renderPropertyPortfolioSummary\(\)/);
+  assert.match(js, /SUBMITTED: "View submission"/);
+  assert.match(js, /LIVE: "Manage property"/);
+  assert.match(experienceCss, /\.portal\.hotel-partner-mode \.sidebar/);
+  assert.match(experienceCss, /\.owner-portfolio-intro/);
+  assert.match(experienceCss, /\.owner-property-stat\.tone-review/);
+  assert.match(experienceCss, /\.status-under-review/);
+});
+
 test("a new property draft opens before its sale mode and rates are configured", () => {
   const openProperty = js.match(
     /async function openProperty\(organizationId, propertyId\) \{[\s\S]*?\n\}/,

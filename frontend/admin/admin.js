@@ -18,6 +18,7 @@ import {
   profilePayload,
   reservationListPath,
   reviewQueuePath,
+  sessionOrganizationId,
 } from "./portal-state.js";
 
 const auth = firebase.auth();
@@ -68,12 +69,100 @@ const state = {
     categories: [],
     types: [],
   },
+  authGeneration: 0,
+  authenticatedUid: null,
+  reviewFilterTouched: false,
 };
 
 const byId = (id) => document.getElementById(id);
 const authView = byId("authView");
 const portal = byId("portal");
 const portalMessage = byId("portalMessage");
+const sessionLoading = byId("sessionLoading");
+
+class StaleSessionError extends Error {
+  constructor() {
+    super("A newer authenticated session replaced this request.");
+    this.name = "StaleSessionError";
+  }
+}
+
+function captureAuthContext() {
+  const user = auth.currentUser;
+  return {
+    user,
+    uid: user?.uid || null,
+    generation: state.authGeneration,
+  };
+}
+
+function assertCurrentAuthContext(context) {
+  if (
+    context.generation !== state.authGeneration ||
+    context.uid !== state.authenticatedUid ||
+    context.uid !== (auth.currentUser?.uid || null)
+  ) {
+    throw new StaleSessionError();
+  }
+}
+
+function resetPortalSessionState() {
+  Object.assign(state, {
+    session: null,
+    screen: null,
+    organizationId: null,
+    properties: [],
+    property: null,
+    onboarding: null,
+    layout: null,
+    commercial: null,
+    hotelGst: null,
+    ownerResponsibility: null,
+    editorRatePlans: [],
+    reservations: [],
+    reservationCursor: null,
+    operationsPropertyId: null,
+    ratePlans: [],
+    rateProducts: [],
+    rateCalendar: null,
+    ownerRateCalendars: {},
+    inventoryCalendar: null,
+    operationsLayout: null,
+    platformReservations: [],
+    platformReservationCursor: null,
+    reviewItems: [],
+    reviewCursor: null,
+    reviewSelection: null,
+    reviewFilterTouched: false,
+  });
+  clearMessage();
+  document
+    .querySelectorAll(".screen")
+    .forEach((screen) => screen.classList.add("hidden"));
+  document
+    .querySelectorAll(".nav")
+    .forEach((item) => item.classList.add("hidden"));
+  for (const id of [
+    "propertyList",
+    "propertyPortfolioSummary",
+    "dashboardMetrics",
+    "dashboardReservationList",
+    "reservationList",
+    "calendarGrid",
+    "controlCenterMetrics",
+    "controlCenterReservationList",
+    "hotelDirectoryList",
+    "reviewList",
+    "reviewDetail",
+  ]) {
+    byId(id)?.replaceChildren();
+  }
+  byId("organizationSelect")?.replaceChildren();
+  if (byId("reviewStatus")) byId("reviewStatus").value = "";
+  if (byId("reviewQueueContext")) byId("reviewQueueContext").textContent = "";
+  byId("accountEmail").textContent = "";
+  byId("roleLabel").textContent = "";
+}
 
 function localDate(value = new Date()) {
   const year = value.getFullYear();
@@ -173,11 +262,19 @@ function rupeesToMinor(value) {
   return Math.round(Number(value) * 100);
 }
 
-function api(path, options = {}) {
-  return authorizedRequest(path, {
-    ...options,
-    getAccessToken: async () => auth.currentUser?.getIdToken(),
-  });
+async function api(path, options = {}) {
+  const context = captureAuthContext();
+  try {
+    const result = await authorizedRequest(path, {
+      ...options,
+      getAccessToken: async () => context.user?.getIdToken(),
+    });
+    assertCurrentAuthContext(context);
+    return result;
+  } catch (error) {
+    assertCurrentAuthContext(context);
+    throw error;
+  }
 }
 
 function idempotent(path, method, operation, body = {}) {
@@ -347,12 +444,19 @@ async function managedUpload(path, file, operation) {
   const key =
     pendingUploadKeys.get(fingerprint) || newIdempotencyKey(operation);
   pendingUploadKeys.set(fingerprint, key);
-  const result = await uploadFile(path, file, {
-    idempotencyKey: key,
-    getAccessToken: async () => auth.currentUser?.getIdToken(),
-  });
-  pendingUploadKeys.delete(fingerprint);
-  return result;
+  const context = captureAuthContext();
+  try {
+    const result = await uploadFile(path, file, {
+      idempotencyKey: key,
+      getAccessToken: async () => context.user?.getIdToken(),
+    });
+    assertCurrentAuthContext(context);
+    pendingUploadKeys.delete(fingerprint);
+    return result;
+  } catch (error) {
+    assertCurrentAuthContext(context);
+    throw error;
+  }
 }
 
 async function optimizeRoomPhoto(file) {
@@ -975,6 +1079,7 @@ async function run(action, successMessage = "") {
     await action();
     if (successMessage) showMessage(successMessage);
   } catch (error) {
+    if (error instanceof StaleSessionError) return;
     showMessage(errorMessage(error), true);
   }
 }
@@ -1034,26 +1139,44 @@ byId("registerForm").addEventListener("submit", async (event) => {
 byId("logoutButton").addEventListener("click", () => auth.signOut());
 
 auth.onAuthStateChanged(async (user) => {
+  const generation = state.authGeneration + 1;
+  state.authGeneration = generation;
+  state.authenticatedUid = user?.uid || null;
+  resetPortalSessionState();
+  portal.classList.add("hidden");
+  authView.classList.add("hidden");
+  sessionLoading.classList.toggle("hidden", !user);
   if (!user) {
-    state.session = null;
-    portal.classList.add("hidden");
+    sessionLoading.classList.add("hidden");
     authView.classList.remove("hidden");
     return;
   }
-  authView.classList.add("hidden");
-  portal.classList.remove("hidden");
-  await run(async () => {
+
+  try {
     await loadSession();
-    await showScreen(availableScreens(state.session)[0]);
-  });
+    assertCurrentAuthContext({ user, uid: user.uid, generation });
+    const firstScreen = availableScreens(state.session)[0];
+    if (!firstScreen) throw new Error("No portal workspace is available for this account.");
+    await showScreen(firstScreen);
+    assertCurrentAuthContext({ user, uid: user.uid, generation });
+    sessionLoading.classList.add("hidden");
+    portal.classList.remove("hidden");
+  } catch (error) {
+    if (error instanceof StaleSessionError) return;
+    resetPortalSessionState();
+    sessionLoading.classList.add("hidden");
+    authView.classList.remove("hidden");
+    byId("authMessage").textContent = errorMessage(error);
+    byId("authMessage").classList.add("error");
+  }
 });
 
 async function loadSession() {
   state.session = await api("/v1/session");
-  state.organizationId =
-    state.organizationId ||
-    state.session.organizations[0]?.organizationId ||
-    null;
+  state.organizationId = sessionOrganizationId(
+    state.session,
+    state.organizationId,
+  );
   byId("accountEmail").textContent =
     state.session.user.email || "Authenticated user";
   byId("roleLabel").textContent = canReviewProperties(state.session)
@@ -1106,6 +1229,7 @@ async function showScreen(name) {
     "SUPER_ADMIN",
   );
   portal.classList.toggle("command-center-mode", isSuperAdmin);
+  portal.classList.toggle("hotel-partner-mode", !isSuperAdmin);
   const accountControls = byId("portal").querySelector(".sidebar-foot");
   if (accountControls) {
     accountControls.classList.toggle("command-account-controls", isSuperAdmin);
@@ -1132,7 +1256,10 @@ async function showScreen(name) {
   if (name === "control") await loadControlCenter(false);
   if (name === "hotels") await loadHotelDirectory(false);
   if (name === "homepage") await loadHomepageContent();
-  if (name === "reviews") await loadReviews(false);
+  if (name === "reviews") {
+    if (!state.reviewFilterTouched) byId("reviewStatus").value = "";
+    await loadReviews(false);
+  }
 }
 
 byId("refreshButton").addEventListener("click", () =>
@@ -1303,18 +1430,30 @@ async function loadProperties() {
 
   await Promise.all([fetchOwnerProperties(), loadPublicPropertyTaxonomy()]);
   renderCreatePropertyTaxonomyFields();
+  renderPropertyPortfolioSummary();
   const list = byId("propertyList");
   list.replaceChildren();
   if (!state.properties.length) {
     list.append(
-      textElement("p", "empty-state card", "No properties registered yet."),
+      textElement(
+        "p",
+        "empty-state card owner-property-empty",
+        "No properties yet. Register your first hotel to begin the guided setup.",
+      ),
     );
     return;
   }
   for (const property of state.properties) {
     const card = document.createElement("article");
     card.className = "property-card";
+    card.dataset.status = property.status;
+    const mark = textElement(
+      "span",
+      "property-card-mark",
+      property.name.trim().slice(0, 1).toUpperCase() || "W",
+    );
     const copy = document.createElement("div");
+    copy.className = "property-card-copy";
     copy.append(textElement("h3", "", property.name));
     copy.append(
       textElement(
@@ -1328,16 +1467,60 @@ async function loadProperties() {
     if (taxonomyLabel) {
       copy.append(textElement("small", "muted", taxonomyLabel));
     }
-    copy.append(
-      textElement("span", "status-pill", property.status.replaceAll("_", " ")),
+    const status = textElement(
+      "span",
+      `status-pill status-${property.status.toLowerCase().replaceAll("_", "-")}`,
+      property.status.replaceAll("_", " "),
     );
+    copy.append(status);
+    const actionLabels = {
+      DRAFT: "Continue setup",
+      SUBMITTED: "View submission",
+      UNDER_REVIEW: "View review progress",
+      CHANGES_REQUIRED: "Update requested details",
+      APPROVED: "View approved property",
+      LIVE: "Manage property",
+    };
     card.append(
+      mark,
       copy,
-      button("Continue registration", () =>
-        openProperty(property.organizationId, property.id),
+      button(
+        actionLabels[property.status] || "Open property",
+        () => openProperty(property.organizationId, property.id),
+        "property-card-action",
       ),
     );
     list.append(card);
+  }
+}
+
+function renderPropertyPortfolioSummary() {
+  const summary = byId("propertyPortfolioSummary");
+  if (!summary) return;
+  const counts = {
+    total: state.properties.length,
+    setup: state.properties.filter((property) =>
+      ["DRAFT", "CHANGES_REQUIRED"].includes(property.status),
+    ).length,
+    review: state.properties.filter((property) =>
+      ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(property.status),
+    ).length,
+    live: state.properties.filter((property) => property.status === "LIVE").length,
+  };
+  summary.replaceChildren();
+  for (const [key, label] of [
+    ["total", "All properties"],
+    ["setup", "Needs setup"],
+    ["review", "With Wildleaf"],
+    ["live", "Live"],
+  ]) {
+    const item = document.createElement("div");
+    item.className = `owner-property-stat tone-${key}`;
+    item.append(
+      textElement("strong", "", String(counts[key])),
+      textElement("span", "", label),
+    );
+    summary.append(item);
   }
 }
 
@@ -5506,21 +5689,31 @@ byId("ownerInventoryControlForm").addEventListener("submit", (event) => {
   });
 });
 
-byId("reviewStatus").addEventListener("change", () =>
-  run(() => loadReviews(false)),
-);
+byId("reviewStatus").addEventListener("change", () => {
+  state.reviewFilterTouched = true;
+  run(() => loadReviews(false));
+});
 byId("loadMoreReviews").addEventListener("click", () =>
   run(() => loadReviews(true)),
 );
 
 async function loadReviews(append) {
+  const selectedStatus = byId("reviewStatus").value;
   const cursor = append ? state.reviewCursor : null;
-  const data = await api(reviewQueuePath(byId("reviewStatus").value, cursor));
+  const data = await api(reviewQueuePath(selectedStatus, cursor));
   state.reviewItems = append
     ? [...state.reviewItems, ...data.items]
     : data.items;
   state.reviewCursor = data.nextCursor;
   byId("loadMoreReviews").classList.toggle("hidden", !state.reviewCursor);
+  const contextCopy = {
+    "": "All submitted properties and active review stages are shown below.",
+    SUBMITTED: "New submissions waiting for a Wildleaf reviewer to begin.",
+    UNDER_REVIEW: "Properties currently being checked by Wildleaf management.",
+    CHANGES_REQUIRED: "Properties returned to owners for updates.",
+    APPROVED: "Approved properties waiting for activation.",
+  };
+  byId("reviewQueueContext").textContent = contextCopy[selectedStatus] || "";
   renderReviewList();
 }
 
@@ -5535,7 +5728,9 @@ function renderReviewList() {
       textElement(
         "p",
         "",
-        "This queue includes submitted and review-stage properties only. Draft and live hotels remain available in All Hotels.",
+        byId("reviewStatus").value
+          ? "No properties are currently in this selected stage. Choose All active reviews to see every submission."
+          : "There are no submitted or active review-stage properties. Draft and live hotels remain available in All Hotels.",
       ),
     );
     if (availableScreens(state.session).includes("hotels")) {

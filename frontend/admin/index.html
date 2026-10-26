@@ -101,6 +101,19 @@
       </section>
     </main>
 
+    <div
+      id="sessionLoading"
+      class="session-loading hidden"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="brand-mark">W</span>
+      <div>
+        <strong>Opening your secure workspace</strong>
+        <small>Confirming your account and properties…</small>
+      </div>
+    </div>
+
     <div id="portal" class="portal hidden">
       <aside class="sidebar">
         <a class="brand brand-light" href="/customer/"
@@ -618,6 +631,21 @@
         </section>
 
         <section id="propertiesScreen" class="screen hidden">
+          <section class="owner-portfolio-intro" aria-labelledby="portfolioTitle">
+            <div>
+              <p class="eyebrow">Your collection</p>
+              <h2 id="portfolioTitle">Manage every stay from one place</h2>
+              <p>
+                Complete new listings, follow review progress and keep live
+                properties accurate.
+              </p>
+            </div>
+            <div
+              id="propertyPortfolioSummary"
+              class="owner-property-summary"
+              aria-live="polite"
+            ></div>
+          </section>
           <div class="toolbar card">
             <label
               >Business workspace<select
@@ -2560,15 +2588,16 @@
               <h2>Property review queue</h2>
             </div>
             <label
-              >Status<select id="reviewStatus">
+              >Review stage<select id="reviewStatus" autocomplete="off">
                 <option value="">All active reviews</option>
-                <option>SUBMITTED</option>
-                <option>UNDER_REVIEW</option>
-                <option>CHANGES_REQUIRED</option>
-                <option>APPROVED</option>
+                <option value="SUBMITTED">New submissions</option>
+                <option value="UNDER_REVIEW">Review in progress</option>
+                <option value="CHANGES_REQUIRED">Changes requested</option>
+                <option value="APPROVED">Approved, awaiting activation</option>
               </select></label
             >
           </div>
+          <p id="reviewQueueContext" class="review-queue-context"></p>
           <div class="review-layout">
             <div>
               <div id="reviewList" class="card-list"></div>
