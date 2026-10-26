@@ -586,7 +586,7 @@ describe("simple owner room-category base rate", () => {
         configured.rateProduct.id,
         [
           {
-            stayDate: "2033-07-01",
+            stayDate: "2033-07-02",
             rateMinor: 9_500_000,
             extraAdultMinor: null,
             extraChildMinor: null,
@@ -613,14 +613,25 @@ describe("simple owner room-category base rate", () => {
           fixture.propertyId,
           configured.rateProduct.id,
           "2033-07-01",
-          "2033-07-02"
+          "2033-07-03"
         )
       );
 
+    expect(calendar.days).toHaveLength(2);
     expect(calendar.days[0]).toMatchObject({
+      stayDate: "2033-07-01",
+      rateMinor: 500_000,
+      extraAdultMinor: 120_000,
+      extraChildMinor: 50_000,
+      source: "BASE",
+      overrideVersion: null
+    });
+    expect(calendar.days[1]).toMatchObject({
+      stayDate: "2033-07-02",
       rateMinor: 9_500_000,
       extraAdultMinor: 120_000,
-      extraChildMinor: 50_000
+      extraChildMinor: 50_000,
+      source: "MANUAL"
     });
 
     const updated = await db.transaction().execute((trx) =>
@@ -645,6 +656,31 @@ describe("simple owner room-category base rate", () => {
       floorRateMinor: null,
       ceilingRateMinor: null,
       version: 2
+    });
+
+    const recalculated = await db
+      .transaction()
+      .execute((trx) =>
+        service.getCalendar(
+          trx,
+          fixture.actor,
+          fixture.organizationId,
+          fixture.propertyId,
+          configured.rateProduct.id,
+          "2033-07-01",
+          "2033-07-03"
+        )
+      );
+
+    expect(recalculated.days[0]).toMatchObject({
+      stayDate: "2033-07-01",
+      rateMinor: 550_000,
+      source: "BASE"
+    });
+    expect(recalculated.days[1]).toMatchObject({
+      stayDate: "2033-07-02",
+      rateMinor: 9_500_000,
+      source: "MANUAL"
     });
   });
 });

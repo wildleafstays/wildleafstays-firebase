@@ -325,6 +325,42 @@ describe("physical property structure foundation", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
   });
 
+  it("rejects guest limits that cannot cover the total room occupancy", async () => {
+    const fixture = await createPropertyFixture();
+    const service = new PropertySetupService();
+
+    await expect(
+      db.transaction().execute((trx) =>
+        service.createRoomCategory(
+          trx,
+          fixture.actor,
+          {
+            organizationId: fixture.organizationId,
+            propertyId: fixture.propertyId,
+            code: "INVALID_CAPACITY",
+            name: "Invalid capacity room",
+            accommodationType: "ROOM",
+            description: null,
+            baseOccupancy: 2,
+            baseAdults: 2,
+            baseChildren: 0,
+            defaultExtraAdultMinor: 100_000,
+            defaultExtraChildMinor: 80_000,
+            maxAdults: 2,
+            maxChildren: 0,
+            maxOccupancy: 3,
+            sizeSqm: null,
+            bedConfiguration: null,
+            extraBedAllowed: true,
+            defaultViewLabel: null,
+            sortOrder: 0
+          },
+          requestMetadata()
+        )
+      )
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED", statusCode: 400 });
+  });
+
   it("locks physical setup after property submission", async () => {
     const fixture = await createPropertyFixture();
     const service = new PropertySetupService();

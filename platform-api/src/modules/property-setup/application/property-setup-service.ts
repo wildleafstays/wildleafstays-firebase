@@ -272,6 +272,26 @@ export class PropertySetupService {
     if (input.maxAdults > input.maxOccupancy) {
       throw new ValidationError("Maximum adults cannot exceed maximum occupancy");
     }
+    if (input.maxChildren > input.maxOccupancy) {
+      throw new ValidationError("Maximum children cannot exceed maximum occupancy");
+    }
+    if (input.maxOccupancy > input.maxAdults + input.maxChildren) {
+      throw new ValidationError("Maximum adults and maximum children must cover maximum occupancy");
+    }
+    if (
+      input.baseAdults !== null &&
+      input.baseAdults !== undefined &&
+      input.baseAdults > input.maxAdults
+    ) {
+      throw new ValidationError("Base adults cannot exceed maximum adults");
+    }
+    if (
+      input.baseChildren !== null &&
+      input.baseChildren !== undefined &&
+      input.baseChildren > input.maxChildren
+    ) {
+      throw new ValidationError("Base children cannot exceed maximum children");
+    }
 
     const roomCategory = await this.repository.createRoomCategory(trx, input);
     const view = presentRoomCategory(roomCategory);

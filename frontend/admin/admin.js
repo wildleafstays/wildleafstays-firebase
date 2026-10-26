@@ -3523,10 +3523,13 @@ byId("roomCategoryForm").addEventListener("submit", (event) => {
     if (
       baseAdults > maxAdults ||
       baseChildren > maxChildren ||
-      baseAdults + baseChildren > maxOccupancy
+      baseAdults + baseChildren > maxOccupancy ||
+      maxAdults > maxOccupancy ||
+      maxChildren > maxOccupancy ||
+      maxOccupancy > maxAdults + maxChildren
     ) {
       throw new Error(
-        "Included guests cannot exceed this category's maximum occupancy.",
+        "Guest limits must be consistent: included guests must fit within each limit, and maximum adults plus maximum kids must cover the total maximum occupancy.",
       );
     }
 
@@ -4757,16 +4760,17 @@ async function configureOwnerCategoryBaseRate(categoryId, explicitRate = null) {
   showMessage(`${category.name} base rate setup saved.`);
 }
 
-async function saveOwnerCategoryCalendar(categoryId) {
+async function saveOwnerCategoryCalendar(categoryId, stayDates = null) {
   return persistOwnerCategoryCalendar(categoryId, {
     refreshAfterSave: true,
     announce: true,
+    stayDates,
   });
 }
 
 async function persistOwnerCategoryCalendar(
   categoryId,
-  { refreshAfterSave, announce },
+  { refreshAfterSave, announce, stayDates = null },
 ) {
   const setup = state.ownerRateCalendars[categoryId];
 
@@ -4810,7 +4814,16 @@ async function persistOwnerCategoryCalendar(
     );
   }
 
-  const entries = calendar.days.map((day) => {
+  const targetDates = stayDates ? new Set(stayDates) : null;
+  const targetDays = targetDates
+    ? calendar.days.filter((day) => targetDates.has(day.stayDate))
+    : calendar.days;
+
+  if (!targetDays.length) {
+    throw new Error("Choose at least one loaded date to update.");
+  }
+
+  const entries = targetDays.map((day) => {
     const selectorBase = `input[data-category-id="${categoryId}"][data-stay-date="${day.stayDate}"]`;
 
     const baseInput = byId("calendarGrid").querySelector(
@@ -5075,6 +5088,7 @@ async function applyOwnerRateBulkUpdate() {
       await persistOwnerCategoryCalendar(plan.category.id, {
         refreshAfterSave: false,
         announce: false,
+        stayDates: selectedDates,
       });
 
       savedCount += 1;
@@ -5240,20 +5254,7 @@ function renderOperationsCalendar() {
 
     categoryCell.append(textElement("strong", "", category.name));
 
-    if (calendar && productSynced) {
-      const saveButton = textElement(
-        "button",
-        "button-secondary owner-category-save",
-        "Save",
-      );
-
-      saveButton.type = "button";
-      saveButton.addEventListener("click", () =>
-        run(() => saveOwnerCategoryCalendar(category.id)),
-      );
-
-      categoryCell.append(saveButton);
-    } else if (!defaultsReady) {
+    if (!defaultsReady) {
       categoryCell.append(
         textElement(
           "small",
@@ -5274,7 +5275,11 @@ function renderOperationsCalendar() {
         textElement(
           "small",
           "muted owner-rate-status",
-          calendar ? "Sync category setup" : "Set base rate",
+          calendar
+            ? productSynced
+              ? "Base rate"
+              : "Sync category setup"
+            : "Set base rate",
         ),
       );
 
@@ -5295,7 +5300,11 @@ function renderOperationsCalendar() {
       const setupButton = textElement(
         "button",
         "button-secondary owner-base-rate-button",
-        calendar ? "Sync setup" : "Set base rate",
+        calendar
+          ? productSynced
+            ? "Update base rate"
+            : "Sync setup"
+          : "Set base rate",
       );
 
       setupButton.type = "button";
@@ -5525,7 +5534,14 @@ function renderOperationsCalendar() {
         display.type = "button";
         display.className = "owner-rate-display";
         display.textContent = input.value;
-        display.title = "Click to edit";
+        display.classList.toggle(
+          "owner-rate-inherited",
+          day.source === "BASE",
+        );
+        display.title =
+          day.source === "BASE"
+            ? "Using the base rate. Click to override this date only."
+            : "Date-specific override. Click to edit.";
 
         const beginEditing = () => {
           input.dataset.originalValue = input.value;
@@ -5555,7 +5571,7 @@ function renderOperationsCalendar() {
 
           run(async () => {
             try {
-              await saveOwnerCategoryCalendar(category.id);
+              await saveOwnerCategoryCalendar(category.id, [date]);
             } catch (error) {
               const scrollLeft = byId("calendarGrid").scrollLeft;
               await refreshCalendarData();

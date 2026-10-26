@@ -506,6 +506,12 @@ input[type="file"] {
   background: #fff8e8;
 }
 
+.owner-rate-grid .owner-rate-inherited {
+  border-style: dashed;
+  color: #356653;
+  background: #f4faf6;
+}
+
 .owner-rate-grid .owner-inventory-display:hover,
 .owner-rate-grid .owner-inventory-display:focus-visible,
 .owner-rate-grid .owner-rate-display:hover,

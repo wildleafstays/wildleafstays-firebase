@@ -613,7 +613,10 @@ test("Step 4B5B owner rate cells are compact and open for editing on click", () 
   assert.match(render[0], /owner-rate-editor-input hidden/);
   assert.match(render[0], /display\.addEventListener\("click", beginEditing\)/);
   assert.match(render[0], /input\.addEventListener\("blur", \(\) =>/);
-  assert.match(render[0], /await saveOwnerCategoryCalendar\(category\.id\)/);
+  assert.match(
+    render[0],
+    /await saveOwnerCategoryCalendar\(category\.id, \[date\]\)/,
+  );
   assert.match(render[0], /event\.key === "Enter"/);
   assert.match(render[0], /event\.key === "Escape"/);
 
@@ -647,7 +650,7 @@ test("Step 4B4B owner calendar saves cells by actual stay date instead of array 
   assert.match(js, /input\.dataset\.stayDate = date/);
 
   const ownerSave = js.match(
-    /async function saveOwnerCategoryCalendar\(categoryId\)[\s\S]*?function renderOperationsCalendar\(\)/,
+    /async function saveOwnerCategoryCalendar\(categoryId, stayDates = null\)[\s\S]*?function renderOperationsCalendar\(\)/,
   );
 
   assert.ok(ownerSave, "owner category calendar save function must exist");
@@ -688,7 +691,7 @@ test("Step 4B2 owner can create or synchronize one simple category base rate", (
 
   assert.match(js, /rates\/room-categories\/\$\{categoryId\}\/base-rate/);
 
-  assert.match(js, /calendar \? "Sync setup" : "Set base rate"/);
+  assert.match(js, /\? "Update base rate"[\s\S]*?: "Sync setup"/);
 
   assert.match(js, /expectedVersion/);
 });
