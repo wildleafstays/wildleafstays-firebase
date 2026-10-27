@@ -693,25 +693,21 @@ function setupPropertyEditorWorkspace() {
     ),
   );
 
-  const rooms = editorAccordionItem("rooms", "Add rooms");
-  const roomIntro = document.createElement("div");
-  roomIntro.className = "editor-panel-intro";
-  roomIntro.append(
-    textElement("h3", "", "Add an actual room"),
-    textElement(
-      "p",
-      "muted",
-      "Choose its room category, enter the room name or number, and save.",
-    ),
-  );
+  // Category count and optional channel identities are now the owner-facing
+  // inventory workflow. Keep the older individual-room controls in the DOM so
+  // existing render and migration code can still synchronize their values,
+  // but do not expose a second, competing room-creation experience.
+  const legacyAccommodationControls = document.createElement("div");
+  legacyAccommodationControls.id = "legacyAccommodationControls";
+  legacyAccommodationControls.hidden = true;
+  legacyAccommodationControls.setAttribute("aria-hidden", "true");
   const physicalRoomHeading = document.createElement("div");
   physicalRoomHeading.className = "editor-list-heading";
   physicalRoomHeading.append(textElement("h3", "", "Existing rooms"));
   const physicalRoomList = document.createElement("div");
   physicalRoomList.id = "physicalRoomList";
   physicalRoomList.className = "physical-room-card-list";
-  rooms.content.append(
-    roomIntro,
+  legacyAccommodationControls.append(
     physicalUnitForm,
     locationDetails,
     physicalRoomHeading,
@@ -746,7 +742,7 @@ function setupPropertyEditorWorkspace() {
     review.details,
   );
 
-  root.replaceChildren(progress, accordion);
+  root.replaceChildren(progress, accordion, legacyAccommodationControls);
 }
 
 setupPropertyEditorWorkspace();
@@ -2506,7 +2502,7 @@ function renderEditor() {
     byId("physicalUnitForm"),
     byId("imageUploadForm"),
     byId("documentUploadForm"),
-  ]) {
+  ].filter(Boolean)) {
     Array.from(form.elements).forEach((element) => {
       element.disabled = !editable;
     });

@@ -114,13 +114,18 @@ test("room category summary reports amenities and photos", () => {
   assert.match(js, /photoCount/);
 });
 
-test("property editor uses one-at-a-time sections without replacing existing forms", () => {
+test("property editor uses category-first sections and retains hidden legacy controls", () => {
   assert.match(js, /function setupPropertyEditorWorkspace\(\)/);
   assert.match(js, /data-editor-accordion/);
   assert.match(js, /if \(candidate !== details\) candidate\.open = false/);
   assert.match(js, /editorAccordionItem\("profile", "Property profile"\)/);
   assert.match(js, /editorAccordionItem\("categories", "Room categories"\)/);
-  assert.match(js, /editorAccordionItem\("rooms", "Add rooms"\)/);
+  assert.doesNotMatch(js, /editorAccordionItem\("rooms", "Add rooms"\)/);
+  assert.match(js, /legacyAccommodationControls\.hidden = true/);
+  assert.match(
+    js,
+    /root\.replaceChildren\(progress, accordion, legacyAccommodationControls\)/,
+  );
   assert.match(js, /editorAccordionItem\("amenities", "Property amenities"\)/);
   assert.match(
     js,
@@ -144,6 +149,13 @@ test("property editor uses one-at-a-time sections without replacing existing for
   assert.match(css, /\.editor-accordion-item/);
   assert.match(css, /#accommodationList,[\s\S]*\.physical-room-card-list/);
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.editor-progress-card/);
+});
+
+test("property editor ignores an unavailable compatibility form instead of crashing", () => {
+  assert.match(
+    js,
+    /byId\("documentUploadForm"\),\s*\]\.filter\(Boolean\)\) \{/,
+  );
 });
 
 test("property owners manage every public property-tab detail in the profile workflow", () => {
