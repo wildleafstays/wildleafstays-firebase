@@ -154,6 +154,31 @@ test("property page uses one compact planner and eight database-backed informati
   assert.doesNotMatch(propertySource, /Live choices are ready for/);
 });
 
+test("services and policies use compact visual cards without false drill-down arrows", () => {
+  assert.match(propertySource, /function guestCompactCard/);
+  assert.match(propertySource, /guestIconName/);
+  assert.match(
+    propertySource,
+    /createElementNS\("http:\/\/www\.w3\.org\/2000\/svg"/,
+  );
+  assert.match(
+    propertySource,
+    /function renderGuestServices[\s\S]*?guest-compact-grid/,
+  );
+  assert.match(
+    propertySource,
+    /function renderGuestRules[\s\S]*?guest-compact-grid/,
+  );
+  assert.doesNotMatch(
+    propertySource.match(
+      /function guestCompactCard[\s\S]*?function mergeGuestRecords/,
+    )?.[0] || "",
+    /guest-row-arrow/,
+  );
+  assert.match(discoveryStyles, /\.guest-compact-grid/);
+  assert.match(discoveryStyles, /\[data-guest-icon="pool"\]/);
+});
+
 test("property page lets guests choose the existing entire-property or room flow", () => {
   assert.match(propertyHtml, /id="stayModeChooser"/);
   assert.match(propertyHtml, /id="chooseEntireProperty"/);

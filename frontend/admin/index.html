@@ -1408,8 +1408,28 @@
                     />
                   </label>
 
+                  <div class="span-two category-pricing-intro">
+                    <h4>Default category pricing</h4>
+                    <p class="field-help">
+                      These rates automatically fill the Rates &amp; Inventory
+                      calendar. A rate entered directly on a calendar date will
+                      override the default for that date only.
+                    </p>
+                  </div>
+
+                  <label class="span-two">
+                    Default room rate per night (₹)
+                    <input
+                      name="defaultBaseRate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="3200"
+                    />
+                  </label>
+
                   <label>
-                    Default extra adult ?
+                    Extra adult per night (₹)
                     <input
                       name="defaultExtraAdult"
                       type="number"
@@ -1421,7 +1441,7 @@
                   </label>
 
                   <label>
-                    Default extra child ?
+                    Extra kid per night (₹)
                     <input
                       name="defaultExtraChild"
                       type="number"

@@ -44,6 +44,7 @@ const state = {
   ownerResponsibility: null,
   platformGstRules: [],
   editorRatePlans: [],
+  editorRateProducts: [],
   selectedCancellationPolicyId: null,
   reservations: [],
   reservationCursor: null,
@@ -120,6 +121,7 @@ function resetPortalSessionState() {
     hotelGst: null,
     ownerResponsibility: null,
     editorRatePlans: [],
+    editorRateProducts: [],
     reservations: [],
     reservationCursor: null,
     operationsPropertyId: null,
@@ -678,6 +680,18 @@ function setupPropertyEditorWorkspace() {
       "Create each sellable category once, set its room count, shared facilities and optional channel identities.",
     ),
   );
+  const categoryPhotoPanel = editorSubpanel(
+    "roomCategoryPhotosPanel",
+    "Manage room category photos",
+    categoryPhotoForm,
+  );
+  categoryPhotoPanel.hidden = true;
+  const categoryPhotoPanelParking = document.createElement("div");
+  categoryPhotoPanelParking.id = "roomCategoryPhotoPanelParking";
+  categoryPhotoPanelParking.hidden = true;
+  categoryPhotoPanelParking.append(categoryPhotoPanel);
+  byId("roomCategoryImageCategory")?.closest("label")?.classList.add("hidden");
+
   categories.content.append(
     categoryIntro,
     categoryList,
@@ -686,11 +700,7 @@ function setupPropertyEditorWorkspace() {
       "Add a room category",
       roomCategoryForm,
     ),
-    editorSubpanel(
-      "roomCategoryPhotosPanel",
-      "Manage room category photos",
-      categoryPhotoForm,
-    ),
+    categoryPhotoPanelParking,
   );
 
   // Category count and optional channel identities are now the owner-facing
@@ -1579,26 +1589,36 @@ async function openProperty(organizationId, propertyId) {
   // policies for an accepted property. Complete that transaction before the
   // commercial snapshot is loaded so readiness never observes a stale gap.
   const hotelGst = await api(`${base}/commercial/hotel-gst-consent`);
-  const [onboarding, layout, commercial, ratePlans, ownerResponsibility] =
-    await Promise.all([
-      api(
-        `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
-      ),
-      api(
-        `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
-      ),
-      api(`${base}/commercial`),
-      state.property.saleMode
-        ? api(`${base}/rates/plans`)
-        : Promise.resolve({ ratePlans: [] }),
-      api(`${base}/owner-responsibility`),
-    ]);
+  const [
+    onboarding,
+    layout,
+    commercial,
+    ratePlans,
+    rateProducts,
+    ownerResponsibility,
+  ] = await Promise.all([
+    api(
+      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/onboarding`,
+    ),
+    api(
+      `/v1/partner/organizations/${organizationId}/properties/${propertyId}/layout`,
+    ),
+    api(`${base}/commercial`),
+    state.property.saleMode
+      ? api(`${base}/rates/plans`)
+      : Promise.resolve({ ratePlans: [] }),
+    state.property.saleMode
+      ? api(`${base}/rates/products`)
+      : Promise.resolve({ rateProducts: [] }),
+    api(`${base}/owner-responsibility`),
+  ]);
   state.onboarding = onboarding;
   state.layout = layout;
   state.commercial = commercial;
   state.hotelGst = hotelGst;
   state.ownerResponsibility = ownerResponsibility;
   state.editorRatePlans = ratePlans.ratePlans || [];
+  state.editorRateProducts = rateProducts.rateProducts || [];
   renderEditor();
   await showScreen("editor");
 }
@@ -2570,7 +2590,10 @@ function renderRoomCategoryMedia(editable, categories) {
   const list = byId("roomCategoryMediaList");
   list.replaceChildren();
 
-  const media = state.layout?.roomCategoryMedia || [];
+  const selectedCategoryId = byId("roomCategoryImageCategory")?.value || "";
+  const media = (state.layout?.roomCategoryMedia || []).filter(
+    (item) => !selectedCategoryId || item.roomCategoryId === selectedCategoryId,
+  );
 
   if (!categories.length) {
     list.append(
@@ -2640,6 +2663,15 @@ function renderRoomCategoryMedia(editable, categories) {
 
     list.append(row);
   }
+}
+
+function parkRoomCategoryPhotoPanel() {
+  const panel = byId("roomCategoryPhotosPanel");
+  const parking = byId("roomCategoryPhotoPanelParking");
+  if (!panel || !parking) return;
+  panel.open = false;
+  panel.hidden = true;
+  parking.append(panel);
 }
 
 function physicalUnitPhotoManager(unit, editable) {
@@ -2830,6 +2862,7 @@ function renderAccommodation(editable) {
     unitFloor.value = previousFloor;
   }
 
+  parkRoomCategoryPhotoPanel();
   const list = byId("accommodationList");
   list.replaceChildren();
 
@@ -2924,7 +2957,12 @@ function renderAccommodation(editable) {
           () => {
             byId("roomCategoryImageCategory").value = category.id;
             const photoPanel = byId("roomCategoryPhotosPanel");
+            photoPanel.querySelector("summary").textContent =
+              `Photos for ${category.name}`;
+            photoPanel.hidden = false;
             photoPanel.open = true;
+            row.append(photoPanel);
+            renderRoomCategoryMedia(editable, categories);
             photoPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
           },
           "button-secondary",
@@ -3583,12 +3621,83 @@ function roomCategoryUnitPayload() {
   });
 }
 
+function propertySupportsRoomCategoryRates(property = state.property) {
+  return (
+    Boolean(property?.saleMode) && property.saleMode !== "FULL_PROPERTY_ONLY"
+  );
+}
+
+function editorRoomCategoryRateSetup(categoryId) {
+  const activeEpPlanIds = new Set(
+    (state.editorRatePlans || [])
+      .filter((plan) => plan.mealPlanCode === "EP" && plan.status === "ACTIVE")
+      .map((plan) => plan.id),
+  );
+  const candidates = (state.editorRateProducts || []).filter(
+    (product) =>
+      product.productType === "ROOM_CATEGORY" &&
+      product.roomCategoryId === categoryId &&
+      product.status === "ACTIVE" &&
+      activeEpPlanIds.has(product.ratePlanId),
+  );
+  return {
+    status:
+      candidates.length === 0
+        ? "MISSING"
+        : candidates.length === 1
+          ? "READY"
+          : "AMBIGUOUS",
+    product: candidates.length === 1 ? candidates[0] : null,
+  };
+}
+
+async function saveEditorRoomCategoryDefaultRates({
+  roomCategoryId,
+  categoryName,
+  baseRateMinor,
+  extraAdultMinor,
+  extraChildMinor,
+  expectedVersion,
+}) {
+  const fingerprint = [
+    state.property.id,
+    roomCategoryId,
+    baseRateMinor,
+    extraAdultMinor,
+    extraChildMinor,
+    expectedVersion ?? "new",
+  ].join(":");
+  const key =
+    pendingOwnerBaseRateKeys.get(fingerprint) ||
+    newIdempotencyKey("category-default-rates");
+  pendingOwnerBaseRateKeys.set(fingerprint, key);
+  try {
+    await api(
+      `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/rates/room-categories/${roomCategoryId}/base-rate`,
+      {
+        method: "PUT",
+        body: {
+          baseRateMinor,
+          extraAdultMinor,
+          extraChildMinor,
+          expectedVersion,
+        },
+        idempotencyKey: key,
+      },
+    );
+  } finally {
+    pendingOwnerBaseRateKeys.delete(fingerprint);
+  }
+  return `${categoryName} default rates saved.`;
+}
+
 function resetRoomCategoryEditor() {
   const form = byId("roomCategoryForm");
   form.reset();
   form.elements.roomCategoryId.value = "";
   form.elements.expectedVersion.value = "";
   form.elements.roomCount.value = "1";
+  form.elements.defaultBaseRate.value = "";
   byId("roomCategorySaveButton").textContent = "Add room category";
   byId("roomCategoryCancelButton").classList.add("hidden");
   form.querySelectorAll('input[name="roomAmenity"]').forEach((input) => {
@@ -3616,6 +3725,10 @@ function editRoomCategory(categoryId) {
   form.elements.baseAdults.value =
     category.baseAdults ?? category.baseOccupancy;
   form.elements.baseChildren.value = category.baseChildren ?? 0;
+  const rateSetup = editorRoomCategoryRateSetup(category.id);
+  form.elements.defaultBaseRate.value = rateSetup.product
+    ? (rateSetup.product.baseRateMinor / 100).toFixed(2)
+    : "";
   form.elements.defaultExtraAdult.value = (
     (category.defaultExtraAdultMinor ?? 0) / 100
   ).toFixed(2);
@@ -3695,8 +3808,19 @@ byId("roomCategoryForm").addEventListener("submit", (event) => {
     const roomCount = Number(values.roomCount);
     const editingId = values.roomCategoryId;
 
+    const defaultBaseRateMinor = rupeesToMinor(values.defaultBaseRate);
     const defaultExtraAdultMinor = rupeesToMinor(values.defaultExtraAdult);
     const defaultExtraChildMinor = rupeesToMinor(values.defaultExtraChild);
+    const shouldSaveCategoryRates = propertySupportsRoomCategoryRates();
+    const existingRateSetup = editingId
+      ? editorRoomCategoryRateSetup(editingId)
+      : { status: "MISSING", product: null };
+
+    if (shouldSaveCategoryRates && existingRateSetup.status === "AMBIGUOUS") {
+      throw new Error(
+        "This category has more than one active EP rate product. Ask Wildleaf support to resolve the duplicate before changing its defaults.",
+      );
+    }
 
     if (
       !Number.isInteger(baseAdults) ||
@@ -3734,13 +3858,16 @@ byId("roomCategoryForm").addEventListener("submit", (event) => {
     }
 
     if (
+      (shouldSaveCategoryRates &&
+        (!Number.isSafeInteger(defaultBaseRateMinor) ||
+          defaultBaseRateMinor <= 0)) ||
       !Number.isSafeInteger(defaultExtraAdultMinor) ||
       defaultExtraAdultMinor < 0 ||
       !Number.isSafeInteger(defaultExtraChildMinor) ||
       defaultExtraChildMinor < 0
     ) {
       throw new Error(
-        "Extra adult and extra child charges must be valid amounts.",
+        "Enter a room rate greater than zero and valid non-negative extra adult and extra kid charges.",
       );
     }
 
@@ -3803,6 +3930,17 @@ byId("roomCategoryForm").addEventListener("submit", (event) => {
       "room-category-amenities-save",
       { amenityCodes: selectedAmenityCodes },
     );
+
+    if (shouldSaveCategoryRates) {
+      await saveEditorRoomCategoryDefaultRates({
+        roomCategoryId,
+        categoryName: name,
+        baseRateMinor: defaultBaseRateMinor,
+        extraAdultMinor: defaultExtraAdultMinor,
+        extraChildMinor: defaultExtraChildMinor,
+        expectedVersion: existingRateSetup.product?.version ?? null,
+      });
+    }
 
     await refreshEditorData();
     resetRoomCategoryEditor();
@@ -4218,16 +4356,25 @@ async function refreshEditorOnboarding() {
 }
 
 async function refreshEditorData() {
-  const [onboarding, layout] = await Promise.all([
+  const base = `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}`;
+  const [onboarding, layout, ratePlans, rateProducts] = await Promise.all([
     api(
       `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/onboarding`,
     ),
     api(
       `/v1/partner/organizations/${state.property.organizationId}/properties/${state.property.id}/layout`,
     ),
+    propertySupportsRoomCategoryRates()
+      ? api(`${base}/rates/plans`)
+      : Promise.resolve({ ratePlans: [] }),
+    propertySupportsRoomCategoryRates()
+      ? api(`${base}/rates/products`)
+      : Promise.resolve({ rateProducts: [] }),
   ]);
   state.onboarding = onboarding;
   state.layout = layout;
+  state.editorRatePlans = ratePlans.ratePlans || [];
+  state.editorRateProducts = rateProducts.rateProducts || [];
   renderEditor();
 }
 
@@ -4908,92 +5055,6 @@ async function refreshCalendarData() {
   renderOperationsCalendar();
 }
 
-async function configureOwnerCategoryBaseRate(categoryId, explicitRate = null) {
-  const category = state.operationsLayout?.roomCategories?.find(
-    (item) => item.id === categoryId,
-  );
-
-  if (!category) {
-    throw new Error("Room category is no longer available.");
-  }
-
-  const input = byId("calendarGrid").querySelector(
-    `input[data-owner-base-rate="${categoryId}"]`,
-  );
-  const extraAdultInput = byId("calendarGrid").querySelector(
-    `input[data-owner-extra-adult="${categoryId}"]`,
-  );
-  const extraChildInput = byId("calendarGrid").querySelector(
-    `input[data-owner-extra-child="${categoryId}"]`,
-  );
-  const rateValue = explicitRate ?? input?.value;
-
-  if (rateValue === undefined || rateValue === null) {
-    throw new Error(
-      "Base rate input is no longer available. Refresh the calendar.",
-    );
-  }
-
-  if (!String(rateValue).trim()) {
-    throw new Error("Enter a base rate.");
-  }
-
-  const baseRateMinor = rupeesToMinor(rateValue);
-  const extraAdultMinor = rupeesToMinor(extraAdultInput?.value ?? "0");
-  const extraChildMinor = rupeesToMinor(extraChildInput?.value ?? "0");
-
-  if (
-    [baseRateMinor, extraAdultMinor, extraChildMinor].some(
-      (amount) => !Number.isSafeInteger(amount) || amount < 0,
-    )
-  ) {
-    throw new Error(
-      "Base, extra adult and extra kid rates must be valid non-negative amounts.",
-    );
-  }
-
-  const calendar = state.ownerRateCalendars[categoryId]?.calendar || null;
-
-  const expectedVersion = calendar?.rateProduct?.version ?? null;
-
-  const propertyId = byId("calendarPropertySelect").value;
-
-  const fingerprint = [
-    propertyId,
-    categoryId,
-    baseRateMinor,
-    extraAdultMinor,
-    extraChildMinor,
-    expectedVersion ?? "new",
-  ].join(":");
-
-  const key =
-    pendingOwnerBaseRateKeys.get(fingerprint) ||
-    newIdempotencyKey("owner-base-rate");
-
-  pendingOwnerBaseRateKeys.set(fingerprint, key);
-
-  await api(
-    `/v1/partner/organizations/${state.organizationId}/properties/${propertyId}/rates/room-categories/${categoryId}/base-rate`,
-    {
-      method: "PUT",
-      body: {
-        baseRateMinor,
-        extraAdultMinor,
-        extraChildMinor,
-        expectedVersion,
-      },
-      idempotencyKey: key,
-    },
-  );
-
-  await refreshCalendarData();
-
-  pendingOwnerBaseRateKeys.delete(fingerprint);
-
-  showMessage(`${category.name} base rate setup saved.`);
-}
-
 async function saveOwnerCategoryCalendar(categoryId, stayDates = null) {
   return persistOwnerCategoryCalendar(categoryId, {
     refreshAfterSave: true,
@@ -5432,9 +5493,9 @@ function renderOperationsCalendar() {
 
   calendarContext.classList.toggle("owner-rate-warning", missingRateCount > 0);
   calendarContext.textContent = missingRateCount
-    ? `Action required: Set a base EP rate for ${missingRateCount} room ${
+    ? `Action required: Add default pricing to ${missingRateCount} room ${
         missingRateCount === 1 ? "category" : "categories"
-      }. Guest search cannot provide a bookable price until rate setup is complete.`
+      } in My properties. Guest search cannot provide a bookable price until category pricing is complete.`
     : "Click any inventory or price cell to edit it. Use Earlier and Later to move through dates without a fixed limit.";
 
   const table = document.createElement("table");
@@ -5489,7 +5550,7 @@ function renderOperationsCalendar() {
         textElement(
           "small",
           "muted owner-rate-status",
-          "Complete category defaults",
+          "Complete guest defaults in My properties",
         ),
       );
     } else if (setup?.status === "AMBIGUOUS") {
@@ -5500,85 +5561,44 @@ function renderOperationsCalendar() {
           "Rate setup needs review",
         ),
       );
+    } else if (calendar && productSynced) {
+      categoryCell.append(
+        textElement(
+          "small",
+          "muted owner-rate-status",
+          "Defaults from room category",
+        ),
+      );
+      const defaults = document.createElement("div");
+      defaults.className = "owner-category-defaults";
+      defaults.append(
+        textElement(
+          "strong",
+          "",
+          money(calendar.rateProduct.baseRateMinor, "INR"),
+        ),
+        textElement(
+          "span",
+          "",
+          `Adult +${money(category.defaultExtraAdultMinor ?? 0, "INR")}`,
+        ),
+        textElement(
+          "span",
+          "",
+          `Kid +${money(category.defaultExtraChildMinor ?? 0, "INR")}`,
+        ),
+      );
+      categoryCell.append(defaults);
     } else {
       categoryCell.append(
         textElement(
           "small",
           "muted owner-rate-status",
           calendar
-            ? productSynced
-              ? "Base rate"
-              : "Sync category setup"
-            : "Set base rate",
+            ? "Re-save category pricing to synchronize"
+            : "Set pricing in My properties → Room categories",
         ),
       );
-
-      const setupBox = document.createElement("div");
-      setupBox.className = "owner-base-rate-setup";
-
-      const rateInput = document.createElement("input");
-      rateInput.type = "number";
-      rateInput.min = "0";
-      rateInput.step = "0.01";
-      rateInput.placeholder = "?";
-      rateInput.dataset.ownerBaseRate = category.id;
-
-      if (calendar) {
-        rateInput.value = (calendar.rateProduct.baseRateMinor / 100).toFixed(2);
-      }
-
-      const extraAdultInput = document.createElement("input");
-      extraAdultInput.type = "number";
-      extraAdultInput.min = "0";
-      extraAdultInput.step = "0.01";
-      extraAdultInput.placeholder = "Extra adult";
-      extraAdultInput.title = "Default extra adult rate";
-      extraAdultInput.dataset.ownerExtraAdult = category.id;
-      extraAdultInput.value = (
-        (category.defaultExtraAdultMinor ?? 0) / 100
-      ).toFixed(2);
-
-      const extraChildInput = document.createElement("input");
-      extraChildInput.type = "number";
-      extraChildInput.min = "0";
-      extraChildInput.step = "0.01";
-      extraChildInput.placeholder = "Extra kid";
-      extraChildInput.title = "Default extra kid rate";
-      extraChildInput.dataset.ownerExtraChild = category.id;
-      extraChildInput.value = (
-        (category.defaultExtraChildMinor ?? 0) / 100
-      ).toFixed(2);
-
-      const rateFields = document.createElement("div");
-      rateFields.className = "owner-base-rate-fields";
-      for (const [label, control] of [
-        ["Room base", rateInput],
-        ["Extra adult", extraAdultInput],
-        ["Extra kid", extraChildInput],
-      ]) {
-        const wrapper = document.createElement("label");
-        wrapper.append(textElement("span", "", label), control);
-        rateFields.append(wrapper);
-      }
-
-      const setupButton = textElement(
-        "button",
-        "button-secondary owner-base-rate-button",
-        calendar
-          ? productSynced
-            ? "Update base rate"
-            : "Sync setup"
-          : "Set base rate",
-      );
-
-      setupButton.type = "button";
-      setupButton.addEventListener("click", () =>
-        run(() => configureOwnerCategoryBaseRate(category.id)),
-      );
-
-      setupBox.append(rateFields, setupButton);
-
-      categoryCell.append(setupBox);
     }
 
     const inventoryRow = document.createElement("tr");
@@ -5713,65 +5733,13 @@ function renderOperationsCalendar() {
         const day = calendar?.days?.find((item) => item.stayDate === date);
 
         if (!day || !productSynced) {
-          if (
-            field === "base" &&
-            defaultsReady &&
-            setup?.status !== "AMBIGUOUS"
-          ) {
-            const input = document.createElement("input");
-            input.type = "number";
-            input.min = "0";
-            input.step = "0.01";
-            input.placeholder = "Enter rate";
-            input.className = "owner-rate-input owner-rate-editor-input hidden";
-
-            const display = document.createElement("button");
-            display.type = "button";
-            display.className = "owner-rate-display owner-rate-setup-display";
-            display.textContent = "Set";
-            display.title = "Click to set the starting EP rate";
-
-            display.addEventListener("click", () => {
-              display.classList.add("hidden");
-              input.classList.remove("hidden");
-              input.focus();
-              input.select();
-            });
-
-            input.addEventListener("blur", () => {
-              input.classList.add("hidden");
-              display.classList.remove("hidden");
-
-              if (!input.value.trim()) return;
-
-              run(() =>
-                configureOwnerCategoryBaseRate(category.id, input.value),
-              );
-            });
-
-            input.addEventListener("keydown", (event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                input.blur();
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                input.value = "";
-                input.blur();
-              }
-            });
-
-            cell.classList.add("owner-rate-editable-cell");
-            cell.append(display, input);
-          } else {
-            cell.append(
-              textElement(
-                "span",
-                "muted",
-                defaultsReady ? "Set EP first" : "Complete setup",
-              ),
-            );
-          }
+          cell.append(
+            textElement(
+              "span",
+              "muted",
+              defaultsReady ? "Set category pricing" : "Complete setup",
+            ),
+          );
           row.append(cell);
           return;
         }

@@ -432,26 +432,78 @@ function roomTotals(property) {
   return { categories, rooms, maximumGuests };
 }
 
-function guestIcon(label) {
+function guestIconName(label) {
   const normalized = String(label || "").toLowerCase();
   const match = [
-    [/pool|water/, "♨"],
-    [/garden|lawn|orchard/, "♧"],
-    [/restaurant|meal|food|dining|chef/, "♨"],
-    [/mountain|view|trail|nature/, "△"],
-    [/parking|transfer|taxi|vehicle/, "▣"],
-    [/room|bed/, "▰"],
-    [/guest|group|family|couple/, "♙"],
-    [/wifi|network|connect/, "⌁"],
-    [/rule|policy|check/, "✓"],
+    [/pool|water/, "pool"],
+    [/garden|lawn|orchard/, "garden"],
+    [/restaurant|meal|food|dining|chef/, "dining"],
+    [/mountain|view|trail|nature/, "mountain"],
+    [/parking|transfer|taxi|vehicle/, "parking"],
+    [/bath|wash/, "bath"],
+    [/building|floor/, "building"],
+    [/room|bed|housekeep|laundry/, "bed"],
+    [/guest|group|family|couple|adult|child|kid/, "guests"],
+    [/wifi|network|connect/, "wifi"],
+    [/calendar|check-in|check-out|quiet|time/, "calendar"],
+    [/location|distance|airport|station|market|hospital/, "location"],
+    [/rule|policy|smoking|parties|event|minimum/, "policy"],
+    [/categor|type/, "category"],
+    [/service|bonfire/, "service"],
   ].find(([pattern]) => pattern.test(normalized));
-  return match?.[1] || "◇";
+  return match?.[1] || "spark";
+}
+
+function guestIcon(label, className = "guest-card-icon") {
+  const name = guestIconName(label);
+  const wrapper = element("span", className);
+  wrapper.dataset.guestIcon = name;
+  wrapper.setAttribute("aria-hidden", "true");
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.9");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const paths = {
+    pool: '<path d="M3 16c2 0 2-1.5 4-1.5S9 16 11 16s2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 2-1.5"/><path d="M4 20c2 0 2-1.5 4-1.5S10 20 12 20s2-1.5 4-1.5S18 20 20 20"/><circle cx="8" cy="6" r="2"/><path d="m10 9 3 2 2.5-2M12 11l-3 3"/>',
+    garden:
+      '<path d="M12 21V10"/><path d="M12 14c-5 0-7-3-7-7 5 0 7 3 7 7Z"/><path d="M12 11c4 0 6-2.5 6-6.5-4 0-6 2.5-6 6.5Z"/><path d="M7 21h10"/>',
+    dining:
+      '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M16 3v18M16 3c3 2 3 8 0 10"/>',
+    mountain:
+      '<path d="m3 19 6.5-10 3 4 2.5-4 6 10H3Z"/><path d="m8 11 2 2 1.5-1.5M16 5v2M13 6h6"/>',
+    parking:
+      '<rect x="4" y="5" width="16" height="14" rx="3"/><path d="M9 16V8h3.5a3 3 0 0 1 0 6H9"/>',
+    bath: '<path d="M4 12h16v2a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-2ZM7 12V6a3 3 0 0 1 5-2"/><path d="M6 21v-2M18 21v-2"/>',
+    building:
+      '<path d="M5 21V5l7-2v18M12 8h7v13M3 21h18"/><path d="M8 8h1M8 12h1M8 16h1M15 11h1M15 15h1"/>',
+    bed: '<path d="M3 19v-7h18v7M3 16h18M5 12V8h6a3 3 0 0 1 3 3v1M3 21v-2M21 21v-2"/>',
+    guests:
+      '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M15 15a4 4 0 0 1 6 3.5V21"/>',
+    wifi: '<path d="M3 9a14 14 0 0 1 18 0M6 13a9 9 0 0 1 12 0M9.5 16.5a4 4 0 0 1 5 0"/><circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/>',
+    calendar:
+      '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01"/>',
+    location:
+      '<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+    policy:
+      '<path d="m12 3 7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3Z"/><path d="m9 12 2 2 4-5"/>',
+    category: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
+    service:
+      '<path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/><path d="m8.5 8.5 7 7M15.5 8.5l-7 7"/>',
+    spark:
+      '<path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/>',
+  };
+  svg.innerHTML = paths[name] || paths.spark;
+  wrapper.append(svg);
+  return wrapper;
 }
 
 function guestMetric(label, value, detail = "") {
   const card = element("article", "guest-metric-card");
   card.append(
-    element("span", "guest-card-icon", guestIcon(label)),
+    guestIcon(label),
     element("strong", "", String(value)),
     element("small", "", label),
   );
@@ -466,7 +518,7 @@ function guestChipList(items, className = "guest-chip-list") {
     if (!label) return;
     const chip = element("span", "guest-info-chip");
     chip.append(
-      element("span", "guest-info-chip-icon", guestIcon(label)),
+      guestIcon(label, "guest-info-chip-icon"),
       element("span", "", label),
     );
     list.append(chip);
@@ -620,7 +672,7 @@ function renderGuestAbout(property) {
 
 function guestInfoRow(label, copy, status = "") {
   const row = element("article", "guest-info-row");
-  row.append(element("span", "guest-row-icon", guestIcon(label)));
+  row.append(guestIcon(label, "guest-row-icon"));
   const body = element("div", "guest-row-copy");
   body.append(element("strong", "", label));
   if (copy) body.append(element("p", "", copy));
@@ -628,6 +680,17 @@ function guestInfoRow(label, copy, status = "") {
   if (status) row.append(element("span", "guest-status-pill", status));
   row.append(element("span", "guest-row-arrow", "›"));
   return row;
+}
+
+function guestCompactCard(label, copy, status = "") {
+  const card = element("article", "guest-compact-card");
+  card.append(guestIcon(label, "guest-row-icon"));
+  const body = element("div", "guest-compact-copy");
+  body.append(element("strong", "", label));
+  if (copy) body.append(element("p", "", copy));
+  card.append(body);
+  if (status) card.append(element("span", "guest-status-pill", status));
+  return card;
 }
 
 function mergeGuestRecords(primary, fallback) {
@@ -713,7 +776,7 @@ function renderGuestServices(property) {
     return section;
   }
   const filters = element("div", "guest-filter-pills");
-  const list = element("div", "guest-row-list");
+  const list = element("div", "guest-compact-grid");
   const render = (filter) => {
     list.replaceChildren();
     services
@@ -729,7 +792,7 @@ function renderGuestServices(property) {
           .filter(Boolean)
           .join(" · ");
         list.append(
-          guestInfoRow(
+          guestCompactCard(
             service.name,
             detail,
             service.availability || service.pricing || "",
@@ -765,7 +828,7 @@ function renderGuestLocation(property) {
   let populated = false;
   if (property.publicAddress || property.locationDescription) {
     const card = element("article", "guest-location-card");
-    card.append(element("span", "guest-card-icon", "⌖"));
+    card.append(guestIcon("Location"));
     const copy = element("div");
     if (property.publicAddress)
       copy.append(element("strong", "", property.publicAddress));
@@ -903,8 +966,10 @@ function renderGuestRules(property) {
   ].filter(([, value]) => value);
   if (!items.length) appendEmptyTabState(section);
   else {
-    const list = element("div", "guest-row-list");
-    items.forEach(([label, value]) => list.append(guestInfoRow(label, value)));
+    const list = element("div", "guest-compact-grid");
+    items.forEach(([label, value]) =>
+      list.append(guestCompactCard(label, value)),
+    );
     section.append(list);
   }
   return section;

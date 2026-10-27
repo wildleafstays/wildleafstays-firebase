@@ -33,8 +33,9 @@ test("room category setup uses owner language and hides internal category code",
   assert.match(form, /Room category name/);
   assert.match(form, /Base adults included in room price/);
   assert.match(form, /Base children included in room price/);
-  assert.match(form, /Default extra adult/);
-  assert.match(form, /Default extra child/);
+  assert.match(form, /Default room rate per night/);
+  assert.match(form, /Extra adult per night/);
+  assert.match(form, /Extra kid per night/);
   assert.doesNotMatch(form, /name="baseOccupancy"/);
   assert.match(form, /How many guests can stay in total\?/);
   assert.match(form, /What does this room include\?/);
@@ -53,8 +54,10 @@ test("category-first inventory supports editing counts and optional channel iden
 });
 
 test("base pricing includes default extra adult and kid controls", () => {
-  assert.match(js, /dataOwnerExtraAdult|ownerExtraAdult/);
-  assert.match(js, /dataOwnerExtraChild|ownerExtraChild/);
+  assert.match(html, /name="defaultBaseRate"/);
+  assert.match(html, /name="defaultExtraAdult"/);
+  assert.match(html, /name="defaultExtraChild"/);
+  assert.match(js, /saveEditorRoomCategoryDefaultRates/);
   assert.match(js, /extraAdultMinor,/);
   assert.match(js, /extraChildMinor,/);
 });
@@ -713,21 +716,23 @@ test("Step 4B does not silently use mismatched category pricing defaults", () =>
   assert.match(js, /existing rate setup must be synchronized/);
 });
 
-test("Step 4B2 owner can create or synchronize one simple category base rate", () => {
-  assert.match(js, /configureOwnerCategoryBaseRate/);
+test("Step 4B2 category editor owns the simple category base rate", () => {
+  assert.match(js, /saveEditorRoomCategoryDefaultRates/);
 
   assert.match(js, /pendingOwnerBaseRateKeys/);
 
-  assert.match(js, /rates\/room-categories\/\$\{categoryId\}\/base-rate/);
+  assert.match(js, /rates\/room-categories\/\$\{roomCategoryId\}\/base-rate/);
 
-  assert.match(js, /\? "Update base rate"[\s\S]*?: "Sync setup"/);
+  assert.match(js, /baseRateMinor: defaultBaseRateMinor/);
 
   assert.match(js, /expectedVersion/);
+
+  assert.doesNotMatch(js, /data-owner-base-rate/);
 });
 
 test("rates workspace clearly exposes missing setup and keeps editable cells readable", () => {
   assert.match(js, /const missingRateCount = categories\.filter/);
-  assert.match(js, /Action required: Set a base EP rate/);
+  assert.match(js, /Action required: Add default pricing/);
   assert.match(experienceCss, /\.owner-rate-warning/);
   assert.match(
     experienceCss,

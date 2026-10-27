@@ -182,7 +182,9 @@
     border-radius: 9px;
     color: #17261f;
     background: #fbfcfa;
-    font: 700 0.76rem/1.2 "DM Sans", sans-serif;
+    font:
+      700 0.76rem/1.2 "DM Sans",
+      sans-serif;
   }
 
   .mobile-range-fields,
@@ -240,7 +242,9 @@
     border-radius: 10px;
     color: #fff;
     background: #0c513c;
-    font: 750 0.76rem/1 "DM Sans", sans-serif;
+    font:
+      750 0.76rem/1 "DM Sans",
+      sans-serif;
   }
 
   /* Homepage: preserve the campaign and replace only the mobile form surface. */
@@ -332,8 +336,10 @@
 
 @media (max-width: 350px) {
   .mobile-compact-search {
-    grid-template-columns:
-      minmax(45px, 0.76fr) minmax(82px, 1.5fr) 36px 36px 44px;
+    grid-template-columns: minmax(45px, 0.76fr) minmax(
+        82px,
+        1.5fr
+      ) 36px 36px 44px;
     height: 52px;
   }
 
@@ -454,7 +460,8 @@
     overflow: hidden;
   }
 
-  .property-body:not(.checkout-view) :is(
+  .property-body:not(.checkout-view)
+    :is(
       .property-tab-copy,
       .property-tab-empty,
       .guest-row-copy,
@@ -475,18 +482,21 @@
     overflow-wrap: anywhere;
   }
 
-  .property-body:not(.checkout-view) :is(
+  .property-body:not(.checkout-view)
+    :is(
       .guest-metric-grid,
       .guest-about-grid,
       .guest-highlight-grid,
       .guest-ideal-grid,
       .guest-distance-grid,
       .guest-facility-grid,
+      .guest-compact-grid,
       .tab-detail-grid,
       .tab-card-grid,
       .tab-amenity-grid,
       .review-list
-    ) > * {
+    )
+    > * {
     min-width: 0;
     max-width: 100%;
   }

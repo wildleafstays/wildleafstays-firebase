@@ -4,9 +4,11 @@ import fs from "node:fs";
 
 const js = fs.readFileSync(new URL("../admin.js", import.meta.url), "utf8");
 
-test("base rates stay editable after initial setup", () => {
-  assert.match(js, /calendar[\s\S]*?"Update base rate"/);
+test("category defaults remain editable while calendar cells are date overrides", () => {
+  assert.match(js, /form\.elements\.defaultBaseRate\.value/);
+  assert.match(js, /saveEditorRoomCategoryDefaultRates/);
   assert.match(js, /calendar\.rateProduct\.baseRateMinor/);
+  assert.doesNotMatch(js, /data-owner-base-rate/);
 });
 
 test("single-night edits persist only the edited date", () => {

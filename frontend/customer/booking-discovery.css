@@ -1931,10 +1931,67 @@
   height: 31px;
   place-items: center;
   border-radius: 10px;
-  color: #076046;
-  background: #eaf6ef;
-  font-size: 1rem;
-  font-weight: 800;
+  color: #0b6b50;
+  background: linear-gradient(145deg, #e5f8ef, #f7fffb);
+  box-shadow: inset 0 0 0 1px rgba(11, 107, 80, 0.08);
+}
+
+.guest-card-icon svg,
+.guest-row-icon svg,
+.guest-info-chip-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+[data-guest-icon="pool"],
+[data-guest-icon="wifi"] {
+  color: #087ec1;
+  background: linear-gradient(145deg, #e5f6ff, #f5fbff);
+}
+
+[data-guest-icon="garden"] {
+  color: #168c54;
+  background: linear-gradient(145deg, #e2f8e9, #f6fff8);
+}
+
+[data-guest-icon="dining"] {
+  color: #e86c15;
+  background: linear-gradient(145deg, #fff0df, #fff9f2);
+}
+
+[data-guest-icon="mountain"],
+[data-guest-icon="location"] {
+  color: #df4c43;
+  background: linear-gradient(145deg, #ffe8e4, #fff8f6);
+}
+
+[data-guest-icon="parking"],
+[data-guest-icon="category"] {
+  color: #6a58c7;
+  background: linear-gradient(145deg, #ede9ff, #faf8ff);
+}
+
+[data-guest-icon="bed"],
+[data-guest-icon="bath"] {
+  color: #cc4778;
+  background: linear-gradient(145deg, #ffe7ef, #fff8fa);
+}
+
+[data-guest-icon="guests"] {
+  color: #176dba;
+  background: linear-gradient(145deg, #e7f2ff, #f8fbff);
+}
+
+[data-guest-icon="calendar"],
+[data-guest-icon="policy"] {
+  color: #b36b05;
+  background: linear-gradient(145deg, #fff0ce, #fffaf0);
+}
+
+[data-guest-icon="service"],
+[data-guest-icon="spark"] {
+  color: #0f8c83;
+  background: linear-gradient(145deg, #dff8f4, #f5fffd);
 }
 
 .guest-highlight-grid,
@@ -2029,6 +2086,53 @@
   font-size: 0.62rem;
   font-weight: 750;
   text-align: center;
+}
+
+.guest-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.guest-compact-card {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5e9e4;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 5px 16px rgba(21, 55, 44, 0.035);
+}
+
+.guest-compact-copy {
+  min-width: 0;
+}
+
+.guest-compact-copy strong,
+.guest-compact-copy p {
+  margin: 0;
+}
+
+.guest-compact-copy strong {
+  color: #1c2b24;
+  font-size: 0.78rem;
+}
+
+.guest-compact-copy p {
+  margin-top: 3px;
+  color: #68716c;
+  font-size: 0.68rem;
+  line-height: 1.38;
+}
+
+.guest-compact-card .guest-status-pill {
+  grid-column: 2;
+  justify-self: start;
+  max-width: 100%;
 }
 
 .guest-facility-grid {
@@ -2325,6 +2429,21 @@
     gap: 7px;
   }
 
+  .guest-compact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .guest-compact-card {
+    gap: 7px;
+    padding: 9px 8px;
+  }
+
+  .guest-compact-card .guest-row-icon {
+    width: 28px;
+    height: 28px;
+  }
+
   .guest-facility-image {
     height: 94px;
   }
@@ -2342,17 +2461,37 @@
   .guest-about-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .guest-compact-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Shared colour rhythm for dynamic property information tabs. */
-.property-tab-panel[data-tab="overview"] { --property-tab-tint: var(--wildleaf-sage, #edf7f0); }
-.property-tab-panel[data-tab="about"] { --property-tab-tint: var(--wildleaf-cream, #fffaf0); }
-.property-tab-panel[data-tab="facilities"] { --property-tab-tint: var(--wildleaf-sky, #eef6fb); }
-.property-tab-panel[data-tab="services"] { --property-tab-tint: var(--wildleaf-blush, #fff1ed); }
-.property-tab-panel[data-tab="location"] { --property-tab-tint: var(--wildleaf-sage, #edf7f0); }
-.property-tab-panel[data-tab="things"] { --property-tab-tint: var(--wildleaf-sand, #fbf3df); }
-.property-tab-panel[data-tab="rules"] { --property-tab-tint: var(--wildleaf-lilac, #f4f1fb); }
-.property-tab-panel[data-tab="reviews"] { --property-tab-tint: var(--wildleaf-cream, #fffaf0); }
+.property-tab-panel[data-tab="overview"] {
+  --property-tab-tint: var(--wildleaf-sage, #edf7f0);
+}
+.property-tab-panel[data-tab="about"] {
+  --property-tab-tint: var(--wildleaf-cream, #fffaf0);
+}
+.property-tab-panel[data-tab="facilities"] {
+  --property-tab-tint: var(--wildleaf-sky, #eef6fb);
+}
+.property-tab-panel[data-tab="services"] {
+  --property-tab-tint: var(--wildleaf-blush, #fff1ed);
+}
+.property-tab-panel[data-tab="location"] {
+  --property-tab-tint: var(--wildleaf-sage, #edf7f0);
+}
+.property-tab-panel[data-tab="things"] {
+  --property-tab-tint: var(--wildleaf-sand, #fbf3df);
+}
+.property-tab-panel[data-tab="rules"] {
+  --property-tab-tint: var(--wildleaf-lilac, #f4f1fb);
+}
+.property-tab-panel[data-tab="reviews"] {
+  --property-tab-tint: var(--wildleaf-cream, #fffaf0);
+}
 
 .property-tab-panel[data-tab] {
   background: linear-gradient(135deg, var(--property-tab-tint), #fff 72%);
